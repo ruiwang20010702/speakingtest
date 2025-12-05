@@ -71,8 +71,13 @@ async def evaluate_test(
         parts = section_data["parts"]
         
         #2. 保存音频文件并记录大小用于成本计算
-        upload_dir = Path("./uploads")
-        upload_dir.mkdir(exist_ok=True)
+        # 使用环境变量配置的绝对路径
+        import os
+        UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./uploads")
+        upload_dir = Path(UPLOAD_DIR)
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(f"📁 上传目录: {upload_dir.absolute()}")
         
         audio_files = {}
         audio_sizes = {}  # 记录音频文件大小
@@ -315,17 +320,35 @@ Expected answers: {' / '.join(dialogue.get('student_options', []))}
             db.add(part_score)
         
         # 保存音频文件记录
+        saved_audio_paths = []  # 收集所有音频路径用于清理
+        
         for part_num, file_path in audio_files.items():
             audio_record = AudioFile(
                 test_record_id=test_record.id,
                 part_number=part_num,
                 file_path=file_path,
-                duration=0  # 可以后续添加音频时长检测
+                file_size=audio_sizes.get(part_num, 0)
             )
             db.add(audio_record)
+            saved_audio_paths.append(file_path)
+        
+        # Part 3的12个音频文件
+        for q_num, file_path in part3_files.items():
+            audio_record = AudioFile(
+                test_record_id=test_record.id,
+                part_number=3,  # Part 3
+                file_path=file_path,
+                file_size=part3_sizes.get(q_num, 0)
+            )
+            db.add(audio_record)
+            saved_audio_paths.append(file_path)
         
         db.commit()
         db.refresh(test_record)
+        
+        # 🗑️ 调度文件清理任务（1小时后删除录音）
+        from services.file_cleanup import cleanup_service
+        cleanup_service.schedule_cleanup(test_record.id, saved_audio_paths)
         
         # 6. 返回结果
         return TestResultResponse(

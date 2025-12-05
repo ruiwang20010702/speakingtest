@@ -55,13 +55,14 @@ class PartScore(Base):
 class AudioFile(Base):
     """音频文件记录"""
     __tablename__ = "audio_files"
-
+    
     id = Column(Integer, primary_key=True, index=True)
-    test_record_id = Column(Integer, ForeignKey("test_records.id"))
+    test_record_id = Column(Integer, ForeignKey('test_records.id'))
     part_number = Column(Integer)
-    file_path = Column(String(255))
-    duration = Column(Float)  # 音频时长（秒）
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    file_path = Column(String, nullable=True)  # 可为空，文件删除后设为None
+    file_size = Column(Integer)
+    created_at = Column(DateTime, default=datetime.now)
+    deleted_at = Column(DateTime, nullable=True)  # 文件删除时间
     
     # 关系
     test_record = relationship("TestRecord", back_populates="audio_files")
