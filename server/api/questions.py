@@ -7,8 +7,8 @@ from pathlib import Path
 
 router = APIRouter(prefix="/api/questions", tags=["questions"])
 
-# 题库文件路径
-QUESTIONS_DIR = Path(__file__).parent.parent.parent
+# 题库文件路径 (在 server 目录下)
+QUESTIONS_DIR = Path(__file__).parent.parent
 QUESTIONS_FILE = QUESTIONS_DIR / "test_questions_level1.json"
 
 
