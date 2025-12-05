@@ -1,0 +1,380 @@
+.detailed-report-page {
+    min-height: 100vh;
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.report-container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: white;
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* 报告头部 */
+.report-header {
+    border-bottom: 3px solid #0088cc;
+    padding-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-xl);
+}
+
+.logo-section h1 {
+    color: #0088cc;
+    font-size: 2rem;
+    margin: 0 0 var(--spacing-md) 0;
+    text-align: center;
+}
+
+.logo-section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+}
+
+.brand-logo {
+    height: 50px;
+    width: auto;
+}
+
+.monkey-avatar {
+    height: 60px;
+    width: auto;
+    animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+.student-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--spacing-md);
+}
+
+.info-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.info-row .label {
+    font-weight: bold;
+    color: #666;
+}
+
+.info-row .value {
+    color: #333;
+}
+
+.level-badge {
+    background: #ff6384;
+    color: white;
+    padding: 4px 12px;
+    border-radius: var(--radius-sm);
+    font-weight: bold;
+}
+
+/* 评估区域 */
+.assessment-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-xl);
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    background: #f8f9fa;
+    border-radius: var(--radius-md);
+}
+
+.radar-section h3,
+.skills-evaluation h3 {
+    color: #333;
+    margin-bottom: var(--spacing-md);
+    text-align: center;
+}
+
+.skills-table {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.skill-row {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: white;
+    border-radius: var(--radius-sm);
+    border-left: 4px solid #0088cc;
+}
+
+.skill-name {
+    font-weight: 600;
+    color: #333;
+}
+
+.skill-level {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+/* 学习建议 */
+.suggestions-section {
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    background: #fff3cd;
+    border-radius: var(--radius-md);
+    border-left: 6px solid #ffc107;
+}
+
+.suggestions-section h3 {
+    color: #856404;
+    margin-bottom: var(--spacing-md);
+}
+
+.suggestion-item {
+    display: flex;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid #ffe5a0;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-number {
+    font-weight: bold;
+    color: #856404;
+    white-space: nowrap;
+}
+
+.suggestion-text {
+    color: #333;
+}
+
+/* 详细反馈 */
+.feedback-section {
+    margin-bottom: var(--spacing-xl);
+}
+
+.feedback-section h3 {
+    color: #333;
+    margin-bottom: var(--spacing-md);
+}
+
+.feedback-item {
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-md);
+    background: #f8f9fa;
+    border-radius: var(--radius-md);
+}
+
+.feedback-item h4 {
+    color: #0088cc;
+    margin-bottom: var(--spacing-sm);
+}
+
+.feedback-item p {
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: var(--spacing-sm);
+}
+
+.items-list {
+    padding: var(--spacing-sm);
+    background: #e7f3ff;
+    border-radius: var(--radius-sm);
+    margin-top: var(--spacing-sm);
+    color: #333;
+}
+
+.items-list.error {
+    background: #ffe7e7;
+}
+
+/* 分数详情 */
+.score-details {
+    margin-bottom: var(--spacing-xl);
+}
+
+.score-details h3 {
+    color: #333;
+    margin-bottom: var(--spacing-md);
+}
+
+.score-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.score-table thead {
+    background: #0088cc;
+    color: white;
+}
+
+.score-table th,
+.score-table td {
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+}
+
+.score-table tbody tr {
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.score-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.score-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+/* API成本统计 */
+.cost-section {
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: var(--radius-md);
+    color: white;
+}
+
+.cost-section h3 {
+    color: white;
+    margin-bottom: var(--spacing-md);
+}
+
+.cost-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--spacing-md);
+}
+
+.cost-item {
+    background: rgba(255, 255, 255, 0.1);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-sm);
+    backdrop-filter: blur(10px);
+}
+
+.cost-item.full-width {
+    grid-column: 1 / -1;
+}
+
+.cost-label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: var(--spacing-xs);
+    font-size: 0.9rem;
+}
+
+.cost-value {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.cost-note {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.cost-description {
+    display: block;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    opacity: 0.95;
+}
+
+/* 其他建议 */
+.other-suggestions {
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    background: #e7f3ff;
+    border-radius: var(--radius-md);
+}
+
+.other-suggestions h3 {
+    color: #0088cc;
+    margin-bottom: var(--spacing-md);
+}
+
+.other-suggestions p {
+    color: #666;
+    line-height: 1.8;
+    margin-bottom: var(--spacing-sm);
+}
+
+.other-suggestions .highlight {
+    background: #fff3cd;
+    padding: var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    color: #856404;
+    font-weight: 500;
+}
+
+/* 操作按钮 */
+.report-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: center;
+    padding-top: var(--spacing-lg);
+    border-top: 2px solid #e0e0e0;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .assessment-section {
+        grid-template-columns: 1fr;
+    }
+
+    .report-actions {
+        flex-direction: column;
+    }
+
+    .student-info {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 打印样式 */
+@media print {
+    .detailed-report-page {
+        background: white;
+        padding: 0;
+    }
+
+    .report-actions {
+        display: none;
+    }
+
+    .report-container {
+        box-shadow: none;
+        max-width: 100%;
+    }
+}
+
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.5rem;
+    color: white;
+}
