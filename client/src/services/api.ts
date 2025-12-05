@@ -4,8 +4,11 @@
 import axios from 'axios';
 import type { QuestionData, TestResult, Level } from '../types';
 
+// 生产环境使用环境变量配置的后端地址，开发环境使用代理
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
 const api = axios.create({
-    baseURL: '/api',
+    baseURL: API_BASE_URL,
     headers: {
         'Content-Type': 'application/json'
     }
