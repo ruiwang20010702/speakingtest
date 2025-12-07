@@ -76,6 +76,15 @@ export default function ResultPage() {
         }
     };
 
+    // 根据分数生成简短评价
+    const getShortEvaluation = (score: number) => {
+        if (score >= 90) return '优秀 - 继续保持';
+        if (score >= 80) return '良好 - 可以继续练习';
+        if (score >= 70) return '中等 - 需要加强练习';
+        if (score >= 60) return '待提升 - 建议多加练习';
+        return '需努力 - 加油练习';
+    };
+
     const getRadarData = () => {
         if (!result) return [];
         
@@ -84,42 +93,49 @@ export default function ResultPage() {
         const part2Score = result.part_scores.find(p => p.part_number === 2);
         const part3Score = result.part_scores.find(p => p.part_number === 3);
         
+        const vocabScore = part1Score ? Math.round((part1Score.score / part1Score.max_score) * 100) : 0;
+        const phonicsScore = part2Score ? Math.round((part2Score.score / part2Score.max_score) * 100) : 0;
+        const sentenceScore = part3Score ? Math.round((part3Score.score / part3Score.max_score) * 100) : 0;
+        const fluencyScore = result.fluency_score ? Math.round(result.fluency_score * 10) : 70;
+        const pronunciationScore = result.pronunciation_score ? Math.round(result.pronunciation_score * 10) : 75;
+        const confidenceScore = result.confidence_score ? Math.round(result.confidence_score * 10) : 80;
+        
         return [
             { 
                 subject: '词汇', 
-                score: part1Score ? Math.round((part1Score.score / part1Score.max_score) * 100) : 0,
+                score: vocabScore,
                 fullMark: 100,
-                evaluation: part1Score?.feedback || '需要更多练习'
+                evaluation: getShortEvaluation(vocabScore)
             },
             { 
                 subject: '自然拼读', 
-                score: part2Score ? Math.round((part2Score.score / part2Score.max_score) * 100) : 0,
+                score: phonicsScore,
                 fullMark: 100,
-                evaluation: part2Score?.feedback || '需要更多练习'
+                evaluation: getShortEvaluation(phonicsScore)
             },
             { 
                 subject: '整句输出', 
-                score: part3Score ? Math.round((part3Score.score / part3Score.max_score) * 100) : 0,
+                score: sentenceScore,
                 fullMark: 100,
-                evaluation: part3Score?.feedback || '需要更多练习'
+                evaluation: getShortEvaluation(sentenceScore)
             },
             { 
                 subject: '流畅度', 
-                score: result.fluency_score ? Math.round(result.fluency_score * 10) : 70,
+                score: fluencyScore,
                 fullMark: 100,
-                evaluation: result.fluency_score && result.fluency_score >= 8 ? '优秀 - 语言流畅自然' : '良好 - 可以继续提升'
+                evaluation: getShortEvaluation(fluencyScore)
             },
             { 
                 subject: '发音', 
-                score: result.pronunciation_score ? Math.round(result.pronunciation_score * 10) : 75,
+                score: pronunciationScore,
                 fullMark: 100,
-                evaluation: result.pronunciation_score && result.pronunciation_score >= 8 ? '优秀 - 发音准确清晰' : '良好 - 继续练习标准发音'
+                evaluation: getShortEvaluation(pronunciationScore)
             },
             { 
                 subject: '自信度', 
-                score: result.confidence_score ? Math.round(result.confidence_score * 10) : 80,
+                score: confidenceScore,
                 fullMark: 100,
-                evaluation: result.confidence_score && result.confidence_score >= 8 ? '优秀 - 表达自信流利' : '良好 - 继续增强自信心'
+                evaluation: getShortEvaluation(confidenceScore)
             },
         ];
     };
