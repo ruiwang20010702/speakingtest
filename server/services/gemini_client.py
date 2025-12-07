@@ -3,8 +3,8 @@ Gemini API 客户端
 使用 gemini-2.5-flash 模型进行音频分析
 使用最新版 google-genai SDK
 """
-from google import genai
-from google.genai import types
+from google import genai  # type: ignore
+from google.genai import types  # type: ignore
 import os
 from dotenv import load_dotenv
 
@@ -73,15 +73,25 @@ class GeminiClient:
             except Exception as e:
                 error_str = str(e)
                 
-                # 检查是否是 503 过载错误
-                if '503' in error_str or 'overloaded' in error_str.lower():
+                # 检查是否是可重试的错误
+                is_retryable = (
+                    '503' in error_str or 
+                    'overloaded' in error_str.lower() or
+                    'SSL' in error_str or
+                    'EOF' in error_str or
+                    'Connection' in error_str or
+                    'timeout' in error_str.lower() or
+                    'reset' in error_str.lower()
+                )
+                
+                if is_retryable:
                     if attempt < max_retries - 1:
                         wait_time = retry_delay * (2 ** attempt)  # 指数退避
-                        print(f"⏳ API繁忙，{wait_time}秒后重试...")
+                        print(f"⏳ 网络/API错误，{wait_time}秒后重试... (错误: {error_str[:50]})")
                         time.sleep(wait_time)
                         continue
                     else:
-                        raise Exception(f"❌ API服务过载，已重试{max_retries}次。请稍后再试。")
+                        raise Exception(f"❌ 网络连接问题，已重试{max_retries}次。请检查网络/VPN后再试。")
                 else:
                     # 其他错误直接抛出
                     raise Exception(f"❌ 分析失败: {error_str}")

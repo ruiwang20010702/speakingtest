@@ -1,13 +1,13 @@
 /**
- * 详细口语测试报告页面
- * 51Talk 风格报告，包含雷达图、详细评估和学习建议
+ * 详细口语测试报告页面 - 51Talk 新设计
+ * 包含详细评估反馈和学习建议
  */
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getResultById } from '../services/api';
-import RadarChart from '../components/RadarChart';
 import type { TestResult } from '../types';
-import './DetailedReportPage.css';
+import { FileText, CheckCircle, XCircle, Lightbulb, BookOpen, Home, ArrowLeft, Printer } from 'lucide-react';
+import logoImage from '../assets/51talk-logo.png';
 
 export default function DetailedReportPage() {
     const navigate = useNavigate();
@@ -34,250 +34,251 @@ export default function DetailedReportPage() {
         }
     };
 
-    if (loading || !result) {
-        return <div className="detailed-report-page loading">加载中...</div>;
-    }
-
-    // 从测试结果计算6维度数据
-    const part1 = result.part_scores.find(p => p.part_number === 1);
-    const part2 = result.part_scores.find(p => p.part_number === 2);
-    const part3 = result.part_scores.find(p => p.part_number === 3);
-
-    const radarData = {
-        vocabulary: part1?.score || 0,
-        phonics: part2?.score || 0,
-        sentences: part3?.score || 0,
-        // 使用 Gemini AI 评估的真实分数（如果没有则使用计算值）
-        fluency: result.fluency_score || Math.min(10, Math.round((result.total_score / 60) * 10)),
-        pronunciation: result.pronunciation_score || Math.min(10, Math.round(((part1?.score || 0) / 20) * 10)),
-        confidence: result.confidence_score || Math.min(10, Math.round(((part3?.score || 0) / 24) * 10))
-    };
-
     // 生成学习建议
     const generateSuggestions = () => {
+        if (!result) return [];
+        
         const suggestions = [];
+        const part1 = result.part_scores.find(p => p.part_number === 1);
+        const part2 = result.part_scores.find(p => p.part_number === 2);
+        const part3 = result.part_scores.find(p => p.part_number === 3);
 
         if ((part1?.score || 0) < 16) {
-            suggestions.push('重点练习词汇发音，特别注意元音和辅音的准确性');
+            suggestions.push('建议加强词汇发音练习，特别注意元音和辅音的准确性');
         }
         if ((part2?.score || 0) < 12) {
-            suggestions.push('加强自然拼读训练，多做拼读练习');
+            suggestions.push('建议加强自然拼读专项练习，巩固phonics规则，提高单词拼读的准确性');
         }
         if ((part3?.score || 0) < 20) {
-            suggestions.push('提高整句输出能力，多进行对话练习');
+            suggestions.push('建议每天坚持朗读练习，提高整句输出的连贯性和流畅度');
         }
 
-        if (suggestions.length === 0) {
-            suggestions.push('继续保持良好的学习状态');
-            suggestions.push('可以挑战更高难度的内容');
-            suggestions.push('多进行实际对话练习');
-        }
+        suggestions.push('建议定期进行单元复习课，强化知识点，确保学习内容的系统性和连贯性');
+        suggestions.push('建议多进行口语表达练习，增强自信心，可以通过角色扮演、情景对话等形式提升口语能力');
 
-        return suggestions;
+        return suggestions.slice(0, 5);
     };
+
+    if (loading) {
+    return (
+            <div className="min-h-screen relative overflow-hidden bg-[#00B4EE]">
+                <div className="absolute inset-0 bg-[#00B4EE]">
+                    <div className="absolute top-0 left-0 w-40 h-40 bg-[#FDE700] rounded-full -translate-x-1/4 -translate-y-1/4" />
+                </div>
+                <div className="relative z-10 min-h-screen flex items-center justify-center">
+                    <div className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-8 text-center">
+                        <div className="w-16 h-16 border-4 border-[#FDE700] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-gray-600">加载中...</p>
+                    </div>
+                        </div>
+                        </div>
+        );
+    }
+
+    if (!result) {
+        return (
+            <div className="min-h-screen relative overflow-hidden bg-[#00B4EE]">
+                <div className="absolute inset-0 bg-[#00B4EE]">
+                    <div className="absolute top-0 left-0 w-40 h-40 bg-[#FDE700] rounded-full -translate-x-1/4 -translate-y-1/4" />
+                        </div>
+                <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+                    <div className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-8 text-center max-w-md">
+                        <h2 className="text-xl font-semibold text-gray-900 mb-4">未找到报告</h2>
+                        <button 
+                            onClick={() => navigate('/')} 
+                            className="w-full py-3 bg-[#FDE700] text-gray-900 font-medium rounded-xl hover:shadow-lg transition-all"
+                        >
+                            返回首页
+                        </button>
+                    </div>
+                </div>
+                    </div>
+        );
+    }
 
     const suggestions = generateSuggestions();
 
-    // 能力评估
-    const getSkillLevel = (score: number, max: number) => {
-        const percentage = (score / max) * 100;
-        if (percentage >= 90) return '优秀 - 可以自行练习';
-        if (percentage >= 75) return '良好 - 可以自行练习';
-        if (percentage >= 60) return '及格 - 需要指导';
-        return '需要加强';
-    };
-
     return (
-        <div className="detailed-report-page">
-            <div className="report-container">
-                {/* 报告头部 */}
-                <div className="report-header">
-                    <div className="logo-section">
-                        <img src="/assets/51talk-logo.png" alt="51Talk" className="brand-logo" />
-                        <h1>口语测试报告</h1>
-                        <img src="/assets/monkey-avatar.png" alt="小猴" className="monkey-avatar" />
+        <div className="min-h-screen relative overflow-hidden bg-[#00B4EE]">
+            {/* Blue Background with decorative elements */}
+            <div className="absolute inset-0 bg-[#00B4EE]">
+                <div className="absolute top-0 left-0 w-40 h-40 bg-[#FDE700] rounded-full -translate-x-1/4 -translate-y-1/4" />
+                <div className="absolute bottom-0 left-0 w-48 h-32">
+                    <div className="absolute bottom-4 left-0 w-24 h-24 bg-white rounded-full -translate-x-1/3" />
+                    <div className="absolute bottom-8 left-12 w-20 h-20 bg-white rounded-full" />
+                    <div className="absolute bottom-12 left-6 w-16 h-16 bg-white rounded-full" />
+                            </div>
+                <div className="absolute top-0 right-0 w-48 h-32">
+                    <div className="absolute top-4 right-0 w-24 h-24 bg-white rounded-full translate-x-1/3" />
+                    <div className="absolute top-8 right-12 w-20 h-20 bg-white rounded-full" />
+                    <div className="absolute top-12 right-6 w-16 h-16 bg-white rounded-full" />
+                            </div>
+                <div className="absolute bottom-0 right-0 w-40 h-40 bg-[#FDE700] translate-x-1/4 translate-y-1/4" style={{ clipPath: 'polygon(0 100%, 100% 100%, 100% 0)' }} />
+                            </div>
+
+            {/* Content */}
+            <div className="relative z-10 p-4 pb-6">
+                <div className="max-w-md mx-auto">
+                    {/* Header */}
+                    <div className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-4 mb-4">
+                        <div className="flex items-center gap-3 mb-2">
+                            <button
+                                onClick={() => navigate(-1)}
+                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                <ArrowLeft className="w-5 h-5 text-gray-700" />
+                            </button>
+                            <div className="flex items-center gap-2 flex-1">
+                                <FileText className="w-6 h-6 text-[#00B4EE]" />
+                                <h1 className="text-lg font-semibold text-gray-900">详细评估反馈</h1>
+                            </div>
+                            <img 
+                                src={logoImage} 
+                                alt="51Talk Logo" 
+                                className="h-8 rounded-lg"
+                            />
+                        </div>
+                        <p className="text-gray-600 text-sm pl-11">
+                            {result.student_name} | {result.level} - {result.unit}
+                        </p>
                     </div>
-                    <div className="student-info">
-                        <div className="info-row">
-                            <span className="label">学生名:</span>
-                            <span className="value">{result.student_name}</span>
-                        </div>
-                        <div className="info-row">
-                            <span className="label">在读等级:</span>
-                            <span className="value level-badge">{result.level.toUpperCase()} - {result.unit}</span>
-                        </div>
-                        <div className="info-row">
-                            <span className="label">测试日期:</span>
-                            <span className="value">
-                                {new Date(result.created_at).toLocaleDateString('zh-CN')}
-                            </span>
-                        </div>
-                    </div>
+
+                    {/* Part Feedbacks */}
+                    {result.part_scores.map((part) => (
+                        <div key={part.part_number} className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-4 mb-4">
+                            <h2 className="text-[#00B4EE] font-semibold mb-3">
+                                Part {part.part_number} 反馈:
+                            </h2>
+                            <div className="text-sm text-gray-700 mb-4">
+                                <p>{part.feedback || '暂无详细反馈'}</p>
                 </div>
 
-                {/* 雷达图和能力评级 */}
-                <div className="assessment-section">
-                    <div className="radar-section">
-                        <h3>能力雷达图</h3>
-                        <RadarChart data={radarData} />
-                    </div>
-
-                    <div className="skills-evaluation">
-                        <h3>Level {result.level === 'level1' ? '1' : result.level} 等级需要具备的能力</h3>
-                        <div className="skills-table">
-                            <div className="skill-row">
-                                <span className="skill-name">词汇:</span>
-                                <span className="skill-level">{getSkillLevel(part1?.score || 0, 20)}</span>
-                            </div>
-                            <div className="skill-row">
-                                <span className="skill-name">自然拼读:</span>
-                                <span className="skill-level">{getSkillLevel(part2?.score || 0, 16)}</span>
-                            </div>
-                            <div className="skill-row">
-                                <span className="skill-name">整句输出:</span>
-                                <span className="skill-level">{getSkillLevel(part3?.score || 0, 24)}</span>
-                            </div>
-                            <div className="skill-row">
-                                <span className="skill-name">流畅度:</span>
-                                <span className="skill-level">{getSkillLevel(radarData.fluency, 10)}</span>
-                            </div>
-                            <div className="skill-row">
-                                <span className="skill-name">发音:</span>
-                                <span className="skill-level">{getSkillLevel(radarData.pronunciation, 10)}</span>
-                            </div>
-                            <div className="skill-row">
-                                <span className="skill-name">自信度:</span>
-                                <span className="skill-level">{getSkillLevel(radarData.confidence, 10)}</span>
-                            </div>
-                        </div>
-                    </div>
+                            {part.correct_items && part.correct_items.length > 0 && (
+                                <div className="flex items-start gap-2 mb-2">
+                                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                                    <div className="flex-1">
+                                        <p className="text-sm">
+                                            <span className="text-green-700 font-medium">正确项目:</span>
+                                            <span className="text-gray-600"> {part.correct_items.join(', ')}</span>
+                                        </p>
                 </div>
-
-                {/* 学习建议 */}
-                <div className="suggestions-section">
-                    <h3>🎯 学习建议</h3>
-                    {suggestions.map((suggestion, index) => (
-                        <div key={index} className="suggestion-item">
-                            <span className="suggestion-number">学习建议 {index + 1}:</span>
-                            <span className="suggestion-text">{suggestion}</span>
-                        </div>
-                    ))}
-                </div>
-
-                {/* 详细反馈 */}
-                <div className="feedback-section">
-                    <h3>📋 详细评估反馈</h3>
-                    {result.part_scores.map(part => (
-                        <div key={part.part_number} className="feedback-item">
-                            <h4>Part {part.part_number} 反馈:</h4>
-                            <p>{part.feedback}</p>
-                            {part.correct_items.length > 0 && (
-                                <div className="items-list">
-                                    <strong>✅ 正确项目:</strong> {part.correct_items.join(', ')}
                                 </div>
                             )}
-                            {part.incorrect_items.length > 0 && (
-                                <div className="items-list error">
-                                    <strong>❌ 需要改进:</strong> {part.incorrect_items.join(', ')}
+                            
+                            {part.incorrect_items && part.incorrect_items.length > 0 && (
+                                <div className="flex items-start gap-2">
+                                    <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                                    <div className="flex-1">
+                                        <p className="text-sm">
+                                            <span className="text-red-700 font-medium">需要改进:</span>
+                                            <span className="text-gray-600"> {part.incorrect_items.join(', ')}</span>
+                                        </p>
+                                    </div>
                                 </div>
                             )}
+
+                            {/* Score indicator */}
+                            <div className="mt-3 pt-3 border-t border-gray-100">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-gray-500 text-sm">得分</span>
+                                    <span className="text-[#00B4EE] font-semibold">
+                                        {part.score} / {part.max_score}
+                                    </span>
+                                </div>
+                                <div className="mt-1 w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                                    <div 
+                                        className="bg-[#FDE700] h-full rounded-full transition-all"
+                                        style={{ width: `${(part.score / part.max_score) * 100}%` }}
+                                    />
+                                </div>
+                            </div>
                         </div>
                     ))}
+
+                    {/* Learning Suggestions */}
+                    <div className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-4 mb-4">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Lightbulb className="w-6 h-6 text-[#FDE700]" />
+                            <h2 className="text-lg font-semibold text-gray-900">学习建议</h2>
                 </div>
 
-                {/* 分数详情 */}
-                <div className="score-details">
-                    <h3>📊 分数详情</h3>
-                    <table className="score-table">
-                        <thead>
-                            <tr>
-                                <th>类别</th>
-                                <th>分数</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>词汇</td>
-                                <td>{part1?.score || 0}</td>
-                            </tr>
-                            <tr>
-                                <td>自然拼读</td>
-                                <td>{part2?.score || 0}</td>
-                            </tr>
-                            <tr>
-                                <td>整句输出</td>
-                                <td>{part3?.score || 0}</td>
-                            </tr>
-                            <tr>
-                                <td>流畅度</td>
-                                <td>{radarData.fluency}</td>
-                            </tr>
-                            <tr>
-                                <td>发音</td>
-                                <td>{radarData.pronunciation}</td>
-                            </tr>
-                            <tr>
-                                <td>自信度</td>
-                                <td>{radarData.confidence}</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                        <div className="space-y-3">
+                            {suggestions.map((suggestion, index) => (
+                                <div key={index} className="flex items-start gap-3">
+                                    <div className="flex-shrink-0 w-8 h-8 bg-[#FDE700] text-gray-900 rounded-full flex items-center justify-center text-sm font-semibold">
+                                        {index + 1}
+                                    </div>
+                                    <div className="flex-1 pt-1">
+                                        <p className="text-gray-700 text-sm">{suggestion}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Additional Tips */}
+                    <div className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-4 mb-4">
+                        <div className="flex items-center gap-2 mb-3">
+                            <BookOpen className="w-6 h-6 text-[#00B4EE]" />
+                            <h2 className="text-lg font-semibold text-gray-900">温馨提示</h2>
+                        </div>
+                        <div className="space-y-2 text-sm text-gray-700">
+                            <p>• 建议每天坚持学习20-30分钟，保持学习的连续性</p>
+                            <p>• 课前预习和课后复习同样重要，能够提高学习效率</p>
+                            <p>• 遇到困难不要气馁，多与老师和同学交流</p>
+                            <p>• 保持积极的学习态度，相信自己一定能够进步</p>
+                        </div>
                 </div>
 
-                {/* API成本统计 */}
+                    {/* API Cost Section */}
                 {(result.total_tokens || result.api_cost) && (
-                    <div className="cost-section">
-                        <h3>💰 API 成本统计</h3>
-                        <div className="cost-grid">
-                            <div className="cost-item">
-                                <span className="cost-label">Token 使用量:</span>
-                                <span className="cost-value">{result.total_tokens?.toLocaleString() || 0} tokens</span>
+                        <div className="bg-gradient-to-r from-[#FDE700] to-[#FFD700] rounded-2xl shadow-lg p-4 mb-4">
+                            <h3 className="text-gray-900 font-semibold mb-3 flex items-center gap-2">
+                                <span className="text-xl">💰</span>
+                                API 成本统计
+                            </h3>
+                            <div className="bg-white/90 rounded-xl p-3 space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600">Token 使用量:</span>
+                                    <span className="font-medium">{result.total_tokens?.toLocaleString() || 0} tokens</span>
                             </div>
-                            <div className="cost-item">
-                                <span className="cost-label">API 成本:</span>
-                                <span className="cost-value">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600">API 成本:</span>
+                                    <span className="font-medium">
                                     ${result.api_cost?.toFixed(4) || '0.0000'} USD
-                                    {result.api_cost && result.api_cost < 0.01 && (
-                                        <span className="cost-note"> (约 ¥{(result.api_cost * 7.2).toFixed(3)})</span>
-                                    )}
                                 </span>
                             </div>
-                            <div className="cost-item full-width">
-                                <span className="cost-label">💡 提示:</span>
-                                <span className="cost-description">
-                                    本次测试使用了Gemini 2.5 Flash模型进行AI评分，成本极低。
-                                    Token使用量包括了音频处理和文本生成。
-                                </span>
+                                <p className="text-gray-500 text-xs mt-2">
+                                    💡 本次测试使用 Gemini 2.5 Flash 模型进行AI评分，成本极低
+                                </p>
                             </div>
                         </div>
-                    </div>
                 )}
 
-                {/* 其他建议 */}
-                <div className="other-suggestions">
-                    <h3>💡 其他建议</h3>
-                    <p>
-                        根据本次测试结果，建议学生在日常学习中注重英语口语的练习，提高英语口语能力。
-                        建议家长鼓励学生多开口说英语，每日坚持15-20分钟的口语练习，未来的你一定会感谢现在的自己。
-                    </p>
-                    {result.star_rating >= 4 && (
-                        <p className="highlight">
-                            ✨ 本次测试表现优秀！从此步入卓越模式，并扎实有所提升的阶阶续续培养习惯，左上方的阙值诀窍会提供最佳学习建议！
-                        </p>
-                    )}
-                </div>
-
-                {/* 操作按钮 */}
-                <div className="report-actions">
-                    <button onClick={() => window.print()} className="btn btn-primary">
-                        🖨️ 打印报告
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-3 gap-3">
+                        <button
+                            onClick={() => navigate('/')}
+                            className="py-3 bg-white text-gray-700 font-medium rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 shadow-md"
+                        >
+                            <Home className="w-4 h-4" />
+                            <span className="text-sm">首页</span>
                     </button>
-                    <button onClick={() => navigate('/history')} className="btn btn-secondary">
-                        📚 返回记录
+                        <button
+                            onClick={() => window.print()}
+                            className="py-3 bg-[#FDE700] text-gray-900 font-medium rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 shadow-md"
+                        >
+                            <Printer className="w-4 h-4" />
+                            <span className="text-sm">打印</span>
                     </button>
-                    <button onClick={() => navigate('/')} className="btn btn-secondary">
-                        🏠 返回首页
+                        <button
+                            onClick={() => navigate(`/result?id=${result.id}`)}
+                            className="py-3 bg-white text-[#00B4EE] font-medium rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 shadow-md"
+                        >
+                            <FileText className="w-4 h-4" />
+                            <span className="text-sm">总览</span>
                     </button>
+                    </div>
                 </div>
             </div>
         </div>

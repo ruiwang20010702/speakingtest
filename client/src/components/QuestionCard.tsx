@@ -1,7 +1,7 @@
 /**
  * 问题卡片组件 - 用于Part 3单独录音
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AudioRecorder from './AudioRecorder';
 import type { DialogueItem } from '../types';
 import './QuestionCard.css';
@@ -30,6 +30,11 @@ export default function QuestionCard({
     isLast
 }: QuestionCardProps) {
     const [hasRecording, setHasRecording] = useState(!!existingAudio);
+
+    // 同步 existingAudio prop 变化到 hasRecording 状态
+    useEffect(() => {
+        setHasRecording(!!existingAudio);
+    }, [existingAudio]);
 
     const handleRecordingComplete = (blob: Blob) => {
         setHasRecording(true);

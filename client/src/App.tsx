@@ -4,7 +4,6 @@ import TestPage from './pages/TestPage';
 import ResultPage from './pages/ResultPage';
 import HistoryPage from './pages/HistoryPage';
 import DetailedReportPage from './pages/DetailedReportPage';
-import './styles/index.css';
 
 function App() {
   return (
