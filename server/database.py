@@ -9,13 +9,27 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Zeabur 会自动注入 POSTGRES_URI 环境变量用于内部连接
-# 本地开发使用 SQLite
-DATABASE_URL = os.getenv("POSTGRES_URI") or os.getenv("DATABASE_URL", "sqlite:///./speakingtest.db")
+# Zeabur 会自动注入 ZEABUR_SERVICE_ID 等环境变量
+# 如果检测到 Zeabur 环境，优先使用 POSTGRES_URI 或 DATABASE_URL
+if os.getenv("ZEABUR_SERVICE_ID"):
+    DATABASE_URL = os.getenv("POSTGRES_URI") or os.getenv("DATABASE_URL")
+    print(f"👉 Detected Zeabur Environment. Using PostgreSQL: {DATABASE_URL}")
+else:
+    # 本地开发强制使用 SQLite，忽略 .env 中的 PostgreSQL 配置
+    DATABASE_URL = "sqlite:///./speakingtest.db"
+    print(f"👉 Detected Local Environment. Using SQLite: {DATABASE_URL}")
+
+# 检查是否使用 PostgreSQL 但缺少驱动 (防御性编程)
+if DATABASE_URL and DATABASE_URL.startswith("postgresql"):
+    try:
+        import psycopg2
+    except ImportError:
+        print("⚠️  psycopg2 module not found. Falling back to local SQLite.")
+        DATABASE_URL = "sqlite:///./speakingtest.db"
 
 # SQLite 需要特殊的连接参数
 connect_args = {}
-if "sqlite" in DATABASE_URL:
+if DATABASE_URL and "sqlite" in DATABASE_URL:
     connect_args["check_same_thread"] = False
 
 engine = create_engine(DATABASE_URL, connect_args=connect_args)

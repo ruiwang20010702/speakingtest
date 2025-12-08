@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getHistory } from '../services/api';
 import type { TestResult } from '../types';
-import { Award, TrendingUp, FileText, Home, History } from 'lucide-react';
+import { Award, TrendingUp } from 'lucide-react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import logoImage from '../assets/51talk-logo.png';
 
@@ -37,8 +37,8 @@ export default function ResultPage() {
             const timer = setInterval(() => {
                 currentStep++;
                 const progress = currentStep / steps;
-                
-                setAnimatedScores(radarData.map((item) => 
+
+                setAnimatedScores(radarData.map((item) =>
                     Math.floor(item.score * progress)
                 ));
 
@@ -87,52 +87,52 @@ export default function ResultPage() {
 
     const getRadarData = () => {
         if (!result) return [];
-        
+
         // 从 part_scores 中计算各项得分百分比
         const part1Score = result.part_scores.find(p => p.part_number === 1);
         const part2Score = result.part_scores.find(p => p.part_number === 2);
         const part3Score = result.part_scores.find(p => p.part_number === 3);
-        
+
         const vocabScore = part1Score ? Math.round((part1Score.score / part1Score.max_score) * 100) : 0;
         const phonicsScore = part2Score ? Math.round((part2Score.score / part2Score.max_score) * 100) : 0;
         const sentenceScore = part3Score ? Math.round((part3Score.score / part3Score.max_score) * 100) : 0;
         const fluencyScore = result.fluency_score ? Math.round(result.fluency_score * 10) : 70;
         const pronunciationScore = result.pronunciation_score ? Math.round(result.pronunciation_score * 10) : 75;
         const confidenceScore = result.confidence_score ? Math.round(result.confidence_score * 10) : 80;
-        
+
         return [
-            { 
-                subject: '词汇', 
+            {
+                subject: '词汇',
                 score: vocabScore,
                 fullMark: 100,
                 evaluation: getShortEvaluation(vocabScore)
             },
-            { 
-                subject: '自然拼读', 
+            {
+                subject: '自然拼读',
                 score: phonicsScore,
                 fullMark: 100,
                 evaluation: getShortEvaluation(phonicsScore)
             },
-            { 
-                subject: '整句输出', 
+            {
+                subject: '整句输出',
                 score: sentenceScore,
                 fullMark: 100,
                 evaluation: getShortEvaluation(sentenceScore)
             },
-            { 
-                subject: '流畅度', 
+            {
+                subject: '流畅度',
                 score: fluencyScore,
                 fullMark: 100,
                 evaluation: getShortEvaluation(fluencyScore)
             },
-            { 
-                subject: '发音', 
+            {
+                subject: '发音',
                 score: pronunciationScore,
                 fullMark: 100,
                 evaluation: getShortEvaluation(pronunciationScore)
             },
-            { 
-                subject: '自信度', 
+            {
+                subject: '自信度',
                 score: confidenceScore,
                 fullMark: 100,
                 evaluation: getShortEvaluation(confidenceScore)
@@ -191,7 +191,7 @@ export default function ResultPage() {
             <div className="min-h-screen relative overflow-hidden bg-[#00B4EE]">
                 <div className="absolute inset-0 bg-[#00B4EE]">
                     <div className="absolute top-0 left-0 w-40 h-40 bg-[#FDE700] rounded-full -translate-x-1/4 -translate-y-1/4" />
-                        </div>
+                </div>
                 <div className="relative z-10 min-h-screen flex items-center justify-center">
                     <div className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-8 text-center">
                         <div className="w-16 h-16 border-4 border-[#FDE700] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -211,8 +211,8 @@ export default function ResultPage() {
                 <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
                     <div className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-8 text-center max-w-md">
                         <h2 className="text-xl font-semibold text-gray-900 mb-4">❌ {error || '加载失败'}</h2>
-                        <button 
-                            onClick={() => navigate('/')} 
+                        <button
+                            onClick={() => navigate('/')}
                             className="w-full py-3 bg-[#FDE700] text-gray-900 font-medium rounded-xl hover:shadow-lg transition-all"
                         >
                             返回首页
@@ -251,9 +251,9 @@ export default function ResultPage() {
                                 <Award className="w-8 h-8 text-[#FDE700]" />
                                 <h1 className="text-xl font-semibold text-gray-900">口语测试报告</h1>
                             </div>
-                            <img 
-                                src={logoImage} 
-                                alt="51Talk Logo" 
+                            <img
+                                src={logoImage}
+                                alt="51Talk Logo"
                                 className="h-10 rounded-lg"
                             />
                         </div>
@@ -267,53 +267,9 @@ export default function ResultPage() {
                                 hour: '2-digit',
                                 minute: '2-digit'
                             })}
-                    </p>
-                    </div>
-
-                    {/* Total Score */}
-                    <div className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-6 mb-4 text-center">
-                        <div className="relative w-32 h-32 mx-auto mb-4">
-                            <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                                <circle
-                                    cx="50"
-                                    cy="50"
-                                    r="45"
-                                    fill="none"
-                                    stroke="#e5e7eb"
-                                    strokeWidth="8"
-                                />
-                                <circle
-                                    cx="50"
-                                    cy="50"
-                                    r="45"
-                                    fill="none"
-                                    stroke="#FDE700"
-                                    strokeWidth="8"
-                                    strokeDasharray={`${(result.total_score / 60) * 283} 283`}
-                                    strokeLinecap="round"
-                                    className="transition-all duration-1000"
-                                />
-                            </svg>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-3xl font-bold text-gray-900">{result.total_score}</span>
-                                <span className="text-gray-500 text-sm">/60</span>
-                            </div>
-                        </div>
-                        <div className="flex justify-center gap-1 mb-2">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                                <span key={star} className={`text-2xl ${star <= result.star_rating ? '' : 'opacity-30'}`}>
-                                    ⭐
-                                </span>
-                            ))}
-                        </div>
-                        <p className="text-gray-600 text-sm">
-                            {result.star_rating === 5 && '杰出！发音准确，表达流畅'}
-                            {result.star_rating === 4 && '优秀！发音良好，偶有小错'}
-                            {result.star_rating === 3 && '良好！基本正确，需改进'}
-                            {result.star_rating === 2 && '中等！需要更多练习'}
-                            {result.star_rating === 1 && '需努力！加油练习'}
                         </p>
                     </div>
+
 
                     {/* Radar Chart */}
                     <div className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-4 mb-4">
@@ -331,21 +287,21 @@ export default function ResultPage() {
                             <ResponsiveContainer width="100%" height={280}>
                                 <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
                                     <PolarGrid stroke="#00B4EE" strokeWidth={1} />
-                                    <PolarAngleAxis 
-                                        dataKey="subject" 
+                                    <PolarAngleAxis
+                                        dataKey="subject"
                                         tick={CustomTick}
                                     />
-                                    <PolarRadiusAxis 
-                                        angle={90} 
-                                        domain={[0, 100]} 
+                                    <PolarRadiusAxis
+                                        angle={90}
+                                        domain={[0, 100]}
                                         tick={false}
                                         tickCount={6}
                                     />
-                                    <Radar 
-                                        name="得分" 
-                                        dataKey="score" 
-                                        stroke="#00B4EE" 
-                                        fill="#00B4EE" 
+                                    <Radar
+                                        name="得分"
+                                        dataKey="score"
+                                        stroke="#00B4EE"
+                                        fill="#00B4EE"
                                         fillOpacity={0.5}
                                         strokeWidth={2}
                                     />
@@ -376,7 +332,7 @@ export default function ResultPage() {
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2">
                                             <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
-                                                <div 
+                                                <div
                                                     className="bg-[#FDE700] h-full rounded-full transition-all"
                                                     style={{ width: `${animatedScores[index] || 0}%` }}
                                                 />
@@ -388,7 +344,7 @@ export default function ResultPage() {
                                     </div>
                                 </div>
                             ))}
-                </div>
+                        </div>
 
                         <div className="mt-4 p-3 bg-[#00B4EE]/10 rounded-xl">
                             <p className="text-sm text-gray-700">
@@ -400,27 +356,12 @@ export default function ResultPage() {
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="mt-6">
                         <button
-                            onClick={() => navigate('/')}
-                            className="py-3 bg-white text-[#00B4EE] font-medium rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 shadow-md"
+                            onClick={() => navigate(`/report/feedback?id=${result.id}`)}
+                            className="w-full py-4 bg-[#FDE700] text-gray-900 font-medium rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 shadow-md"
                         >
-                            <Home className="w-4 h-4" />
-                            <span className="text-sm">首页</span>
-                        </button>
-                        <button
-                            onClick={() => navigate(`/detailed-report?id=${result.id}`)}
-                            className="py-3 bg-[#FDE700] text-gray-900 font-medium rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 shadow-md"
-                        >
-                            <FileText className="w-4 h-4" />
-                            <span className="text-sm">详细</span>
-                        </button>
-                        <button
-                            onClick={() => navigate(`/history?student=${encodeURIComponent(result.student_name)}`)}
-                            className="py-3 bg-white text-gray-700 font-medium rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 shadow-md"
-                        >
-                            <History className="w-4 h-4" />
-                            <span className="text-sm">历史</span>
+                            <span className="text-lg">进入下一页</span>
                         </button>
                     </div>
                 </div>

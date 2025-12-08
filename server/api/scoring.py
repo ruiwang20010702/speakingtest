@@ -24,19 +24,9 @@ async def evaluate_test(
     unit: str = Form(...),
     part1_audio: UploadFile = File(...),
     part2_audio: UploadFile = File(...),
-    # Part 3: 接收12个音频文件
+    # Part 3: 接收2个音频文件（问题1-6和问题7-12各一个）
     part3_audio_1: UploadFile = File(...),
     part3_audio_2: UploadFile = File(...),
-    part3_audio_3: UploadFile = File(...),
-    part3_audio_4: UploadFile = File(...),
-    part3_audio_5: UploadFile = File(...),
-    part3_audio_6: UploadFile = File(...),
-    part3_audio_7: UploadFile = File(...),
-    part3_audio_8: UploadFile = File(...),
-    part3_audio_9: UploadFile = File(...),
-    part3_audio_10: UploadFile = File(...),
-    part3_audio_11: UploadFile = File(...),
-    part3_audio_12: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
     """
@@ -91,22 +81,18 @@ async def evaluate_test(
             audio_files[part_num] = str(file_path)
             audio_sizes[part_num] = len(content)
         
-        # 保存 Part 3 的12个音频文件
-        part3_audio_files = [
-            part3_audio_1, part3_audio_2, part3_audio_3, part3_audio_4,
-            part3_audio_5, part3_audio_6, part3_audio_7, part3_audio_8,
-            part3_audio_9, part3_audio_10, part3_audio_11, part3_audio_12
-        ]
+        # 保存 Part 3 的2个分组音频文件
+        part3_group_files = [part3_audio_1, part3_audio_2]
         
         part3_files = {}
         part3_sizes = {}
-        for q_num, audio_file in enumerate(part3_audio_files, 1):
-            file_path = upload_dir / f"{student_name}_{level}_{unit}_part3_q{q_num}_{audio_file.filename}"
+        for group_num, audio_file in enumerate(part3_group_files, 1):
+            file_path = upload_dir / f"{student_name}_{level}_{unit}_part3_group{group_num}_{audio_file.filename}"
             content = await audio_file.read()
             with open(file_path, "wb") as f:
                 f.write(content)
-            part3_files[q_num] = str(file_path)
-            part3_sizes[q_num] = len(content)
+            part3_files[group_num] = str(file_path)
+            part3_sizes[group_num] = len(content)
 
         # 3. 使用 Gemini评分（全局并发 - Part 1/2/3 + Part 3的12个问题）
         from services.cost_calculator import estimate_tokens, calculate_cost
@@ -142,58 +128,43 @@ async def evaluate_test(
         part1_task = evaluate_part_async(1, audio_files[1], audio_sizes[1], evaluate_part1, words_part1)
         part2_task = evaluate_part_async(2, audio_files[2], audio_sizes[2], evaluate_part2, words_part2, sentences_part2)
         
-        # Part 3的12个问题评估任务
-        async def evaluate_question_async(q_num, dialogue, audio_path, audio_size):
-            """异步评估单个问题"""
-            single_q_prompt = f"""你是专业的英语口语评估专家。学生需要回答问题：
-Teacher: {dialogue['teacher']}
-Expected answers: {' / '.join(dialogue.get('student_options', []))}
-
-评分标准：回答正确且完整2分，部分正确1分，错误0分。
-
-返回JSON：
-{{
-  "score": 得分（0-2）,
-  "student_answer": "学生的回答",
-  "feedback": "评价",
-  "fluency_score": 流畅度（0-10）,
-  "pronunciation_score": 发音（0-10）,
-  "confidence_score": 自信度（0-10）
-}}
-"""
-            q_tokens = estimate_tokens(single_q_prompt, audio_size)
-            
+        # Part 3 分组评估任务（2个分组，每组6个问题）
+        from services.part3_evaluator import evaluate_part3_group
+        
+        async def evaluate_group_async(group_num, dialogues, audio_path, audio_size, start_q_num):
+            """异步评估一组6个问题"""
             loop = asyncio.get_event_loop()
             with ThreadPoolExecutor() as executor:
-                score_q, result_q = await loop.run_in_executor(
+                total_score, question_results = await loop.run_in_executor(
                     executor,
-                    evaluate_part3_single_question,
+                    evaluate_part3_group,
                     audio_path,
-                    dialogue,
-                    q_num
+                    dialogues,
+                    start_q_num
                 )
             
+            # 计算tokens
+            group_tokens = estimate_tokens("", audio_size)
+            
             return {
-                "question_num": q_num,
-                "score": score_q,
-               "student_answer": result_q.get("student_answer", ""),
-                "feedback": result_q.get("feedback", ""),
-                "fluency_score": result_q.get("fluency_score"),
-                "pronunciation_score": result_q.get("pronunciation_score"),
-                "confidence_score": result_q.get("confidence_score"),
-                "tokens": q_tokens
+                "group_num": group_num,
+                "total_score": total_score,
+                "question_results": question_results,
+                "tokens": group_tokens
             }
         
-        # 创建Part 3的12个任务
-        part3_tasks = []
-        for q_num in range(1, 13):
-            dialogue = dialogues_part3[q_num - 1]
-            task = evaluate_question_async(q_num, dialogue, part3_files[q_num], part3_sizes[q_num])
-            part3_tasks.append(task)
+        # 创建Part 3的2个分组任务
+        # Group 1: 问题 1-6
+        group1_dialogues = dialogues_part3[:6]
+        group1_task = evaluate_group_async(1, group1_dialogues, part3_files[1], part3_sizes[1], 1)
         
-        # 🚀 全局并发：Part 1 + Part 2 + Part 3的12个问题 = 共14个任务同时执行
-        print("🚀 开始并发评分：Part 1 + Part 2 + Part 3（12个问题）...")
-        all_results = await asyncio.gather(part1_task, part2_task, *part3_tasks)
+        # Group 2: 问题 7-12
+        group2_dialogues = dialogues_part3[6:12]
+        group2_task = evaluate_group_async(2, group2_dialogues, part3_files[2], part3_sizes[2], 7)
+        
+        # 🚀 全局并发：Part 1 + Part 2 + Part 3的2个分组 = 共4个任务同时执行
+        print("🚀 开始并发评分：Part 1 + Part 2 + Part 3（2个分组）...")
+        all_results = await asyncio.gather(part1_task, part2_task, group1_task, group2_task)
         print("✅ 并发评分完成！")
         
         # 解析 Part 1 结果
@@ -218,10 +189,14 @@ Expected answers: {' / '.join(dialogue.get('student_options', []))}
             "incorrect_items": result2.get("incorrect_words", [])
         })
         
-        # 解析 Part 3 结果（从索引2开始的12个结果）
-        part3_question_results = all_results[2:]
-        part3_total_score = sum(r["score"] for r in part3_question_results)
-        part3_all_feedback = [f"Q{r['question_num']}: {r['feedback']}" for r in part3_question_results]
+        # 解析 Part 3 结果（2个分组结果）
+        group1_result = all_results[2]
+        group2_result = all_results[3]
+        
+        # 合并所有问题结果
+        part3_question_results = group1_result["question_results"] + group2_result["question_results"]
+        part3_total_score = group1_result["total_score"] + group2_result["total_score"]
+        part3_all_feedback = [f"Q{r.get('question_num', i+1)}: {r.get('feedback', '')}" for i, r in enumerate(part3_question_results)]
         
         # Part 1/2 token估算（使用音频大小）
         from services.gemini_scorer import create_part1_prompt, create_part2_prompt
@@ -235,9 +210,11 @@ Expected answers: {' / '.join(dialogue.get('student_options', []))}
         total_input_tokens += part2_tokens["input_tokens"]
         total_output_tokens += part2_tokens["output_tokens"]
 
-        for result in part3_question_results:
-            total_input_tokens += result["tokens"]["input_tokens"]
-            total_output_tokens += result["tokens"]["output_tokens"]
+        # Part 3 token累加（2个分组）
+        total_input_tokens += group1_result["tokens"]["input_tokens"]
+        total_output_tokens += group1_result["tokens"]["output_tokens"]
+        total_input_tokens += group2_result["tokens"]["input_tokens"]
+        total_output_tokens += group2_result["tokens"]["output_tokens"]
         
         scores.append({
             "part_number": 3,
@@ -273,9 +250,9 @@ Expected answers: {' / '.join(dialogue.get('student_options', []))}
         for audio_size in [audio_sizes[1], audio_sizes[2]]:
             total_audio_tokens += int((audio_size / (16 * 1024)) * 32)  # 音频token估算
         
-        # Part 3音频token已在循环中累加
-        for q_num in range(1, 13):
-            total_audio_tokens += int((part3_sizes[q_num] / (16 * 1024)) * 32)
+        # Part 3音频token（2个分组）
+        for group_num in range(1, 3):
+            total_audio_tokens += int((part3_sizes[group_num] / (16 * 1024)) * 32)
         
         # 文本token粗略估算
         total_text_tokens = total_input_tokens - total_audio_tokens
@@ -332,8 +309,8 @@ Expected answers: {' / '.join(dialogue.get('student_options', []))}
             db.add(audio_record)
             saved_audio_paths.append(file_path)
         
-        # Part 3的12个音频文件
-        for q_num, file_path in part3_files.items():
+        # Part 3的2个分组音频文件
+        for group_num, file_path in part3_files.items():
             audio_record = AudioFile(
                 test_record_id=test_record.id,
                 part_number=3,  # Part 3

@@ -54,7 +54,8 @@ export const evaluateTest = async (
     unit: string,
     part1Audio: File,
     part2Audio: File,
-    part3Audios: File[]  // 修改为File数组
+    part3Group1Audio: File,  // 问题1-6合并后的音频
+    part3Group2Audio: File   // 问题7-12合并后的音频
 ): Promise<TestResult> => {
     const formData = new FormData();
     formData.append('student_name', studentName);
@@ -63,10 +64,9 @@ export const evaluateTest = async (
     formData.append('part1_audio', part1Audio);
     formData.append('part2_audio', part2Audio);
 
-    // 添加Part 3的多个音频文件
-    part3Audios.forEach((file, index) => {
-        formData.append(`part3_audio_${index + 1}`, file);
-    });
+    // 添加Part 3的2个分组音频文件
+    formData.append('part3_audio_1', part3Group1Audio);
+    formData.append('part3_audio_2', part3Group2Audio);
 
     const response = await api.post('/scoring/evaluate', formData, {
         headers: {

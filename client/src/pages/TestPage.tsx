@@ -70,7 +70,7 @@ export default function TestPage() {
         setRecordingError(null);
         setAudioSegments([]); // 清空录音片段
         setIsPaused(false);
-        
+
         // 恢复已有录音
         const existingBlob = recordings[`part${currentPart}` as keyof typeof recordings];
         if (existingBlob) {
@@ -94,12 +94,12 @@ export default function TestPage() {
     const startRecording = async (isContinuing: boolean = false) => {
         try {
             setRecordingError(null);
-            const stream = await navigator.mediaDevices.getUserMedia({ 
+            const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     noiseSuppression: true,
                     echoCancellation: true,
                     autoGainControl: true
-                } 
+                }
             });
             streamRef.current = stream;
             const mediaRecorder = new MediaRecorder(stream);
@@ -117,7 +117,7 @@ export default function TestPage() {
 
             mediaRecorder.onstop = () => {
                 const currentSegment = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                
+
                 // 合并所有片段（包括之前的）
                 setAudioSegments(prev => {
                     const allSegments = [...prev, currentSegment];
@@ -134,9 +134,9 @@ export default function TestPage() {
                         setRecordings(prevRec => ({
                             ...prevRec,
                             [`part${currentPart}`]: mergedBlob
-        }));
+                        }));
                     }
-                    
+
                     return allSegments;
                 });
 
@@ -147,7 +147,7 @@ export default function TestPage() {
             mediaRecorder.start(100); // 每100ms收集一次数据
             setIsRecording(true);
             setIsPaused(false);
-            
+
             // 如果不是继续录音，重置时间
             if (!isContinuing) {
                 setRecordingTime(0);
@@ -304,14 +304,28 @@ export default function TestPage() {
             const part1File = new File([recordings.part1], 'part1.webm', { type: 'audio/webm' });
             const part2File = new File([recordings.part2], 'part2.webm', { type: 'audio/webm' });
 
-            const part3Files: File[] = [];
-            for (let i = 0; i < totalQuestions; i++) {
+            // 将12个问题的录音合并成2个分组
+            // Group 1: 问题1-6
+            const group1Blobs: Blob[] = [];
+            for (let i = 0; i < 6; i++) {
                 const blob = part3Recordings[i];
-                if (!blob) {
-                    throw new Error(`问题 ${i + 1} 的录音丢失`);
+                if (blob) {
+                    group1Blobs.push(blob);
                 }
-                part3Files.push(new File([blob], `part3_q${i + 1}.webm`, { type: 'audio/webm' }));
             }
+            const group1Merged = new Blob(group1Blobs, { type: 'audio/webm' });
+            const part3Group1File = new File([group1Merged], 'part3_group1.webm', { type: 'audio/webm' });
+
+            // Group 2: 问题7-12
+            const group2Blobs: Blob[] = [];
+            for (let i = 6; i < 12; i++) {
+                const blob = part3Recordings[i];
+                if (blob) {
+                    group2Blobs.push(blob);
+                }
+            }
+            const group2Merged = new Blob(group2Blobs, { type: 'audio/webm' });
+            const part3Group2File = new File([group2Merged], 'part3_group2.webm', { type: 'audio/webm' });
 
             const result = await evaluateTest(
                 studentName,
@@ -319,7 +333,8 @@ export default function TestPage() {
                 unit,
                 part1File,
                 part2File,
-                part3Files
+                part3Group1File,
+                part3Group2File
             );
 
             navigate(`/result?id=${result.id}`);
@@ -359,14 +374,14 @@ export default function TestPage() {
                     <div className="absolute bottom-4 left-0 w-24 h-24 bg-white rounded-full -translate-x-1/3" />
                     <div className="absolute bottom-8 left-12 w-20 h-20 bg-white rounded-full" />
                     <div className="absolute bottom-12 left-6 w-16 h-16 bg-white rounded-full" />
-                    </div>
+                </div>
                 <div className="absolute top-0 right-0 w-48 h-32">
                     <div className="absolute top-4 right-0 w-24 h-24 bg-white rounded-full translate-x-1/3" />
                     <div className="absolute top-8 right-12 w-20 h-20 bg-white rounded-full" />
                     <div className="absolute top-12 right-6 w-16 h-16 bg-white rounded-full" />
                 </div>
                 <div className="absolute bottom-0 right-0 w-40 h-40 bg-[#FDE700] translate-x-1/4 translate-y-1/4" style={{ clipPath: 'polygon(0 100%, 100% 100%, 100% 0)' }} />
-                </div>
+            </div>
 
             {/* Content */}
             <div className="relative z-10 p-3 pb-6">
@@ -392,7 +407,7 @@ export default function TestPage() {
                                 词汇列表 {currentGroup === 1 ? `(1-${Math.ceil(currentPartData.items.length / 2)})` : `(${Math.ceil(currentPartData.items.length / 2) + 1}-${currentPartData.items.length})`}
                             </h2>
                             <p className="text-gray-500 text-sm mb-3">Read the following words aloud.</p>
-                            
+
                             <div className="grid grid-cols-2 gap-2 mb-3">
                                 {currentPartData.items
                                     .slice(
@@ -413,15 +428,14 @@ export default function TestPage() {
                                             </div>
                                         );
                                     })}
-                                </div>
+                            </div>
 
                             <button
                                 onClick={() => setCurrentGroup(currentGroup === 1 ? 2 : 1)}
-                                className={`w-full py-2.5 rounded-lg hover:shadow-md transition-all active:scale-95 ${
-                                    currentGroup === 1
+                                className={`w-full py-2.5 rounded-lg hover:shadow-md transition-all active:scale-95 ${currentGroup === 1
                                         ? 'bg-[#FDE700] text-gray-900'
                                         : 'bg-white text-gray-900 border border-gray-200'
-                                }`}
+                                    }`}
                             >
                                 {currentGroup === 1 ? `下部分词汇 (${Math.ceil(currentPartData.items.length / 2) + 1}-${currentPartData.items.length})` : `上部分词汇 (1-${Math.ceil(currentPartData.items.length / 2)})`}
                             </button>
@@ -448,7 +462,7 @@ export default function TestPage() {
                                             </div>
                                         ))}
                                     </div>
-                                    
+
                                     <button
                                         onClick={() => setShowSentences(true)}
                                         className="w-full py-3 bg-[#FDE700] text-gray-900 font-medium rounded-xl hover:shadow-md transition-all flex items-center justify-center gap-2"
@@ -473,10 +487,10 @@ export default function TestPage() {
                                                     <span className="text-gray-500">{(currentPartData.words?.length || 0) + index + 1}. </span>
                                                     {item.text}
                                                 </p>
-                                        </div>
-                                    ))}
+                                            </div>
+                                        ))}
                                     </div>
-                                    
+
                                     <button
                                         onClick={() => setShowSentences(false)}
                                         className="w-full py-3 bg-white text-gray-900 font-medium rounded-xl hover:shadow-md transition-all flex items-center justify-center gap-2 border border-gray-200"
@@ -501,7 +515,7 @@ export default function TestPage() {
                                     </span>
                                 </div>
                                 <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                                    <div 
+                                    <div
                                         className="h-full bg-[#FDE700] transition-all duration-300"
                                         style={{ width: `${((currentQuestionIndex + 1) / part3Dialogues.length) * 100}%` }}
                                     />
@@ -523,7 +537,7 @@ export default function TestPage() {
                                         <p className="text-gray-900 text-lg leading-relaxed">
                                             {part3Dialogues[currentQuestionIndex].teacher}
                                         </p>
-                                        </div>
+                                    </div>
                                 </div>
 
                                 {part3Recordings[currentQuestionIndex] && (
@@ -550,35 +564,32 @@ export default function TestPage() {
                                             setRecordingTime(0);
                                             setIsPlaying(false);
                                         }}
-                                        className={`w-2 h-2 rounded-full transition-all ${
-                                            index === currentQuestionIndex
+                                        className={`w-2 h-2 rounded-full transition-all ${index === currentQuestionIndex
                                                 ? 'w-6 bg-[#00B4EE]'
                                                 : part3Recordings[index]
-                                                ? 'bg-[#FDE700]'
-                                                : 'bg-gray-300'
-                                        }`}
+                                                    ? 'bg-[#FDE700]'
+                                                    : 'bg-gray-300'
+                                            }`}
                                     />
                                 ))}
-                        </div>
+                            </div>
                         </>
                     )}
 
                     {/* Recording Controls */}
                     <div className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-4">
                         <h2 className="text-lg font-semibold text-gray-900 mb-3">录音</h2>
-                        
+
                         <div className="flex flex-col items-center gap-3">
                             {/* Recording Status & Time */}
                             <div className="flex items-center gap-3">
                                 {isRecording && (
-                                    <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
-                                        isPaused 
-                                            ? 'bg-yellow-100 text-yellow-700' 
+                                    <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${isPaused
+                                            ? 'bg-yellow-100 text-yellow-700'
                                             : 'bg-red-100 text-red-700'
-                                    }`}>
-                                        <span className={`w-2 h-2 rounded-full ${
-                                            isPaused ? 'bg-yellow-500' : 'bg-red-500 animate-pulse'
-                                        }`}></span>
+                                        }`}>
+                                        <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-yellow-500' : 'bg-red-500 animate-pulse'
+                                            }`}></span>
                                         {isPaused ? '已暂停' : '录音中'}
                                     </span>
                                 )}
@@ -602,7 +613,7 @@ export default function TestPage() {
                                 >
                                     <Mic className="w-7 h-7" />
                                 </button>
-                    )}
+                            )}
 
                             {/* 录音中的控制按钮 */}
                             {isRecording && (
@@ -625,7 +636,7 @@ export default function TestPage() {
                                             <Play className="w-6 h-6" />
                                         </button>
                                     )}
-                                    
+
                                     {/* 完成按钮 */}
                                     <button
                                         onClick={stopRecording}
@@ -635,7 +646,7 @@ export default function TestPage() {
                                         <Square className="w-6 h-6" />
                                     </button>
                                 </div>
-                                )}
+                            )}
 
                             <p className="text-gray-600 text-sm">
                                 {!audioURL && !isRecording && '点击开始录音'}
@@ -666,7 +677,7 @@ export default function TestPage() {
                                         onEnded={() => setIsPlaying(false)}
                                         className="hidden"
                                     />
-                                    
+
                                     {/* 播放按钮 */}
                                     <button
                                         onClick={togglePlayback}
@@ -684,7 +695,7 @@ export default function TestPage() {
                                             </>
                                         )}
                                     </button>
-                                    
+
                                     {/* 继续录音 & 重新录音按钮 */}
                                     <div className="flex gap-2">
                                         <button
@@ -719,11 +730,10 @@ export default function TestPage() {
                             <button
                                 onClick={handleNext}
                                 disabled={currentPart === 1 ? currentGroup === 1 : !showSentences}
-                                className={`flex-1 py-4 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 ${
-                                    (currentPart === 1 && currentGroup === 2) || (currentPart === 2 && showSentences)
+                                className={`flex-1 py-4 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 ${(currentPart === 1 && currentGroup === 2) || (currentPart === 2 && showSentences)
                                         ? 'bg-[#FDE700] text-gray-900'
                                         : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                }`}
+                                    }`}
                             >
                                 <span>进入 Part {currentPart + 1}</span>
                                 <ChevronRight className="w-5 h-5" />
@@ -743,7 +753,7 @@ export default function TestPage() {
                                     <ChevronLeft className="w-5 h-5" />
                                     <span>上一题</span>
                                 </button>
-                                
+
                                 {currentQuestionIndex === part3Dialogues.length - 1 ? (
                                     <button
                                         onClick={handleSubmit}
