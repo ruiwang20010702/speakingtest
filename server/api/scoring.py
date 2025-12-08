@@ -38,7 +38,8 @@ async def evaluate_test(
         unit: 单元（如 unit1-3）
         part1_audio: Part 1 音频文件
         part2_audio: Part 2 音频文件
-        part3_audio_1 to part3_audio_12: Part 3的12个问题音频文件
+        part3_audio_1: Part 3 第一组音频文件（问题1-6）
+        part3_audio_2: Part 3 第二组音频文件（问题7-12）
         db: 数据库会话
     
     Returns:
@@ -94,7 +95,7 @@ async def evaluate_test(
             part3_files[group_num] = str(file_path)
             part3_sizes[group_num] = len(content)
 
-        # 3. 使用 Gemini评分（全局并发 - Part 1/2/3 + Part 3的12个问题）
+        # 3. 使用 Gemini评分（全局并发 - Part 1/2 + Part 3的2个分组）
         from services.cost_calculator import estimate_tokens, calculate_cost
         import asyncio
         from concurrent.futures import ThreadPoolExecutor
