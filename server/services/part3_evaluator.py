@@ -100,7 +100,11 @@ Expected answers: {' / '.join(dialogue.get('student_options', []))}
   "confidence_score": 整体自信度（0-10）
 }}
 
-注意：只返回JSON，不要包含其他文字。请确保questions数组包含6个问题的评估结果，按顺序对应问题 {start_question_num} 到 {start_question_num + 5}。
+注意：
+1. 只返回JSON，不要包含其他文字
+2. 请确保questions数组包含6个问题的评估结果，按顺序对应问题 {start_question_num} 到 {start_question_num + 5}
+3. **重要**：feedback字段必须使用中文评价
+4. student_answer字段必须保持学生说的英文原话
 """
     
     client = GeminiClient()

@@ -76,6 +76,7 @@ def create_part1_prompt(words: List[str]) -> str:
 1. 只返回 JSON，不要包含其他文字
 2. 时间戳尽可能准确，如果无法确定可以估算
 3. word_timestamps 应包含所有尝试朗读的单词
+4. **重要**：feedback字段必须使用中文，但correct_words和incorrect_words保持英文原词
 """
     
     return prompt
@@ -142,6 +143,7 @@ def create_part2_prompt(words: List[str], sentences: List[str]) -> str:
 1. 只返回 JSON，不要包含其他文字
 2. 时间戳尽可能准确，如果无法确定可以估算
 3. 先朗读单词，后朗读句子，时间戳应体现这个顺序
+4. **重要**：feedback和sentence_quality字段必须使用中文，但单词和句子内容保持英文
 """
     
     return prompt
@@ -213,7 +215,10 @@ def create_part3_prompt(dialogues: List[Dict]) -> str:
   "feedback": "整体反馈"
 }}
 
-注意：只返回 JSON，不要包含其他文字。"""
+注意：
+1. 只返回 JSON，不要包含其他文字
+2. **重要**：feedback和comment字段必须使用中文评价
+3. student_answer字段必须保持学生说的英文原话"""
     
     return prompt
 

@@ -300,6 +300,9 @@ export default function TestPage() {
         setIsSubmitting(true);
         setError(null);
 
+        // 先跳转到 loading 页面
+        navigate('/loading');
+
         try {
             const part1File = new File([recordings.part1], 'part1.webm', { type: 'audio/webm' });
             const part2File = new File([recordings.part2], 'part2.webm', { type: 'audio/webm' });
@@ -337,9 +340,11 @@ export default function TestPage() {
                 part3Group2File
             );
 
-            navigate(`/result?id=${result.id}`);
+            // 评分完成后，通过 state 传递结果 ID 给 loading 页面
+            navigate('/loading', { state: { resultId: result.id }, replace: true });
         } catch (err: any) {
-            setError(err.response?.data?.detail || '评分失败，请重试');
+            const errorMsg = err.response?.data?.detail || '评分失败，请重试';
+            navigate('/loading', { state: { error: errorMsg }, replace: true });
             console.error(err);
         } finally {
             setIsSubmitting(false);
@@ -433,8 +438,8 @@ export default function TestPage() {
                             <button
                                 onClick={() => setCurrentGroup(currentGroup === 1 ? 2 : 1)}
                                 className={`w-full py-2.5 rounded-lg hover:shadow-md transition-all active:scale-95 ${currentGroup === 1
-                                        ? 'bg-[#FDE700] text-gray-900'
-                                        : 'bg-white text-gray-900 border border-gray-200'
+                                    ? 'bg-[#FDE700] text-gray-900'
+                                    : 'bg-white text-gray-900 border border-gray-200'
                                     }`}
                             >
                                 {currentGroup === 1 ? `下部分词汇 (${Math.ceil(currentPartData.items.length / 2) + 1}-${currentPartData.items.length})` : `上部分词汇 (1-${Math.ceil(currentPartData.items.length / 2)})`}
@@ -565,10 +570,10 @@ export default function TestPage() {
                                             setIsPlaying(false);
                                         }}
                                         className={`w-2 h-2 rounded-full transition-all ${index === currentQuestionIndex
-                                                ? 'w-6 bg-[#00B4EE]'
-                                                : part3Recordings[index]
-                                                    ? 'bg-[#FDE700]'
-                                                    : 'bg-gray-300'
+                                            ? 'w-6 bg-[#00B4EE]'
+                                            : part3Recordings[index]
+                                                ? 'bg-[#FDE700]'
+                                                : 'bg-gray-300'
                                             }`}
                                     />
                                 ))}
@@ -585,8 +590,8 @@ export default function TestPage() {
                             <div className="flex items-center gap-3">
                                 {isRecording && (
                                     <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${isPaused
-                                            ? 'bg-yellow-100 text-yellow-700'
-                                            : 'bg-red-100 text-red-700'
+                                        ? 'bg-yellow-100 text-yellow-700'
+                                        : 'bg-red-100 text-red-700'
                                         }`}>
                                         <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-yellow-500' : 'bg-red-500 animate-pulse'
                                             }`}></span>
@@ -731,8 +736,8 @@ export default function TestPage() {
                                 onClick={handleNext}
                                 disabled={currentPart === 1 ? currentGroup === 1 : !showSentences}
                                 className={`flex-1 py-4 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 ${(currentPart === 1 && currentGroup === 2) || (currentPart === 2 && showSentences)
-                                        ? 'bg-[#FDE700] text-gray-900'
-                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    ? 'bg-[#FDE700] text-gray-900'
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                     }`}
                             >
                                 <span>进入 Part {currentPart + 1}</span>
