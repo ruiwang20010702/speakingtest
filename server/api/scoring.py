@@ -315,7 +315,7 @@ async def evaluate_test(
                 test_record_id=test_record.id,
                 part_number=3,  # Part 3
                 file_path=file_path,
-                file_size=part3_sizes.get(q_num, 0)
+                file_size=part3_sizes.get(group_num, 0)
             )
             db.add(audio_record)
             saved_audio_paths.append(file_path)
