@@ -27,7 +27,7 @@ class TestRecord(Base):
     total_tokens = Column(Integer, default=0)  # 总token数
     api_cost = Column(Float, default=0.0)  # API调用成本（美元）
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.utcnow())
 
     
     # 关系
