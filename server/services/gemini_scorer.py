@@ -266,7 +266,14 @@ def parse_gemini_response(response_text: str) -> Dict:
         
         # 解析 JSON
         result = json.loads(json_str)
-        print(f"✅ 评分完成: {result.get('score', 'N/A')} 分")
+        # 日志：支持单独 score 或 questions 数组格式
+        if 'score' in result:
+            print(f"✅ 评分完成: {result['score']} 分")
+        elif 'questions' in result:
+            total = sum(q.get('score', 0) for q in result['questions'])
+            print(f"✅ 分组评分完成: {total} 分 ({len(result['questions'])}个问题)")
+        else:
+            print(f"✅ 评分完成")
         return result
         
     except json.JSONDecodeError as e:
