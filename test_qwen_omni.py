@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Qwen3-Omni-Flash 口语测评测试脚本
-使用 OpenAI 兼容协议调用阿里云百炼平台的 Qwen3-Omni-Flash 模型
+Qwen3-Omni-Flash 口语测评测试脚本 (结构化输出版)
+使用 OpenAI 兼容协议调用阿里云百炼平台的 Qwen3-Omni-Flash 模型，并要求返回 JSON 格式数据
 """
 
 import os
@@ -18,7 +18,7 @@ from openai import OpenAI
 API_KEY = os.getenv("DASHSCOPE_API_KEY") or "sk-038d7badfa974ca9850ed879dae34a47"
 
 # 模型名称
-MODEL = "qwen-omni-turbo"  # 或 "qwen-omni-turbo-latest"
+MODEL = "qwen3-omni-flash"
 
 # 百炼平台 OpenAI 兼容 base_url
 BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -77,72 +77,155 @@ def load_audio_file(audio_path: str) -> tuple[str, str, str]:
     return audio_data, audio_format, data_url
 
 
+# 定义输出的 JSON Schema
+EVALUATION_SCHEMA = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "speaking_evaluation",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "transcription": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "integer"},
+                            "question": {"type": "string"},
+                            "answer": {"type": "string"}
+                        },
+                        "required": ["id", "question", "answer"],
+                        "additionalProperties": False
+                    }
+                },
+                "scores": {
+                    "type": "object",
+                    "properties": {
+                        "pronunciation": {"type": "integer", "description": "Score from 1-10"},
+                        "grammar": {"type": "integer", "description": "Score from 1-10"},
+                        "fluency": {"type": "integer", "description": "Score from 1-10"},
+                        "content": {"type": "integer", "description": "Score from 1-10"},
+                        "overall": {"type": "integer", "description": "Score from 1-10"}
+                    },
+                    "required": ["pronunciation", "grammar", "fluency", "content", "overall"],
+                    "additionalProperties": False
+                },
+                "question_details": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "integer"},
+                            "score": {"type": "integer"},
+                            "comment": {"type": "string"}
+                        },
+                        "required": ["id", "score", "comment"],
+                        "additionalProperties": False
+                    }
+                },
+                "pronunciation_issues": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "word": {"type": "string"},
+                            "issue": {"type": "string"}
+                        },
+                        "required": ["word", "issue"],
+                        "additionalProperties": False
+                    }
+                },
+                "grammar_issues": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "original": {"type": "string"},
+                            "corrected": {"type": "string"},
+                            "explanation": {"type": "string"}
+                        },
+                        "required": ["original", "corrected", "explanation"],
+                        "additionalProperties": False
+                    }
+                },
+                "suggestions": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                }
+            },
+            "required": [
+                "transcription",
+                "scores",
+                "question_details",
+                "pronunciation_issues",
+                "grammar_issues",
+                "suggestions"
+            ],
+            "additionalProperties": False
+        }
+    }
+}
+
+
 def evaluate_speaking(
     client: OpenAI,
     audio_path: str,
-    question: str = None,
-    expected_answer: str = None,
+    question_context: str,
 ) -> dict:
     """
-    使用 Qwen3-Omni 评测口语
-    
-    Args:
-        client: OpenAI 客户端
-        audio_path: 音频文件路径
-        question: 测试题目（可选）
-        expected_answer: 参考答案（可选）
-    
-    Returns:
-        评测结果字典
+    使用 Qwen3-Omni 评测口语，返回结构化 JSON 数据
     """
     # 加载音频
     audio_base64, audio_format, data_url = load_audio_file(audio_path)
     
-    # 构建评测 prompt
-    prompt_parts = ["请评测这段英语口语录音：\n"]
-    
-    if question:
-        prompt_parts.append(f"**测试题目**: {question}\n")
-    
-    if expected_answer:
-        prompt_parts.append(f"**参考答案**: {expected_answer}\n")
-    
-    prompt_parts.append("""
-请按以下格式输出评测结果：
+    # 构建 Prompt
+    system_prompt = """
+你是一位专业的英语口语评测老师。请听取学生的录音，并根据提供的问题列表进行评测。
+请严格按照要求的 JSON 格式输出评测结果。
 
-## 1. 语音转写
-（学生实际说了什么，逐字转写）
-
-## 2. 评分（每项1-10分）
-- **发音准确度**: X/10
-- **语法正确性**: X/10  
-- **流利度**: X/10
-- **内容完整性**: X/10
-- **综合得分**: X/10
-
-## 3. 发音问题
-（列出发音有问题的单词，并说明具体问题）
-
-## 4. 语法问题
-（列出语法错误，并给出正确表达）
-
-## 5. 改进建议
-（给出具体、可操作的改进建议）
-""")
+**评分标准（1-10分）**：
+- **发音准确度 (Pronunciation)**: 
+  - 9-10: 发音清晰、标准，无明显口音，元音/辅音发音准确。
+  - 7-8: 发音较清晰，有个别单词发音不准，但不影响理解。
+  - 5-6: 有明显口音，部分单词发音错误，影响理解。
+  - 1-4: 发音含糊不清，难以理解。
+- **语法正确性 (Grammar)**:
+  - 9-10: 语法结构正确，时态、单复数使用得当。
+  - 7-8: 偶有小错误（如单复数、冠词），但不影响句意。
+  - 5-6: 语法错误较多，影响句子结构的完整性。
+  - 1-4: 语法错误严重，无法构成完整句子。
+- **流利度 (Fluency)**:
+  - 9-10: 语速适中，停顿自然，连贯性好。
+  - 7-8: 稍有停顿或重复，但整体流畅。
+  - 5-6: 停顿较多，语速缓慢，有明显的犹豫。
+  - 1-4: 极不流利，频繁卡顿。
+- **内容完整性 (Content)**:
+  - 9-10: 回答切题，内容丰富完整，逻辑清晰。
+  - 7-8: 回答基本切题，内容较完整。
+  - 5-6: 回答部分切题，内容遗漏较多。
+  - 1-4: 答非所问或未回答。
+"""
     
-    prompt = "\n".join(prompt_parts)
+    user_prompt = f"""
+请评测这段录音。
+
+**测试题目**:
+{question_context}
+
+请分析学生的回答，包括语音转写、各项评分（1-10分）、每道题的详细点评、发音问题、语法问题以及改进建议。
+"""
     
-    print(f"\n🎯 正在调用 {MODEL} 进行评测...")
+    print(f"\n🎯 正在调用 {MODEL} 进行结构化评测...")
     print("-" * 50)
     
-    # 调用 API - 使用流式输出（百炼 Qwen-Omni 要求 stream=True）
     try:
         completion = client.chat.completions.create(
             model=MODEL,
             messages=[
                 {
                     "role": "system",
-                    "content": "你是一位专业的英语口语评测老师，擅长评估学生的发音、语法和流利度。请认真听取学生的口语录音，给出详细、准确的评测反馈。"
+                    "content": system_prompt
                 },
                 {
                     "role": "user",
@@ -156,39 +239,41 @@ def evaluate_speaking(
                         },
                         {
                             "type": "text",
-                            "text": prompt
+                            "text": user_prompt
                         }
                     ]
                 }
             ],
-            # 只输出文本，不输出音频
-            modalities=["text"],
-            stream=True,
-            stream_options={"include_usage": True},
+            modalities=["text"],  # 暂时只获取文本（JSON）
+            response_format=EVALUATION_SCHEMA, # 使用结构化输出
+            stream=False,
         )
         
-        # 收集流式响应
-        result_text = ""
-        usage_info = None
+        # 获取响应内容
+        result_text = completion.choices[0].message.content
+        usage_info = completion.usage
         
-        for chunk in completion:
-            if chunk.choices and chunk.choices[0].delta.content:
-                content = chunk.choices[0].delta.content
-                result_text += content
-            if hasattr(chunk, 'usage') and chunk.usage:
-                usage_info = chunk.usage
+        print("\n" + "-" * 50)
         
-        return {
-            "success": True,
-            "evaluation": result_text,
-            "model": MODEL,
-            "usage": {
-                "prompt_tokens": usage_info.prompt_tokens if usage_info else 0,
-                "completion_tokens": usage_info.completion_tokens if usage_info else 0,
-                "total_tokens": usage_info.total_tokens if usage_info else 0,
-            } if usage_info else {}
-        }
-        
+        # 解析 JSON
+        try:
+            evaluation_json = json.loads(result_text)
+            return {
+                "success": True,
+                "data": evaluation_json,
+                "usage": {
+                    "prompt_tokens": usage_info.prompt_tokens if usage_info else 0,
+                    "completion_tokens": usage_info.completion_tokens if usage_info else 0,
+                    "total_tokens": usage_info.total_tokens if usage_info else 0,
+                } if usage_info else {}
+            }
+        except json.JSONDecodeError:
+            return {
+                "success": False,
+                "error": "无法解析模型返回的 JSON",
+                "raw_output": result_text
+            }
+            
     except Exception as e:
         return {
             "success": False,
@@ -199,100 +284,45 @@ def evaluate_speaking(
 def main():
     """主函数"""
     print("=" * 60)
-    print("🎤 Qwen3-Omni 口语测评测试")
+    print("🎤 Qwen3-Omni 结构化口语测评测试")
     print("=" * 60)
     
-    # 创建客户端
     client = create_client()
-    print(f"✅ 已连接到百炼平台")
-    print(f"📍 Base URL: {BASE_URL}")
-    print(f"🤖 模型: {MODEL}")
     
-    # ============================================
-    # 测试用例 1: playing basketball.mp3
-    # ============================================
-    print("\n" + "=" * 60)
-    print("📝 测试用例 1: playing basketball")
-    print("=" * 60)
+    # Part 2 问题列表
+    part2_questions = """Part 2: Sentences - Question & Answer
+1. How are you?
+2. Are you happy today?
+3. How old are you?
+4. What grade are you in?
+5. Do you have sisters or brothers?
+6. How many sisters or brothers do you have?
+7. What can you see in your room?
+8. What time is it now?
+9. When do you wake up?
+10. What is your favorite food?
+11. Do you like English?
+12. Can you count from one to twenty?"""
     
-    audio_file = "playing basketball.mp3"
+    # 使用转换后的 MP3 文件
+    audio_file = "test_converted.mp3"
     
     if Path(audio_file).exists():
         result = evaluate_speaking(
             client=client,
             audio_path=audio_file,
-            question="What do you like to do in your free time?",
-            expected_answer="I like playing basketball in my free time.",
+            question_context=part2_questions
         )
         
         if result["success"]:
-            print("\n📊 评测结果：")
-            print("-" * 50)
-            print(result["evaluation"])
-            print("-" * 50)
+            print("\n✅ 评测成功！解析后的数据：")
+            print(json.dumps(result["data"], indent=2, ensure_ascii=False))
             print(f"\n💰 Token 使用: {result['usage']}")
         else:
             print(f"\n❌ 评测失败: {result['error']}")
     else:
-        print(f"⚠️ 音频文件不存在: {audio_file}")
-    
-    # ============================================
-    # 测试用例 2: car.mp3
-    # ============================================
-    print("\n" + "=" * 60)
-    print("📝 测试用例 2: car")
-    print("=" * 60)
-    
-    audio_file = "car.mp3"
-    
-    if Path(audio_file).exists():
-        result = evaluate_speaking(
-            client=client,
-            audio_path=audio_file,
-            question="What can you see in the picture?",
-            expected_answer="I can see a car.",
-        )
-        
-        if result["success"]:
-            print("\n📊 评测结果：")
-            print("-" * 50)
-            print(result["evaluation"])
-            print("-" * 50)
-            print(f"\n💰 Token 使用: {result['usage']}")
-        else:
-            print(f"\n❌ 评测失败: {result['error']}")
-    else:
-        print(f"⚠️ 音频文件不存在: {audio_file}")
-
-
-def test_simple():
-    """
-    简单测试 - 只测试一个音频文件
-    """
-    print("🎤 Qwen3-Omni 简单测试")
-    print("-" * 40)
-    
-    client = create_client()
-    
-    # 测试音频文件
-    audio_file = "playing basketball.mp3"
-    
-    result = evaluate_speaking(
-        client=client,
-        audio_path=audio_file,
-    )
-    
-    if result["success"]:
-        print("\n📊 评测结果：")
-        print(result["evaluation"])
-    else:
-        print(f"❌ 失败: {result['error']}")
-
+        print(f"⚠️ 音频文件不存在: {audio_file} (请先运行之前的转换命令)")
 
 if __name__ == "__main__":
-    # 运行完整测试
     main()
-    
-    # 或运行简单测试
-    # test_simple()
 
