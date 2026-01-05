@@ -1,0 +1,394 @@
+{
+    "levels": [
+        {
+            "level_id": "level1",
+            "level_name": "Level 1",
+            "sections": [
+                {
+                    "section_id": "unit1-3",
+                    "section_name": "Unit 1-3",
+                    "parts": [
+                        {
+                            "part_id": 1,
+                            "part_name": "Vocabulary",
+                            "type": "word_reading",
+                            "max_score": 20,
+                            "instruction": "Read the following words.",
+                            "items": [
+                                {
+                                    "id": 1,
+                                    "word": "how"
+                                },
+                                {
+                                    "id": 2,
+                                    "word": "night"
+                                },
+                                {
+                                    "id": 3,
+                                    "word": "tomato"
+                                },
+                                {
+                                    "id": 4,
+                                    "word": "pencil"
+                                },
+                                {
+                                    "id": 5,
+                                    "word": "what"
+                                },
+                                {
+                                    "id": 6,
+                                    "word": "moon cake"
+                                },
+                                {
+                                    "id": 7,
+                                    "word": "breakfast"
+                                },
+                                {
+                                    "id": 8,
+                                    "word": "lunch"
+                                },
+                                {
+                                    "id": 9,
+                                    "word": "fine"
+                                },
+                                {
+                                    "id": 10,
+                                    "word": "he"
+                                },
+                                {
+                                    "id": 11,
+                                    "word": "book"
+                                },
+                                {
+                                    "id": 12,
+                                    "word": "red"
+                                },
+                                {
+                                    "id": 13,
+                                    "word": "homework"
+                                },
+                                {
+                                    "id": 14,
+                                    "word": "science"
+                                },
+                                {
+                                    "id": 15,
+                                    "word": "party"
+                                },
+                                {
+                                    "id": 16,
+                                    "word": "hen"
+                                },
+                                {
+                                    "id": 17,
+                                    "word": "math"
+                                },
+                                {
+                                    "id": 18,
+                                    "word": "English"
+                                },
+                                {
+                                    "id": 19,
+                                    "word": "movie theater"
+                                },
+                                {
+                                    "id": 20,
+                                    "word": "polar bear"
+                                }
+                            ]
+                        },
+                        {
+                            "part_id": 2,
+                            "part_name": "Sentences",
+                            "type": "question_answer",
+                            "max_score": 24,
+                            "instruction": "Answer the following questions.",
+                            "dialogues": [
+                                {
+                                    "id": 1,
+                                    "teacher": "How are you?",
+                                    "student_options": [
+                                        "Yes, I am.",
+                                        "No, I am not."
+                                    ]
+                                },
+                                {
+                                    "id": 2,
+                                    "teacher": "Are you happy today?",
+                                    "student_options": [
+                                        "Yes, I am.",
+                                        "No, I am not."
+                                    ]
+                                },
+                                {
+                                    "id": 3,
+                                    "teacher": "How old are you?",
+                                    "student_options": [
+                                        "I am..."
+                                    ]
+                                },
+                                {
+                                    "id": 4,
+                                    "teacher": "What grade are you in?",
+                                    "student_options": [
+                                        "I am in the ... grade."
+                                    ]
+                                },
+                                {
+                                    "id": 5,
+                                    "teacher": "Do you have sisters or brothers?",
+                                    "student_options": [
+                                        "Yes, I do.",
+                                        "No, I don't."
+                                    ]
+                                },
+                                {
+                                    "id": 6,
+                                    "teacher": "How many sisters or brothers do you have?",
+                                    "student_options": [
+                                        "I have ... sister(s)/brother(s)."
+                                    ]
+                                },
+                                {
+                                    "id": 7,
+                                    "teacher": "What can you see in your room?",
+                                    "student_options": [
+                                        "I can see..."
+                                    ]
+                                },
+                                {
+                                    "id": 8,
+                                    "teacher": "What time is it now?",
+                                    "student_options": [
+                                        "It is... o'clock"
+                                    ]
+                                },
+                                {
+                                    "id": 9,
+                                    "teacher": "When do you wake up?",
+                                    "student_options": [
+                                        "I wake up at ... o'clock."
+                                    ]
+                                },
+                                {
+                                    "id": 10,
+                                    "teacher": "What is your favorite food?",
+                                    "student_options": [
+                                        "My favorite food is ..."
+                                    ]
+                                },
+                                {
+                                    "id": 11,
+                                    "teacher": "Do you like English?",
+                                    "student_options": [
+                                        "Yes, I do.",
+                                        "No, I don't."
+                                    ]
+                                },
+                                {
+                                    "id": 12,
+                                    "teacher": "Can you count from one to twenty?",
+                                    "student_options": [
+                                        "1,2,3..."
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "section_id": "unit4-8",
+                    "section_name": "Unit 4-8",
+                    "parts": [
+                        {
+                            "part_id": 1,
+                            "part_name": "Vocabulary",
+                            "type": "word_reading",
+                            "max_score": 20,
+                            "instruction": "Read the following words.",
+                            "items": [
+                                {
+                                    "id": 1,
+                                    "word": "pizza"
+                                },
+                                {
+                                    "id": 2,
+                                    "word": "salad"
+                                },
+                                {
+                                    "id": 3,
+                                    "word": "strawberry"
+                                },
+                                {
+                                    "id": 4,
+                                    "word": "candy"
+                                },
+                                {
+                                    "id": 5,
+                                    "word": "jelly bean"
+                                },
+                                {
+                                    "id": 6,
+                                    "word": "movie"
+                                },
+                                {
+                                    "id": 7,
+                                    "word": "toy"
+                                },
+                                {
+                                    "id": 8,
+                                    "word": "where"
+                                },
+                                {
+                                    "id": 9,
+                                    "word": "slide"
+                                },
+                                {
+                                    "id": 10,
+                                    "word": "egg"
+                                },
+                                {
+                                    "id": 11,
+                                    "word": "next to"
+                                },
+                                {
+                                    "id": 12,
+                                    "word": "inside"
+                                },
+                                {
+                                    "id": 13,
+                                    "word": "under"
+                                },
+                                {
+                                    "id": 14,
+                                    "word": "starfish"
+                                },
+                                {
+                                    "id": 15,
+                                    "word": "jellyfish"
+                                },
+                                {
+                                    "id": 16,
+                                    "word": "dolphin"
+                                },
+                                {
+                                    "id": 17,
+                                    "word": "sea turtle"
+                                },
+                                {
+                                    "id": 18,
+                                    "word": "thirteen"
+                                },
+                                {
+                                    "id": 19,
+                                    "word": "fourteen"
+                                },
+                                {
+                                    "id": 20,
+                                    "word": "shopping"
+                                }
+                            ]
+                        },
+                        {
+                            "part_id": 2,
+                            "part_name": "Sentences",
+                            "type": "question_answer",
+                            "max_score": 24,
+                            "instruction": "Answer the following questions.",
+                            "dialogues": [
+                                {
+                                    "id": 1,
+                                    "teacher": "What is your favorite food?",
+                                    "student_options": [
+                                        "My favorite food is..."
+                                    ]
+                                },
+                                {
+                                    "id": 2,
+                                    "teacher": "What is your favorite fruit?",
+                                    "student_options": [
+                                        "My favorite fruit is..."
+                                    ]
+                                },
+                                {
+                                    "id": 3,
+                                    "teacher": "Do you like candy?",
+                                    "student_options": [
+                                        "Yes, I do",
+                                        "No, I don't"
+                                    ]
+                                },
+                                {
+                                    "id": 4,
+                                    "teacher": "What kind of candy do you like?",
+                                    "student_options": [
+                                        "I like jelly beans and lollipops."
+                                    ]
+                                },
+                                {
+                                    "id": 5,
+                                    "teacher": "Do you like animals?",
+                                    "student_options": [
+                                        "Yes, I do",
+                                        "No, I don't"
+                                    ]
+                                },
+                                {
+                                    "id": 6,
+                                    "teacher": "What is your favorite animal?",
+                                    "student_options": [
+                                        "My favorite animal is..."
+                                    ]
+                                },
+                                {
+                                    "id": 7,
+                                    "teacher": "What animals live in the sea?",
+                                    "student_options": [
+                                        "Sea turtles live in the sea."
+                                    ]
+                                },
+                                {
+                                    "id": 8,
+                                    "teacher": "How many pens do you have?",
+                                    "student_options": [
+                                        "There are ...pens.",
+                                        "I have...pens."
+                                    ]
+                                },
+                                {
+                                    "id": 9,
+                                    "teacher": "How much is your school bag?",
+                                    "student_options": [
+                                        "It's...yuan."
+                                    ]
+                                },
+                                {
+                                    "id": 10,
+                                    "teacher": "How many people are there in your family.",
+                                    "student_options": [
+                                        "There are...people in my family."
+                                    ]
+                                },
+                                {
+                                    "id": 11,
+                                    "teacher": "Do you like listen to music?",
+                                    "student_options": [
+                                        "Yes, I do",
+                                        "No, I don't"
+                                    ]
+                                },
+                                {
+                                    "id": 12,
+                                    "teacher": "Can you count from one to thirty?",
+                                    "student_options": [
+                                        "1,2,3..."
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

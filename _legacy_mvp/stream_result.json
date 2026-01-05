@@ -1,0 +1,84 @@
+{
+  "total_score": 0.0,
+  "accuracy_score": 1.0,
+  "fluency_score": 0.0,
+  "integrity_score": 0.0,
+  "rec_text": "rec_paper",
+  "details": [
+    {
+      "content": "home",
+      "total_score": 0.0
+    },
+    {
+      "content": "night",
+      "total_score": 0.0
+    },
+    {
+      "content": "to",
+      "total_score": 0.0
+    },
+    {
+      "content": "my",
+      "total_score": 0.0
+    },
+    {
+      "content": "tell",
+      "total_score": 0.0
+    },
+    {
+      "content": "can",
+      "total_score": 0.0
+    },
+    {
+      "content": "so",
+      "total_score": 0.0
+    },
+    {
+      "content": "worked",
+      "total_score": 0.0
+    },
+    {
+      "content": "mooncake",
+      "total_score": 0.0
+    },
+    {
+      "content": "breakfast",
+      "total_score": 0.0
+    },
+    {
+      "content": "lunch",
+      "total_score": 0.0
+    },
+    {
+      "content": "to",
+      "total_score": 0.0
+    },
+    {
+      "content": "homework",
+      "total_score": 0.0
+    },
+    {
+      "content": "scientist",
+      "total_score": 0.0
+    },
+    {
+      "content": "party",
+      "total_score": 0.0
+    },
+    {
+      "content": "and",
+      "total_score": 0.0
+    },
+    {
+      "content": "best",
+      "total_score": 0.0
+    },
+    {
+      "content": "english",
+      "total_score": 0.0
+    }
+  ],
+  "is_rejected": true,
+  "reject_type": "64",
+  "except_info": "28676"
+}

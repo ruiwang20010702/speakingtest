@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+  <xml_result>
+      <topic lan="en" type="study" version="7.0.0.1020">
+          <rec_paper>
+              <rec_paper accuracy_score="1.000000" beg_pos="93" content="rec_paper" end_pos="1595" except_info="28676" is_rejected="true" phone_score="5.000000" reject_type="64" speeking_speed="83.333336" total_score="0.000000">
+                  <sentence content="home night to my tell can so worked mooncake breakfast lunch " index="0">
+                      <word beg_pos="99" content="home" end_pos="147"></word>
+                      <word beg_pos="147" content="night" end_pos="225"></word>
+                      <word beg_pos="225" content="to" end_pos="257"></word>
+                      <word beg_pos="257" content="my" end_pos="275"></word>
+                      <word beg_pos="275" content="tell" end_pos="292"></word>
+                      <word beg_pos="292" content="can" end_pos="351"></word>
+                      <word beg_pos="351" content="so" end_pos="373"></word>
+                      <word beg_pos="373" content="worked" end_pos="461"></word>
+                      <word beg_pos="461" content="mooncake" end_pos="535"></word>
+                      <word beg_pos="535" content="breakfast" end_pos="647"></word>
+                      <word beg_pos="647" content="lunch" end_pos="707"></word>
+                  </sentence>
+                  <sentence content="to homework scientist party and best english " index="1">
+                      <word beg_pos="893" content="to" end_pos="926"></word>
+                      <word beg_pos="926" content="homework" end_pos="1112"></word>
+                      <word beg_pos="1112" content="scientist" end_pos="1226"></word>
+                      <word beg_pos="1226" content="party" end_pos="1325"></word>
+                      <word beg_pos="1325" content="and" end_pos="1399"></word>
+                      <word beg_pos="1399" content="best" end_pos="1499"></word>
+                      <word beg_pos="1499" content="english" end_pos="1581"></word>
+                  </sentence>
+              </rec_paper>
+          </rec_paper>
+      </topic>
+  </xml_result>
