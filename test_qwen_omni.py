@@ -258,6 +258,12 @@ def evaluate_speaking(
         # 解析 JSON
         try:
             evaluation_json = json.loads(result_text)
+            
+            # 获取 Token 详情
+            prompt_details = getattr(usage_info, "prompt_tokens_details", None)
+            audio_tokens = prompt_details.audio_tokens if prompt_details and hasattr(prompt_details, "audio_tokens") else 0
+            text_tokens = prompt_details.text_tokens if prompt_details and hasattr(prompt_details, "text_tokens") else 0
+
             return {
                 "success": True,
                 "data": evaluation_json,
@@ -265,7 +271,11 @@ def evaluate_speaking(
                     "prompt_tokens": usage_info.prompt_tokens if usage_info else 0,
                     "completion_tokens": usage_info.completion_tokens if usage_info else 0,
                     "total_tokens": usage_info.total_tokens if usage_info else 0,
-                } if usage_info else {}
+                    "details": {
+                        "audio_tokens": audio_tokens,
+                        "text_tokens": text_tokens
+                    }
+                }
             }
         except json.JSONDecodeError:
             return {
