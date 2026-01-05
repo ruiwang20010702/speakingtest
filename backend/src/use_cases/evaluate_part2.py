@@ -1,0 +1,220 @@
+"""
+Part 2 评测用例
+编排完整的 Part 2 评测流程：提交任务、消费处理、保存结果
+"""
+import uuid
+from datetime import datetime
+from typing import Optional
+from dataclasses import dataclass
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from loguru import logger
+
+from src.adapters.repositories.models import TestModel, TestItemModel
+from src.adapters.gateways.qwen_client import QwenOmniGateway, Part2EvaluationResult
+from src.infrastructure.queue_service import Part2Task, enqueue_part2_task
+
+
+@dataclass
+class SubmitPart2Request:
+    """提交 Part 2 评测请求"""
+    test_id: int
+    audio_url: str
+    questions: list  # 12 道题目
+
+
+@dataclass
+class SubmitPart2Response:
+    """提交 Part 2 响应"""
+    success: bool
+    task_id: Optional[str] = None
+    message: str = ""
+
+
+class SubmitPart2UseCase:
+    """
+    提交 Part 2 评测任务（异步入队）
+    
+    流程:
+    1. 验证测评状态（必须是 part1_done）
+    2. 创建任务并入队
+    3. 更新测评状态为 processing
+    """
+    
+    def __init__(self, db: AsyncSession):
+        self.db = db
+    
+    async def execute(self, request: SubmitPart2Request) -> SubmitPart2Response:
+        """
+        提交 Part 2 评测任务
+        
+        Args:
+            request: SubmitPart2Request
+            
+        Returns:
+            SubmitPart2Response 包含任务 ID
+        """
+        # 1. 查找并验证测评
+        stmt = select(TestModel).where(TestModel.id == request.test_id)
+        result = await self.db.execute(stmt)
+        test = result.scalar_one_or_none()
+        
+        if not test:
+            return SubmitPart2Response(
+                success=False,
+                message="测评记录不存在"
+            )
+        
+        if test.status != "part1_done":
+            return SubmitPart2Response(
+                success=False,
+                message=f"无法提交 Part 2：当前状态为 {test.status}"
+            )
+        
+        # 2. 创建任务
+        task_id = str(uuid.uuid4())[:8]
+        task = Part2Task(
+            task_id=task_id,
+            test_id=request.test_id,
+            audio_url=request.audio_url,
+            questions=request.questions
+        )
+        
+        # 3. 入队
+        try:
+            await enqueue_part2_task(task)
+        except Exception as e:
+            logger.exception(f"Part 2 任务入队失败: {e}")
+            return SubmitPart2Response(
+                success=False,
+                message=f"任务入队失败: {str(e)}"
+            )
+        
+        # 4. 更新状态
+        test.status = "processing"
+        test.updated_at = datetime.utcnow()
+        await self.db.commit()
+        
+        logger.info(f"Part 2 任务已入队: task_id={task_id}, test_id={request.test_id}")
+        
+        return SubmitPart2Response(
+            success=True,
+            task_id=task_id,
+            message="评测任务已提交，请稍后查询结果"
+        )
+
+
+class ProcessPart2TaskUseCase:
+    """
+    处理 Part 2 评测任务（消费者调用）
+    
+    流程:
+    1. 下载音频
+    2. 调用 Qwen API
+    3. 解析评分结果
+    4. 保存到数据库
+    5. 更新测评状态
+    """
+    
+    def __init__(self, db: AsyncSession, qwen_gateway: QwenOmniGateway):
+        self.db = db
+        self.qwen = qwen_gateway
+    
+    async def execute(self, task: Part2Task) -> bool:
+        """
+        处理 Part 2 评测任务
+        
+        Args:
+            task: Part2Task 任务对象
+            
+        Returns:
+            bool - True 表示成功
+        """
+        # 1. 查找测评
+        stmt = select(TestModel).where(TestModel.id == task.test_id)
+        result = await self.db.execute(stmt)
+        test = result.scalar_one_or_none()
+        
+        if not test:
+            logger.error(f"测评不存在: {task.test_id}")
+            return False
+        
+        # 2. 下载音频
+        import httpx
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(task.audio_url, timeout=60)
+                response.raise_for_status()
+                audio_data = response.content
+        except Exception as e:
+            logger.exception(f"下载音频失败: {e}")
+            test.status = "failed"
+            test.failure_reason = f"下载音频失败: {str(e)}"
+            await self.db.commit()
+            return False
+        
+        # 3. 调用 Qwen API
+        # 根据 URL 判断格式
+        audio_format = "mp3"
+        if task.audio_url.endswith(".wav"):
+            audio_format = "wav"
+        elif task.audio_url.endswith(".m4a"):
+            audio_format = "m4a"
+        
+        qwen_result = await self.qwen.evaluate_part2(
+            audio_data=audio_data,
+            audio_format=audio_format,
+            questions=task.questions
+        )
+        
+        # 4. 处理结果
+        if not qwen_result.success:
+            test.status = "failed"
+            test.failure_reason = qwen_result.error
+            test.retry_count += 1
+            await self.db.commit()
+            return False
+        
+        # 5. 保存逐题评分
+        for item_data in qwen_result.items:
+            item = TestItemModel(
+                test_id=task.test_id,
+                question_no=item_data.get("no"),
+                score=item_data.get("score_0_2", 0),
+                feedback=item_data.get("reason", ""),
+                evidence=item_data.get("evidence", "")
+            )
+            self.db.add(item)
+        
+        # 6. 更新测评记录
+        test.part2_score = qwen_result.total_score
+        test.part2_transcript = qwen_result.transcript
+        test.total_score = (float(test.part1_score or 0) + float(qwen_result.total_score or 0))
+        test.star_level = self._calculate_star_level(test.total_score)
+        test.status = "completed"
+        test.completed_at = datetime.utcnow()
+        test.updated_at = datetime.utcnow()
+        
+        await self.db.commit()
+        
+        logger.info(
+            f"Part 2 评测完成: test_id={task.test_id}, "
+            f"part2_score={qwen_result.total_score}, "
+            f"total_score={test.total_score}"
+        )
+        
+        return True
+    
+    def _calculate_star_level(self, total_score: float) -> int:
+        """根据总分 (0-44) 计算星级 (1-5)"""
+        if total_score >= 40:
+            return 5
+        elif total_score >= 32:
+            return 4
+        elif total_score >= 24:
+            return 3
+        elif total_score >= 16:
+            return 2
+        else:
+            return 1
