@@ -12,6 +12,7 @@ from loguru import logger
 
 from src.adapters.repositories.models import TestModel
 from src.adapters.gateways.xunfei_client import XunfeiGateway, XunfeiEvaluationResult
+from src.adapters.gateways.oss_client import upload_test_audio
 
 
 @dataclass
@@ -30,6 +31,7 @@ class Part1EvaluationResponse:
     score: Optional[float] = None
     fluency_score: Optional[float] = None
     pronunciation_score: Optional[float] = None
+    audio_url: Optional[str] = None  # 新增：OSS URL
     error: Optional[str] = None
 
 
@@ -40,8 +42,9 @@ class EvaluatePart1UseCase:
     Flow:
     1. Validate test exists and is in correct state
     2. Call Xunfei API for evaluation
-    3. Parse and store scores
-    4. Update test status
+    3. Upload audio to OSS
+    4. Parse and store scores + audio URL
+    5. Update test status
     """
 
     def __init__(self, db: AsyncSession, xunfei_gateway: XunfeiGateway):
@@ -106,9 +109,27 @@ class EvaluatePart1UseCase:
                 error=xunfei_result.error_message
             )
 
-        # 5. Store scores
+        # 5. 上传音频到 OSS
+        audio_url = None
+        try:
+            oss_result = await upload_test_audio(
+                audio_data=request.audio_data,
+                test_id=request.test_id,
+                part="part1",
+                extension="pcm"  # 讯飞使用 PCM 格式
+            )
+            if oss_result.success:
+                audio_url = oss_result.url
+                logger.info(f"Part 1 音频已上传: {audio_url}")
+            else:
+                logger.warning(f"Part 1 音频上传失败: {oss_result.error}")
+        except Exception as e:
+            logger.warning(f"OSS 上传异常（不影响评测结果）: {e}")
+
+        # 6. Store scores + audio URL
         test.part1_score = xunfei_result.total_score
         test.part1_raw_result = xunfei_result.to_dict()
+        test.part1_audio_url = audio_url  # 保存音频 URL
         test.status = "part1_done"
         test.updated_at = datetime.utcnow()
 
@@ -121,5 +142,7 @@ class EvaluatePart1UseCase:
             test_id=request.test_id,
             score=xunfei_result.total_score,
             fluency_score=xunfei_result.fluency_score,
-            pronunciation_score=xunfei_result.pronunciation_score
+            pronunciation_score=xunfei_result.pronunciation_score,
+            audio_url=audio_url
         )
+

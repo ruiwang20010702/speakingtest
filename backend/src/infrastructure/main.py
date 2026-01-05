@@ -64,8 +64,10 @@ async def health_check():
 # Import and include routers
 from src.adapters.controllers.student_controller import router as student_router
 from src.adapters.controllers.test_controller import router as test_router
+from src.adapters.controllers.upload_controller import router as upload_router
 # from src.adapters.controllers.report_controller import router as report_router
 
 app.include_router(student_router, prefix="/api/v1/students", tags=["Students"])
 app.include_router(test_router, prefix="/api/v1/tests", tags=["Tests"])
+app.include_router(upload_router, prefix="/api/v1/upload", tags=["Upload"])
 # app.include_router(report_router, prefix="/api/v1/reports", tags=["Reports"])

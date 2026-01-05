@@ -190,6 +190,7 @@ class ProcessPart2TaskUseCase:
         # 6. 更新测评记录
         test.part2_score = qwen_result.total_score
         test.part2_transcript = qwen_result.transcript
+        test.part2_audio_url = task.audio_url  # 保存音频 URL
         test.total_score = (float(test.part1_score or 0) + float(qwen_result.total_score or 0))
         test.star_level = self._calculate_star_level(test.total_score)
         test.status = "completed"
