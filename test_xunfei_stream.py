@@ -194,7 +194,7 @@ class XunfeiStreamClient:
             "business": {
                 "category": category,           # 评测类型
                 "rstcd": "utf8",                # 结果编码
-                "group": "adult",               # 评测分组（pupil/adult 等，部分引擎对 group 有要求）
+                "group": "pupil",               # 评测分组（pupil/adult 等，部分引擎对 group 有要求）
                 "sub": "ise",                   # 服务类型
                 "ent": "en_vip",                # 引擎类型：英语
                 "tte": "utf-8",                 # 文本编码
@@ -202,6 +202,10 @@ class XunfeiStreamClient:
                 "auf": "audio/L16;rate=16000",  # 音频格式
                 "aue": "raw",                   # 音频编码
                 "ttp_skip": True,               # 跳过 ttp 阶段，直接使用 ssb 的 text
+                # New parameters for verification
+                "ise_unite": "1",
+                "rst": "entirety",
+                "extra_ability": "multi_dimension",
                 # 文本直接在 ssb 帧传入；按官方要求我们已补齐 UTF-8 BOM，并设置 ttp_skip=true
                 "text": text,
             },
@@ -678,6 +682,9 @@ def _parse_ise_xml(xml_result: str) -> dict:
 
         for w in words:
             if w is None:
+                continue
+            # Skip silence in test output too
+            if w.get("content") == "sil":
                 continue
             word_info = {
                 "content": w.get("content", "") or "",

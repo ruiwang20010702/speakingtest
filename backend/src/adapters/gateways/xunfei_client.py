@@ -10,8 +10,9 @@ import hmac
 import json
 import time
 from datetime import datetime
-from typing import Optional, Callable, Awaitable
+from typing import Optional, Callable, Awaitable, List, Dict, Any
 from urllib.parse import urlencode
+import xml.etree.ElementTree as ET
 
 import websockets
 from loguru import logger
@@ -30,35 +31,144 @@ class XunfeiEvaluationResult:
         self.success = raw_result.get("code") == 0
         self.error_message = raw_result.get("message", "")
         
-        # Parse scores from result
-        self._parse_scores()
-    
-    def _parse_scores(self):
-        """Parse scores from Xunfei response."""
+        # Scores
         self.total_score = 0.0
         self.fluency_score = 0.0
         self.integrity_score = 0.0
         self.pronunciation_score = 0.0
         
+        # Diagnostics
+        self.is_rejected = False
+        self.except_info = ""
+        self.diagnosis = ""
+        
+        # Detailed word-level results
+        self.details: List[Dict[str, Any]] = []
+        
+        # Parse scores from result
+        self._parse_result()
+    
+    def _parse_result(self):
+        """Parse scores and details from Xunfei response."""
         if not self.success:
             return
         
         try:
-            # Navigate to read_chapter result
+            # Navigate to data
             data = self.raw.get("data", {})
+            
             # Xunfei returns base64 encoded result in some cases
+            # The decoded content can be JSON or XML depending on the engine/params
+            decoded_data = ""
             if isinstance(data, str):
-                data = json.loads(base64.b64decode(data).decode("utf-8"))
+                decoded_data = base64.b64decode(data).decode("utf-8")
+            elif isinstance(data, dict) and "data" in data:
+                # Sometimes nested in data.data
+                decoded_data = base64.b64decode(data["data"]).decode("utf-8")
             
-            read_chapter = data.get("read_chapter", {})
-            
-            self.total_score = float(read_chapter.get("total_score", 0))
-            self.fluency_score = float(read_chapter.get("fluency_score", 0))
-            self.integrity_score = float(read_chapter.get("integrity_score", 0))
-            self.pronunciation_score = float(read_chapter.get("pron_score", 0))
-            
+            if not decoded_data:
+                return
+
+            # Check if it's XML (common for ISE)
+            if decoded_data.strip().startswith("<"):
+                self._parse_xml_result(decoded_data)
+            else:
+                # Try JSON
+                try:
+                    json_data = json.loads(decoded_data)
+                    self._parse_json_result(json_data)
+                except json.JSONDecodeError:
+                    logger.warning("Xunfei result is neither XML nor JSON")
+                    
         except Exception as e:
             logger.error(f"Failed to parse Xunfei scores: {e}")
+
+    def _parse_json_result(self, data: dict):
+        """Parse JSON format result (legacy or specific engines)."""
+        read_chapter = data.get("read_chapter", {})
+        self.total_score = float(read_chapter.get("total_score", 0))
+        self.fluency_score = float(read_chapter.get("fluency_score", 0))
+        self.integrity_score = float(read_chapter.get("integrity_score", 0))
+        self.pronunciation_score = float(read_chapter.get("pron_score", 0))
+        
+        # JSON format details parsing can be added here if needed
+        # But ISE usually returns XML for detailed read_chapter results
+
+    def _parse_xml_result(self, xml_str: str):
+        """Parse XML format result (standard for ISE read_chapter)."""
+        try:
+            root = ET.fromstring(xml_str)
+            
+            # 1. Parse Global Scores & Diagnostics
+            # Usually in <read_chapter> or <rec_paper> tag
+            score_node = None
+            
+            # Try to find the main score node
+            for node in root.iter():
+                if "total_score" in node.attrib:
+                    score_node = node
+                    # Prefer read_chapter node if available
+                    if node.tag == "read_chapter":
+                        break
+            
+            if score_node is not None:
+                self.total_score = float(score_node.get("total_score", 0))
+                self.fluency_score = float(score_node.get("fluency_score", 0))
+                self.integrity_score = float(score_node.get("integrity_score", 0))
+                # pron_score might be named differently or calculated
+                self.pronunciation_score = float(score_node.get("standard_score", 0))
+                if self.pronunciation_score == 0:
+                     self.pronunciation_score = float(score_node.get("phone_score", 0))
+                
+                # Parse diagnostics
+                self.is_rejected = (score_node.get("is_rejected", "false").lower() == "true")
+                self.except_info = score_node.get("except_info", "")
+                
+                # Map except_info to diagnosis
+                except_code = int(self.except_info) if self.except_info.isdigit() else 0
+                if except_code == 28673:
+                    self.diagnosis = "音量过小或无语音"
+                elif except_code == 28676:
+                    self.diagnosis = "乱读或无关语音"
+                elif except_code == 28680:
+                    self.diagnosis = "信噪比低（环境嘈杂）"
+                elif except_code == 28690:
+                    self.diagnosis = "录音截幅（音量过大）"
+                elif except_code == 28689:
+                    self.diagnosis = "无音频输入"
+
+            # 2. Parse Word Details
+            words = []
+            # Find all sentences
+            sentences = root.findall(".//sentence")
+            if not sentences:
+                # Fallback: try finding words directly (e.g. read_word type)
+                words_nodes = root.findall(".//word")
+            else:
+                words_nodes = []
+                for sent in sentences:
+                    words_nodes.extend(sent.findall("word"))
+            
+            for w in words_nodes:
+                content = w.get("content", "")
+                # Skip punctuation, empty content, or silence markers
+                if not content or content in [".", ",", "!", "?", "sil"]:
+                    continue
+                    
+                word_info = {
+                    "content": content,
+                    "total_score": float(w.get("total_score", 0)),
+                    "dp_message": int(w.get("dp_message", 0)), # 0:normal, 16:deletion, 32:insertion, 64:substitution
+                    "global_index": int(w.get("global_index", -1)),
+                    "beg_pos": int(w.get("beg_pos", 0)),
+                    "end_pos": int(w.get("end_pos", 0))
+                }
+                
+                self.details.append(word_info)
+                
+        except Exception as e:
+            logger.error(f"XML parsing error: {e}")
+            # Don't fail the whole request, just log error
     
     def to_dict(self) -> dict:
         """Convert to dictionary for storage."""
@@ -68,6 +178,9 @@ class XunfeiEvaluationResult:
             "fluency_score": self.fluency_score,
             "integrity_score": self.integrity_score,
             "pronunciation_score": self.pronunciation_score,
+            "is_rejected": self.is_rejected,
+            "diagnosis": self.diagnosis,
+            "details": self.details,
             "raw": self.raw
         }
 
@@ -135,7 +248,12 @@ class XunfeiGateway:
                 "cmd": "ssb",  # Start session
                 "aue": "raw",  # PCM audio
                 "auf": "audio/L16;rate=16000",  # 16kHz 16bit
-                "text": base64.b64encode(text.encode("utf-8")).decode("utf-8")
+                "text": base64.b64encode(text.encode("utf-8")).decode("utf-8"),
+                # New parameters for primary school & percentage scores
+                "group": "pupil",
+                "ise_unite": "1",
+                "rst": "entirety",
+                "extra_ability": "multi_dimension"
             },
             "data": {
                 "status": 0  # First frame
