@@ -1,10 +1,29 @@
-server/.env
-server/uploads/
-server/*.db
-client/node_modules/
-client/dist/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+venv/
+.venv/
+backend/.env
+backend/uvicorn.log
+
+# Node
+node_modules/
+dist/
+frontend/teacher-web/node_modules/
+frontend/teacher-web/dist/
+
+# OS
 .DS_Store
-server/venv/
-.zeabur/
+Thumbs.db
+
+# Project specific temp files
+*.m4a
+*.mp3
+stream_result.json
+stream_result_raw.xml
+backend/tests/test_results/
+
+# Legacy/Old
+server/
+client/

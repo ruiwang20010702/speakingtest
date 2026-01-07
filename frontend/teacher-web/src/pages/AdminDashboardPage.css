@@ -1,0 +1,138 @@
+.admin-dashboard {
+    padding: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.dashboard-content {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.stats-section h2 {
+    font-size: 18px;
+    color: #333;
+    margin-bottom: 16px;
+    border-left: 4px solid #FFC800;
+    padding-left: 12px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.stat-card {
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.stat-label {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+.stat-value {
+    font-size: 32px;
+    font-weight: bold;
+    color: #333;
+}
+
+/* Funnel Chart */
+.funnel-chart {
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.funnel-step {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.funnel-bar {
+    background: #e6f7ff;
+    height: 40px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    min-width: 120px;
+    transition: width 0.5s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.funnel-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 4px;
+    background: #1890ff;
+}
+
+.step-label {
+    font-weight: 500;
+    color: #333;
+    z-index: 1;
+}
+
+.step-value {
+    font-weight: bold;
+    color: #1890ff;
+    z-index: 1;
+}
+
+.conversion-rate {
+    font-size: 12px;
+    color: #999;
+    width: 60px;
+    text-align: right;
+}
+
+/* Cost Card */
+.cost-card {
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    max-width: 400px;
+}
+
+.cost-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.cost-row.highlight {
+    border-bottom: none;
+    font-weight: bold;
+    font-size: 18px;
+    color: #ff4d4f;
+    margin-top: 8px;
+}
+
+.cost-note {
+    font-size: 12px;
+    color: #999;
+    margin-top: 16px;
+}

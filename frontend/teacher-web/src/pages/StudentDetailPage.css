@@ -1,0 +1,145 @@
+.detail-page {
+    min-height: 100vh;
+    background: #f5f7fa;
+}
+
+.btn-back {
+    background: none;
+    border: none;
+    font-size: 16px;
+    color: #666;
+    cursor: pointer;
+    padding: 0;
+    margin-right: 16px;
+}
+
+.btn-back:hover {
+    color: #333;
+}
+
+.content-container {
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.section-header h2 {
+    margin: 0;
+    color: #333;
+}
+
+.tests-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.test-item {
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    transition: all 0.2s;
+    border: 1px solid transparent;
+}
+
+.test-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
+    border-color: #667eea;
+    cursor: pointer;
+}
+
+.test-info h3 {
+    margin: 0 0 4px 0;
+    font-size: 18px;
+}
+
+.test-date {
+    color: #888;
+    font-size: 14px;
+}
+
+.test-stats {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+}
+
+.score-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.score-box .label {
+    font-size: 12px;
+    color: #888;
+}
+
+.score-box .value {
+    font-size: 20px;
+    font-weight: bold;
+    color: #667eea;
+}
+
+.star-box {
+    font-size: 18px;
+}
+
+.test-status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-badge.completed {
+    background: #e6fffa;
+    color: #00b894;
+}
+
+.status-badge.processing {
+    background: #fff8e1;
+    color: #ffa502;
+}
+
+.status-badge.part1_done {
+    background: #e3f2fd;
+    color: #0984e3;
+}
+
+.status-badge.pending {
+    background: #f1f2f6;
+    color: #a4b0be;
+}
+
+.status-badge.failed {
+    background: #ffebee;
+    color: #ff4757;
+}
+
+.form-group select {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 16px;
+    background: white;
+}

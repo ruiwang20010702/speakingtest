@@ -140,7 +140,8 @@ async def get_test_status(
 class Part2SubmitRequest(BaseModel):
     """Part 2 提交请求"""
     audio_url: str  # OSS 音频 URL
-    questions: list  # 12 道题目
+    # questions 参数现在是可选的，默认从 DB 加载
+    questions: Optional[list] = None  # 可选：覆盖默认题目
 
 
 class Part2SubmitResponse(BaseModel):
@@ -167,19 +168,64 @@ async def submit_part2(
     """
     提交 Part 2 录音进行异步评测。
     
+    题目会根据 Test 的 Level/Unit 自动从题库加载。
     录音会被发送到消息队列，由后台 Worker 调用 Qwen API 评测。
     评测完成后可通过 GET /tests/{id} 查询结果。
     
     注意：这是异步操作，不会立即返回评分结果。
     """
+    from sqlalchemy import select, and_
+    from src.adapters.repositories.models import TestModel, QuestionModel
     from src.use_cases.evaluate_part2 import SubmitPart2UseCase, SubmitPart2Request
     
+    # 1. 获取 Test 信息（主要是 level 和 unit）
+    stmt = select(TestModel).where(TestModel.id == test_id)
+    result = await db.execute(stmt)
+    test = result.scalar_one_or_none()
+    
+    if not test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "TestNotFound", "message": "测评记录不存在"}
+        )
+    
+    # 2. 确定题目来源
+    questions = request.questions
+    if not questions:
+        # 从数据库加载题目
+        stmt = select(QuestionModel).where(
+            and_(
+                QuestionModel.level == test.level,
+                QuestionModel.unit == test.unit,
+                QuestionModel.is_active == True
+            )
+        ).order_by(QuestionModel.question_no)
+        
+        result = await db.execute(stmt)
+        db_questions = result.scalars().all()
+        
+        if not db_questions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "NoQuestions", "message": f"题库中没有 {test.level} - {test.unit} 的题目，请先添加"}
+            )
+        
+        questions = [
+            {
+                "no": q.question_no,
+                "question": q.question,
+                "reference_answer": q.reference_answer or "无"
+            }
+            for q in db_questions
+        ]
+    
+    # 3. 提交评测任务
     use_case = SubmitPart2UseCase(db)
     result = await use_case.execute(
         SubmitPart2Request(
             test_id=test_id,
             audio_url=request.audio_url,
-            questions=request.questions
+            questions=questions
         )
     )
     

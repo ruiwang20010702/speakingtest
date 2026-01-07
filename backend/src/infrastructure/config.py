@@ -46,6 +46,15 @@ class Settings(BaseSettings):
     # RabbitMQ
     RABBITMQ_URL: str = "amqp://guest:guest@localhost:5672/"
 
+    # SMTP Email
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 465
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_FROM_NAME: str = "51Talk 口语测评"
+    SMTP_USE_SSL: bool = True
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
