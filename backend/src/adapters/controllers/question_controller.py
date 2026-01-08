@@ -3,8 +3,10 @@ Question Controller
 Handles question bank CRUD operations for different levels and units.
 """
 from typing import List, Optional
+import uuid
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.infrastructure.database import get_db
 from src.infrastructure.auth import get_current_user_id, get_current_user_role
 from src.adapters.repositories.models import QuestionModel
+from src.adapters.gateways.oss_client import get_oss_client
 
 
 router = APIRouter()
@@ -25,14 +28,19 @@ class QuestionCreate(BaseModel):
     """Create a new question."""
     level: str
     unit: str
+    part: int = 2  # 1=Word Reading, 2=Q&A
     question_no: int
     question: str
+    translation: Optional[str] = None  # Chinese translation (Part 1)
+    image_url: Optional[str] = None  # Image URL (Part 1)
     reference_answer: Optional[str] = None
 
 
 class QuestionUpdate(BaseModel):
     """Update an existing question."""
     question: Optional[str] = None
+    translation: Optional[str] = None
+    image_url: Optional[str] = None
     reference_answer: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -42,8 +50,11 @@ class QuestionResponse(BaseModel):
     id: int
     level: str
     unit: str
+    part: int
     question_no: int
     question: str
+    translation: Optional[str] = None
+    image_url: Optional[str] = None
     reference_answer: Optional[str] = None
     is_active: bool
 
@@ -91,6 +102,7 @@ async def list_questions(
             level=q.level,
             unit=q.unit,
             question_no=q.question_no,
+            part=q.part,
             question=q.question,
             reference_answer=q.reference_answer,
             is_active=q.is_active
@@ -137,6 +149,7 @@ async def get_questions_by_level_unit(
             level=q.level,
             unit=q.unit,
             question_no=q.question_no,
+            part=q.part,
             question=q.question,
             reference_answer=q.reference_answer,
             is_active=q.is_active
@@ -191,6 +204,7 @@ async def create_question(
         level=question.level,
         unit=question.unit,
         question_no=question.question_no,
+        part=question.part,
         question=question.question,
         reference_answer=question.reference_answer,
         is_active=question.is_active
@@ -290,6 +304,7 @@ async def update_question(
         level=question.level,
         unit=question.unit,
         question_no=question.question_no,
+        part=question.part,
         question=question.question,
         reference_answer=question.reference_answer,
         is_active=question.is_active
@@ -331,3 +346,90 @@ async def delete_question(
     await db.commit()
     
     return {"success": True, "message": "Question deleted"}
+
+
+# ============================================
+# Image Upload Endpoint
+# ============================================
+
+@router.post(
+    "/{question_id}/image",
+    summary="上传题目图片",
+    description="上传题目图片到 OSS 并更新 image_url。仅 Admin 可操作。"
+)
+async def upload_question_image(
+    question_id: int,
+    file: UploadFile = File(...),
+    user_id: int = Depends(get_current_user_id),
+    role: str = Depends(get_current_user_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Upload an image for a question.
+    - Uploads to OSS: questions/{level}/{filename}
+    - Updates question.image_url in database
+    - Returns the new URL
+    """
+    if role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin can upload images"
+        )
+    
+    # Fetch question
+    stmt = select(QuestionModel).where(QuestionModel.id == question_id)
+    result = await db.execute(stmt)
+    question = result.scalar_one_or_none()
+    
+    if not question:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Question not found"
+        )
+    
+    # Validate file type
+    allowed_types = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed: {allowed_types}"
+        )
+    
+    # Read file content
+    content = await file.read()
+    
+    # Generate OSS key
+    now = datetime.utcnow()
+    ext = file.filename.split(".")[-1] if "." in file.filename else "png"
+    unique_id = str(uuid.uuid4())[:8]
+    oss_key = f"questions/{question.level}/{question_id}_{unique_id}.{ext}"
+    
+    # Upload to OSS
+    oss_client = get_oss_client()
+    try:
+        upload_result = oss_client.bucket.put_object(oss_key, content)
+        
+        if upload_result.status != 200:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to upload image to OSS"
+            )
+        
+        # Generate URL
+        image_url = f"https://{oss_client.bucket_name}.{oss_client.endpoint.replace('https://', '')}/{oss_key}"
+        
+        # Update database
+        question.image_url = image_url
+        await db.commit()
+        
+        return {
+            "success": True,
+            "image_url": image_url,
+            "message": "Image uploaded successfully"
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Upload failed: {str(e)}"
+        )

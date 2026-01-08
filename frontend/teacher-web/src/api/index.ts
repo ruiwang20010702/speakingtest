@@ -117,6 +117,7 @@ export interface TestSummary {
   star_level?: number;
   created_at: string;
   completed_at?: string;
+  entry_url?: string;
 }
 
 export interface TestReport {
@@ -153,3 +154,61 @@ export interface Interpretation {
   suggestions: string[];
   parent_script: string;
 }
+
+// Questions API
+export interface Question {
+  id: number;
+  level: string;
+  unit: string;
+  part: number;
+  question_no: number;
+  question: string;
+  translation?: string;
+  image_url?: string;
+  reference_answer?: string;
+  is_active: boolean;
+}
+
+export interface QuestionCreate {
+  level: string;
+  unit: string;
+  part: number;
+  question_no: number;
+  question: string;
+  translation?: string;
+  image_url?: string;
+  reference_answer?: string;
+}
+
+export interface QuestionUpdate {
+  question?: string;
+  translation?: string;
+  image_url?: string;
+  reference_answer?: string;
+  is_active?: boolean;
+}
+
+export const questionsApi = {
+  list: (level?: string, unit?: string) =>
+    api.get<Question[]>('/questions', { params: { level, unit } }),
+
+  getByLevelUnit: (level: string, unit: string) =>
+    api.get<Question[]>(`/questions/${level}/${encodeURIComponent(unit)}`),
+
+  create: (data: QuestionCreate) =>
+    api.post<Question>('/questions', data),
+
+  update: (id: number, data: QuestionUpdate) =>
+    api.put<Question>(`/questions/${id}`, data),
+
+  delete: (id: number) =>
+    api.delete(`/questions/${id}`),
+
+  uploadImage: (id: number, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post<{ success: boolean; image_url: string }>(`/questions/${id}/image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+};

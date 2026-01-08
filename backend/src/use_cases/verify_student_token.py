@@ -68,17 +68,36 @@ class VerifyStudentEntryTokenUseCase:
             )
 
         # 2. Check if expired
-        if entry_token.expires_at < datetime.utcnow():
+        # Ensure current time is timezone-aware (UTC) to match database
+        now = datetime.utcnow().replace(tzinfo=datetime.utcnow().astimezone().tzinfo)
+        # Or simpler: use entry_token.expires_at.replace(tzinfo=None) if DB returns aware
+        
+        # Best practice: make both aware or both naive. 
+        # Since DB returns aware (DateTime(timezone=True)), let's make current time aware.
+        from datetime import timezone
+        if entry_token.expires_at < datetime.now(timezone.utc):
             return TokenVerificationError(
                 error="TokenExpired",
                 message="入口链接已过期，请联系老师获取新链接"
             )
 
-        # 3. Check if already used
-        if entry_token.is_used:
-            return TokenVerificationError(
-                error="TokenUsed",
-                message="该链接已被使用，请联系老师获取新链接"
+        # 3. Check if test is already completed
+        # We allow re-entry if the test is not completed, even if token was used before.
+        
+        # Find latest test first to check status
+        stmt = select(TestModel).where(
+            TestModel.student_id == entry_token.student_id,
+            TestModel.level == entry_token.level,
+            TestModel.unit == entry_token.unit
+        ).order_by(TestModel.created_at.desc()).limit(1)
+        
+        result = await self.db.execute(stmt)
+        test = result.scalar_one_or_none()
+
+        if test and test.status == 'completed':
+             return TokenVerificationError(
+                error="TestCompleted",
+                message="您已完成该测评，无法再次进入"
             )
 
         # 4. Get student info
@@ -92,19 +111,12 @@ class VerifyStudentEntryTokenUseCase:
                 message="学生信息不存在，请联系老师"
             )
 
-        # 5. Mark token as used
-        entry_token.is_used = True
-        entry_token.used_at = datetime.utcnow()
+        # 5. Mark token as used (track usage, but don't block re-entry)
+        if not entry_token.is_used:
+            entry_token.is_used = True
+            entry_token.used_at = datetime.utcnow()
 
-        # 6. Create or find existing test
-        stmt = select(TestModel).where(
-            TestModel.student_id == entry_token.student_id,
-            TestModel.level == entry_token.level,
-            TestModel.unit == entry_token.unit
-        )
-        result = await self.db.execute(stmt)
-        test = result.scalar_one_or_none()
-
+        # 6. Create test if not exists (should exist from generation, but safe fallback)
         if not test:
             # Create new test
             test = TestModel(

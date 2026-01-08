@@ -2,6 +2,7 @@
 Student Entry Controller
 Handles student entry token verification and session creation.
 """
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession

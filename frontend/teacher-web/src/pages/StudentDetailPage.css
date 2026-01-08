@@ -3,143 +3,419 @@
     background: #f5f7fa;
 }
 
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 20px 24px;
+    background: white;
+    border-bottom: 1px solid #eee;
+}
+
+.page-header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+}
+
 .btn-back {
     background: none;
     border: none;
-    font-size: 16px;
-    color: #666;
+    color: #1CB0F6;
+    font-size: 14px;
     cursor: pointer;
-    padding: 0;
-    margin-right: 16px;
-}
-
-.btn-back:hover {
-    color: #333;
 }
 
 .content-container {
-    max-width: 800px;
-    margin: 40px auto;
-    padding: 0 20px;
+    padding: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
 .section-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: 20px;
 }
 
 .section-header h2 {
+    font-size: 18px;
+    font-weight: 600;
     margin: 0;
-    color: #333;
 }
 
-.tests-list {
-    display: flex;
-    flex-direction: column;
+.btn-primary {
+    background: linear-gradient(135deg, #1CB0F6, #58CC02);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(28, 176, 246, 0.4);
+}
+
+.loading,
+.error,
+.empty {
+    text-align: center;
+    padding: 60px;
+    color: #999;
+    font-size: 16px;
+}
+
+/* Test Cards Grid */
+.tests-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 16px;
 }
 
-.test-item {
+.test-card {
     background: white;
-    padding: 24px;
-    border-radius: 12px;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.test-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.card-header {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
-    transition: all 0.2s;
-    border: 1px solid transparent;
-}
-
-.test-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
-    border-color: #667eea;
-    cursor: pointer;
-}
-
-.test-info h3 {
-    margin: 0 0 4px 0;
-    font-size: 18px;
-}
-
-.test-date {
-    color: #888;
-    font-size: 14px;
-}
-
-.test-stats {
-    display: flex;
-    gap: 24px;
     align-items: center;
+    margin-bottom: 12px;
 }
 
-.score-box {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-.score-box .label {
-    font-size: 12px;
-    color: #888;
-}
-
-.score-box .value {
-    font-size: 20px;
-    font-weight: bold;
-    color: #667eea;
-}
-
-.star-box {
-    font-size: 18px;
-}
-
-.test-status {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+.level-unit {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
 }
 
 .status-badge {
-    padding: 4px 12px;
+    padding: 4px 10px;
     border-radius: 20px;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 500;
 }
 
-.status-badge.completed {
-    background: #e6fffa;
-    color: #00b894;
+.status-pending {
+    background: #f5f5f5;
+    color: #999;
 }
 
-.status-badge.processing {
-    background: #fff8e1;
-    color: #ffa502;
+.status-progress {
+    background: #fff7e6;
+    color: #fa8c16;
 }
 
-.status-badge.part1_done {
-    background: #e3f2fd;
-    color: #0984e3;
+.status-processing {
+    background: #fff7e6;
+    color: #fa8c16;
 }
 
-.status-badge.pending {
-    background: #f1f2f6;
-    color: #a4b0be;
+.status-completed {
+    background: #f6ffed;
+    color: #52c41a;
 }
 
-.status-badge.failed {
-    background: #ffebee;
-    color: #ff4757;
+.status-failed {
+    background: #fff1f0;
+    color: #f5222d;
+}
+
+.status-expired {
+    background: #fff1f0;
+    color: #f5222d;
+}
+
+.card-body {
+    margin-bottom: 16px;
+}
+
+.card-time {
+    font-size: 13px;
+    color: #999;
+    margin-bottom: 12px;
+}
+
+.card-score {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.score-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: #1CB0F6;
+}
+
+.score-label {
+    font-size: 14px;
+    color: #999;
+}
+
+.stars {
+    margin-left: 8px;
+    font-size: 16px;
+}
+
+.card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-action {
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-copy {
+    background: #f0f0f0;
+    color: #666;
+}
+
+.btn-copy:hover {
+    background: #e0e0e0;
+}
+
+.btn-qr {
+    background: #fff7e6;
+    color: #fa8c16;
+}
+
+.btn-qr:hover {
+    background: #ffe7ba;
+}
+
+.btn-report {
+    background: #e6f4ff;
+    color: #1890ff;
+}
+
+.btn-report:hover {
+    background: #cce7ff;
+}
+
+.btn-interpret {
+    background: #f0e6ff;
+    color: #722ed1;
+}
+
+.btn-interpret:hover {
+    background: #e0d0ff;
+}
+
+.processing-hint {
+    font-size: 13px;
+    color: #999;
+    font-style: italic;
+}
+
+/* Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    padding: 28px;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-content h2 {
+    margin: 0 0 24px;
+    font-size: 20px;
+    text-align: center;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #333;
 }
 
 .form-group select {
     width: 100%;
     padding: 12px;
     border: 2px solid #e0e0e0;
-    border-radius: 8px;
-    font-size: 16px;
+    border-radius: 10px;
+    font-size: 15px;
+    appearance: none;
+    background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 12px center;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.btn-cancel {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    background: #f0f0f0;
+    color: #666;
+}
+
+.btn-confirm {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    background: linear-gradient(135deg, #1CB0F6, #58CC02);
+    color: white;
+}
+
+.btn-confirm:disabled,
+.btn-cancel:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* QR Code Modal */
+.qr-modal {
+    text-align: center;
+    max-width: 360px;
+}
+
+.qr-success-icon {
+    font-size: 48px;
+    margin-bottom: 8px;
+}
+
+.qr-code-container {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+    padding: 16px;
     background: white;
+    border-radius: 12px;
+    border: 2px solid #f0f0f0;
+}
+
+.btn-download-qr {
+    display: block;
+    width: 100%;
+    margin-bottom: 16px;
+    padding: 10px;
+    background: #e6f4ff;
+    color: #1890ff;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-download-qr:hover {
+    background: #cce7ff;
+}
+
+.qr-hint {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 20px;
+}
+
+.link-container {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.link-input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #666;
+    background: #f9f9f9;
+}
+
+.btn-copy-link {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    background: #1CB0F6;
+    color: white;
+    white-space: nowrap;
+    transition: background 0.2s;
+}
+
+.btn-copy-link:hover {
+    background: #1899d6;
+}
+
+.btn-copy-link.copied {
+    background: #52c41a;
+}
+
+.expiry-hint {
+    font-size: 13px;
+    color: #999;
+    margin-bottom: 20px;
+}
+
+.btn-close-qr {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    background: #f0f0f0;
+    color: #333;
+}
+
+.btn-close-qr:hover {
+    background: #e0e0e0;
 }

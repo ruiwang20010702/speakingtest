@@ -1,4 +1,4 @@
-# PRD v1.0 Production｜口语测评系统
+# PRD v1.1 Production｜口语测评系统
 
 > **学生端测评 + 老师端报告/解读 + 家长端查看**
 
@@ -41,6 +41,7 @@
 | **高并发 (Concurrency)** | 系统吞吐量 (QPS) | 支持 **1000+ QPS** (峰值)；支持 **5000+** 学生同时在线作答 |
 | **高可用 (Availability)** | 服务可用性 (SLA) | **99.9%** (月度不可用时间 < 43分钟) |
 | **低延迟 (Latency)** | 接口响应时间 (P95) | 核心接口 < 200ms；Part 1 评测 < 500ms (流式) |
+| **技术栈 (Tech Stack)** | 后端/前端 | **Python (FastAPI)** / **React + Vite** |
 | **数据安全 (Security)** | 数据持久化 | RPO < 1分钟 (数据库主从 + 每日全量备份 + Binlog 实时备份) |
 | **可观测性 (Observability)** | 监控覆盖率 | 核心链路 100% 覆盖 (Trace/Log/Metric)；报警响应 < 5分钟 |
 
@@ -59,6 +60,7 @@
 | 角色 | 说明 | 登录方式 |
 |------|------|----------|
 | **老师（班主任）** | 组织测评、读懂结果、完成对家长/学生的“解释与跟进”，把测评变成可执行动作 | `@51talk.com` 邮箱 + 验证码 |
+| **管理员 (Admin)** | 全局数据监控、题库管理、老师/学生账号管理、系统配置 | `@51talk.com` 邮箱 + 密码/验证码 |
 | **学生** | 完成测评并获得即时反馈，降低紧张与操作失误，确保数据有效 | **1 人 1 码**：老师生成学生专属二维码/链接（带一次性 token），学生扫码进入 |
 | **家长** | 在手机端快速理解孩子口语水平与证据点，形成“配合练/咨询/购买”等决策 | 无需登录，链接长期有效 |
 
@@ -139,10 +141,11 @@ graph TD
     end
 
     subgraph API_Gateway [网关/后端服务]
-        Backend[后端服务 Node.js/Python]
+        Backend[后端服务 Python/FastAPI]
         Auth[鉴权模块]
         TestService[测评服务]
         ReportService[报告服务]
+        AdminService[管理服务]
     end
 
     subgraph Storage_Layer [存储层]
@@ -228,7 +231,7 @@ graph TD
 
 | Part | 名称 | 分值 | 说明 |
 |------|------|------|------|
-| Part 1 | 词汇朗读 | 20 分 | 一次录音覆盖全部词汇 |
+| Part 1 | 词汇朗读 | 20 分 | 讯飞原始分(0-100) / 5 映射为 0-20 |
 | Part 2 | 问答表达 | 24 分 | 12 题，每题 0/1/2 分 |
 | **总计** | - | **44 分** | - |
 
@@ -263,6 +266,7 @@ graph TD
 
 - **生成方式**：模型生成，允许引用学生转写作为证据点
 - **家长沟通话术**：亮点、短板、证据点（引用报告片段/示例/转写摘录）、行动建议（1 周练习计划）
+- **实现方式**：MVP 阶段采用**基于规则的逻辑生成**，后续可升级为 LLM 动态生成。
 - **风险提示**：如录音环境差导致的置信度下降说明（若可判断）
 
 #### 家长端（专属链接）
@@ -628,13 +632,13 @@ for chunk in completion:
 
 按总分百分比映射：`pct = score / 44`
 
-| 百分比 | 星级 |
-|--------|------|
-| 90%+ | ⭐⭐⭐⭐⭐ 5 星 |
-| 80–89% | ⭐⭐⭐⭐ 4 星 |
-| 65–79% | ⭐⭐⭐ 3 星 |
-| 50–64% | ⭐⭐ 2 星 |
-| <50% | ⭐ 1 星 |
+| 百分比 | 星级 | 说明 |
+|--------|------|------|
+| 90%+ | ⭐⭐⭐⭐⭐ 5 星 | 优秀 |
+| 80–89% | ⭐⭐⭐⭐ 4 星 | 良好 |
+| 65–79% | ⭐⭐⭐ 3 星 | 中等 |
+| 50–64% | ⭐⭐ 2 星 | 需努力 |
+| <50% | ⭐ 1 星 | 待提升 |
 
 > 可按教研口径调整
 
@@ -658,9 +662,17 @@ for chunk in completion:
   - 策略：服务端按需拉取 + 缓存（如 10-30 分钟）+ 支持“刷新”按钮（避免强依赖实时接口稳定性）
   - 兜底：如接口不可用，允许导入 CSV（仅用于临时试点；字段以 `user_id + real_name` 为最小集）
 - [ ] 学生入口码（1 人 1 码）：为学生生成**专属二维码/链接**（支持批量导出/打印；支持作废重置）
+- [ ] **CRM 学生导入**：通过 `student_id` 自动从 CRM 同步学生档案（含姓名、年级、Level、SS 账号等）。
 - [ ] 报告列表与详情：完整报告、解读版
 - [ ] 生成家长专属链接（永久有效）
 - [ ] 复制链接/二维码（二维码可选）
+
+### 8.4 管理员端 (Admin)
+
+- [ ] **全量看板**：查看全校/全系统的测评完成率、平均分、异常任务统计。
+- [ ] **题库管理**：支持按 Level/Unit 动态配置 Part 2 的 12 道题目及参考答案。
+- [ ] **老师管理**：查看老师名下的学生分布及跟进情况。
+- [ ] **系统日志**：查看关键操作审计日志。
 
 ### 8.3 家长端（Must）
 
@@ -721,10 +733,12 @@ CREATE TABLE student_profiles (
     external_user_id VARCHAR(50), -- CRM 中的 ID
     teacher_id BIGINT NOT NULL, -- 关联 users.id (Teacher)
     ss_email_addr VARCHAR(100), -- 冗余字段，用于快速校验
+    ss_crm_name VARCHAR(100), -- 老师 CRM 账号名
     -- 冗余 CRM 字段 (用于展示与筛选)
     cur_age INT,
     cur_grade VARCHAR(20),
     cur_level_desc VARCHAR(50),
+    main_last_buy_unit_name VARCHAR(100), -- 最后购买单元
     last_synced_at TIMESTAMP,
     INDEX idx_teacher_id (teacher_id),
     INDEX idx_external_user_id (external_user_id)
@@ -890,20 +904,21 @@ speakingtest/
 
 | Method | Path | 说明 |
 |--------|------|------|
-| POST | `/auth/teacher/request-code` | 发送验证码（仅 51talk 邮箱） |
-| POST | `/auth/teacher/login` | 老师登录 |
+| POST | `/api/v1/auth/teacher/request-code` | 发送验证码（仅 51talk 邮箱） |
+| POST | `/api/v1/auth/teacher/login` | 老师登录 |
 | GET | `/s/{token}` | 学生入口页（H5 路由；后端可返回页面或做前端重定向） |
-| POST | `/auth/student/entry/verify` | 校验学生入口 token（返回 student 会话/JWT + 允许进入的测试信息） |
+| POST | `/api/v1/students/verify-token` | 校验学生入口 token（返回 student 会话/JWT + 允许进入的测试信息） |
 
 ### Test
 
 | Method | Path | 说明 |
 |--------|------|------|
-| GET | `/questions` | 获取题目（level, unit；题库源为 JSON 文件，后续可迁移 DB） |
-| POST | `/tests` | 创建测试 |
-| POST | `/tests/{id}/upload-urls` | 获取 OSS 上传签名（raw+mp3） |
-| POST | `/tests/{id}/submit` | 提交，触发评测（Part1=讯飞 + Part2=Qwen，后台并行） |
-| GET | `/tests/{id}` | 获取结果（按权限裁剪） |
+| GET | `/api/v1/questions/{level}/{unit}` | 获取题目（level, unit） |
+| POST | `/api/v1/tests` | 创建测试 |
+| POST | `/api/v1/upload/test-audio` | 获取 OSS 上传签名 |
+| POST | `/api/v1/tests/{id}/part1` | 提交 Part 1 评测（同步） |
+| POST | `/api/v1/tests/{id}/part2` | 提交 Part 2 评测（异步） |
+| GET | `/api/v1/tests/{id}` | 获取测评状态/结果 |
 
 ### 内部流程（后端评测）
 
@@ -941,22 +956,19 @@ POST /tests/{id}/submit-part2
 
 | Method | Path | 说明 |
 |--------|------|------|
-| GET | `/teacher/students` | 学生列表（默认从 CRM 学生列表接口拉取 + 缓存；支持分页/搜索/筛选） |
-| POST | `/teacher/students/sync` | 手动刷新学生列表（触发后端重新拉取 CRM；用于兜底/排障） |
-| POST | `/teacher/students/{id}/entry-token` | 生成/重置该学生入口 token（返回链接 + 二维码内容） |
-| POST | `/teacher/students/{id}/tasks/{level}/{unit}/reset` | 重置该学生该任务测评（仅用于系统失败/运营批准场景；默认仅允许 1 次测评） |
-| POST | `/teacher/students/entry-tokens/export` | 批量导出学生入口码（PDF/图片；可选） |
-| GET | `/teacher/tests` | 测试列表（可筛选 studentId） |
-| GET | `/teacher/tests/{id}/report` | 完整报告 |
-| GET | `/teacher/tests/{id}/interpretation` | 解读版 |
-| POST | `/teacher/tests/{id}/share` | 生成家长 token |
-| POST | `/teacher/tests/{id}/share/reset` | 作废旧链接并重置 token（教师端操作） |
+| GET | `/api/v1/students` | 学生列表（默认从 CRM 学生列表接口拉取 + 缓存；支持分页/搜索/筛选） |
+| POST | `/api/v1/students/import` | 导入学生（从 CRM 拉取） |
+| POST | `/api/v1/students/{id}/tests` | 获取该学生测评历史 |
+| POST | `/api/v1/students/{id}/entry-token` | 生成/重置该学生入口 token（返回链接 + 二维码内容） |
+| GET | `/api/v1/tests/{id}` | 完整报告 |
+| GET | `/api/v1/tests/{id}/interpretation` | 解读版 |
+| POST | `/api/v1/tests/{id}/share` | 生成家长分享链接 |
 
 ### Parent
 
 | Method | Path | 说明 |
 |--------|------|------|
-| GET | `/p/{shareToken}` | 家长可见报告 |
+| GET | `/api/v1/reports/{token}` | 家长可见报告 |
 
 ### External (CRM / 国内 SS)
 
@@ -1194,4 +1206,5 @@ POST /tests/{id}/submit-part2
 | v0.1 | 2025-12-28 | 初版，定义产品范围、讯飞语音评测（流式版）方案 |
 | v0.2 | 2025-12-29 | 新增阿里云 Qwen-Omni 评测方案（第6章），验证通过；补齐外部单学生接口（upgrade-28）、RBAC/单次测评重置口径、录音 6 个月过期降级 |
 | v1.0 | 2026-01-04 | **生产级发布**：全面升级为 V1.0 Production 标准（NFR/HA/Schema）；新增系统架构与部署架构图；优化学生端结果页体验（Part 1 即时反馈） |
+| v1.1 | 2026-01-07 | **代码对齐更新**：同步 Python(FastAPI) + React 技术栈；更新星级评分阈值（40/32/24/16）；明确 Part 1 评分映射逻辑；新增管理员端与题库管理功能描述；同步数据库字段（ss_crm_name 等）。 |
 

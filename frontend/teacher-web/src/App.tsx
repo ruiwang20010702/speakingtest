@@ -6,6 +6,7 @@ import StudentsPage from './pages/StudentsPage';
 import StudentDetailPage from './pages/StudentDetailPage';
 import ReportPage from './pages/ReportPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import QuestionsPage from './pages/QuestionsPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -46,6 +47,14 @@ function App() {
           element={
             <PrivateRoute>
               <AdminDashboardPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/questions"
+          element={
+            <PrivateRoute>
+              <QuestionsPage />
             </PrivateRoute>
           }
         />

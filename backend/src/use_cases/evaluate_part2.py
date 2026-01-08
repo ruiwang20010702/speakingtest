@@ -208,14 +208,15 @@ class ProcessPart2TaskUseCase:
         return True
     
     def _calculate_star_level(self, total_score: float) -> int:
-        """根据总分 (0-44) 计算星级 (1-5)"""
-        if total_score >= 40:
+        """根据总分百分比 (score/44) 计算星级 (1-5)"""
+        pct = total_score / 44.0
+        if pct >= 0.90:
             return 5
-        elif total_score >= 32:
+        elif pct >= 0.80:
             return 4
-        elif total_score >= 24:
+        elif pct >= 0.65:
             return 3
-        elif total_score >= 16:
+        elif pct >= 0.50:
             return 2
         else:
             return 1

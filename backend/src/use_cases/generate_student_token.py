@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
-from src.adapters.repositories.models import StudentEntryTokenModel, StudentProfileModel
+from src.adapters.repositories.models import StudentEntryTokenModel, StudentProfileModel, TestModel
 
 
 @dataclass
@@ -19,7 +19,7 @@ class GenerateTokenRequest:
     teacher_id: int
     level: str
     unit: str
-    expires_hours: int = 24
+    expires_hours: int = 168
 
 
 @dataclass
@@ -38,11 +38,12 @@ class GenerateStudentTokenUseCase:
     
     1. Validate student belongs to teacher
     2. Generate random token string
-    3. Save to database
-    4. Return token and full entry URL
+    3. Create a pending Test record
+    4. Save token to database
+    5. Return token and full entry URL
     """
     
-    BASE_URL = "http://localhost:3000/s"  # TODO: Move to config
+    BASE_URL = "http://localhost:3001/s"  # TODO: Move to config
     
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -52,11 +53,23 @@ class GenerateStudentTokenUseCase:
         # Assuming the controller has already checked basic permissions,
         # but we can double check here if needed.
         
-        # 2. Generate token
+        # 2. Create Pending Test Record
+        # This ensures the test appears in the "Test History" list immediately
+        test_record = TestModel(
+            student_id=request.student_id,
+            level=request.level,
+            unit=request.unit,
+            status="pending",
+            created_at=datetime.utcnow()
+        )
+        self.db.add(test_record)
+        await self.db.flush()  # Get ID
+
+        # 3. Generate token
         token = secrets.token_urlsafe(16)
         expires_at = datetime.utcnow() + timedelta(hours=request.expires_hours)
         
-        # 3. Save to DB
+        # 4. Save to DB
         entry_token = StudentEntryTokenModel(
             token=token,
             student_id=request.student_id,

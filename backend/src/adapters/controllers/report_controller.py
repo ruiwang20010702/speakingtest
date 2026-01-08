@@ -38,6 +38,7 @@ class TestSummary(BaseModel):
     star_level: Optional[int] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
+    entry_url: Optional[str] = None
 
 
 class TestItemDetail(BaseModel):
@@ -67,6 +68,7 @@ class TestReportDetail(BaseModel):
     items: List[TestItemDetail] = []
     created_at: datetime
     completed_at: Optional[datetime] = None
+    entry_url: Optional[str] = None
 
 
 class ShareLinkResponse(BaseModel):
@@ -119,6 +121,26 @@ async def get_student_tests(
     
     result = await db.execute(stmt)
     tests = result.scalars().all()
+
+    # Get active tokens for this student to populate entry_url for pending tests
+    from src.adapters.repositories.models import StudentEntryTokenModel
+    token_stmt = select(StudentEntryTokenModel).where(
+        StudentEntryTokenModel.student_id == student_id,
+        StudentEntryTokenModel.expires_at > datetime.utcnow()
+    ).order_by(StudentEntryTokenModel.created_at.desc())
+    
+    token_result = await db.execute(token_stmt)
+    tokens = token_result.scalars().all()
+    
+    # Map (level, unit) -> token
+    token_map = {}
+    for t in tokens:
+        key = (t.level, t.unit)
+        if key not in token_map:
+            token_map[key] = t.token
+
+    # Base URL for student H5 (TODO: Move to config)
+    BASE_URL = "http://localhost:3001/s"
     
     return [
         TestSummary(
@@ -131,7 +153,8 @@ async def get_student_tests(
             part2_score=float(t.part2_score) if t.part2_score else None,
             star_level=t.star_level,
             created_at=t.created_at,
-            completed_at=t.completed_at
+            completed_at=t.completed_at,
+            entry_url=f"{BASE_URL}/{token_map.get((t.level, t.unit))}" if t.status != 'completed' and (t.level, t.unit) in token_map else None
         )
         for t in tests
     ]

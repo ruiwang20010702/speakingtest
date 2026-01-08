@@ -201,17 +201,19 @@ class VerificationCodeModel(Base):
 
 
 class QuestionModel(Base):
-    """Question bank for Part 2 evaluation."""
+    """Question bank for Part 1 (words) and Part 2 (Q&A) evaluation."""
     __tablename__ = "questions"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    level = Column(String(20), nullable=False)  # e.g., "L1", "L2"
-    unit = Column(String(50), nullable=False)   # e.g., "Unit 1", "Food"
-    part = Column(Integer, nullable=False, default=2) # 1=Read, 2=Q&A
-    type = Column(String(20), nullable=False, default="question_answer") # word_reading, question_answer
-    question_no = Column(Integer, nullable=False)  # 1-12
-    question = Column(Text, nullable=False)  # The question text
-    reference_answer = Column(Text, nullable=True)  # Expected answer pattern
+    level = Column(String(20), nullable=False)  # e.g., "L0", "L1", "L2"
+    unit = Column(String(50), nullable=False)   # e.g., "Unit 1-4", "Unit 5-8"
+    part = Column(Integer, nullable=False, default=2)  # 1=Word Reading, 2=Q&A
+    type = Column(String(20), nullable=False, default="question_answer")  # word_reading, question_answer
+    question_no = Column(Integer, nullable=False)  # 1-20 for Part1, 1-12 for Part2
+    question = Column(Text, nullable=False)  # The word/question text
+    translation = Column(String(100), nullable=True)  # Chinese translation (for Part 1 words)
+    image_url = Column(String(500), nullable=True)  # Image URL (OSS or CDN)
+    reference_answer = Column(Text, nullable=True)  # Expected answer pattern (for Part 2)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
