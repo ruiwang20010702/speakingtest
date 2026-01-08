@@ -214,12 +214,6 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
 
   // 播放英语句子音频
   const playEnglishAudio = (text: string) => {
-    // 如果正在录音，完全禁止播放音频
-    if (isRecording) {
-      console.log("录音中，禁止播放音频");
-      return;
-    }
-
     // 停止之前的播放
     window.speechSynthesis.cancel();
     setIsAudioPlaying(true);
@@ -228,7 +222,7 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
     utterance.lang = 'en-US';
     utterance.rate = 0.8; // 稍微慢一点，适合小朋友
     utterance.pitch = 1.1; // 稍微高一点，更友好
-    utterance.volume = 0.7; // 降低音量，减少被麦克风录制的可能性
+    utterance.volume = 1.0; // 提高音量，确保能听清
 
     // 播放完成后的回调
     utterance.onend = () => {
@@ -251,26 +245,20 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
     // 确保 questions 已加载且 currentIndex 有效
     if (questions.length === 0 || isLoading || currentIndex < 0 || currentIndex >= questions.length) return;
 
-    // 如果正在录音，不自动播放
-    if (isRecording) return;
-
     const currentQ = questions[currentIndex];
     const isPartDialogue = currentPart === 2;
 
     if (isPartDialogue && currentQ && currentQ.text) {
       // 延迟一点播放，让页面切换动画完成
       const timer = setTimeout(() => {
-        // 再次检查是否在录音（防止延迟期间开始录音）
-        if (!isRecording) {
-          playEnglishAudio(currentQ.text);
-        }
+        playEnglishAudio(currentQ.text);
       }, 500);
       return () => {
         clearTimeout(timer);
         window.speechSynthesis.cancel();
       };
     }
-  }, [currentIndex, currentPart, questions.length, isLoading, isRecording]);
+  }, [currentIndex, currentPart, questions.length, isLoading]);
 
   if (isLoading) return <div className="h-screen flex items-center justify-center font-black text-[#1CB0F6]">加载中...</div>;
 
@@ -356,10 +344,31 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
 
       <main className="flex-1 w-full max-w-md flex flex-col items-center">
         <div
-          className="w-full flex-1 flex flex-col items-center justify-center relative"
+          className="w-full flex-1 flex flex-col items-center justify-center relative select-none cursor-grab active:cursor-grabbing"
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
+          onMouseDown={(e) => {
+            touchEndRef.current = null;
+            touchStartRef.current = e.clientX;
+          }}
+          onMouseMove={(e) => {
+            if (touchStartRef.current !== null) {
+              touchEndRef.current = e.clientX;
+            }
+          }}
+          onMouseUp={() => {
+            onTouchEnd();
+            touchStartRef.current = null;
+            touchEndRef.current = null;
+          }}
+          onMouseLeave={() => {
+            if (touchStartRef.current !== null) {
+              onTouchEnd();
+              touchStartRef.current = null;
+              touchEndRef.current = null;
+            }
+          }}
         >
 
           {/* 对话环节现在也有左右翻页箭头 */}

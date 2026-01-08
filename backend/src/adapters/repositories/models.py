@@ -81,6 +81,7 @@ class TestModel(Base):
     star_level = Column(SmallInteger, nullable=True)
     part2_transcript = Column(Text, nullable=True)
     part2_audio_url = Column(String(500), nullable=True)
+    part2_raw_result = Column(JSONB, nullable=True)
     part1_audio_url = Column(String(500), nullable=True)
     part1_raw_result = Column(JSONB, nullable=True)
     failure_reason = Column(String(255), nullable=True)

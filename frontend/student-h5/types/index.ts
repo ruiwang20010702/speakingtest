@@ -33,3 +33,29 @@ export interface TestResult {
     vocabulary: number; // 词汇量/词汇运用
   };
 }
+
+export interface TestItemResponse {
+  question_no: number;
+  score: number;
+  feedback?: string;
+  evidence?: string;
+}
+
+export interface FullReportResponse {
+  test_id: number;
+  status: string;
+  student_name: string;
+  level: string;
+  unit: string;
+  total_score?: number;
+  star_level?: number;
+  part1_score?: number;
+  part1_fluency?: number;
+  part1_pronunciation?: number;
+  part2_score?: number;
+  part2_transcript?: string;
+  part2_items: TestItemResponse[];
+  part2_suggestions: string[];
+  created_at?: string;
+  completed_at?: string;
+}

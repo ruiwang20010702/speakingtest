@@ -104,6 +104,8 @@ async def list_questions(
             question_no=q.question_no,
             part=q.part,
             question=q.question,
+            translation=q.translation,
+            image_url=q.image_url,
             reference_answer=q.reference_answer,
             is_active=q.is_active
         )
@@ -132,7 +134,7 @@ async def get_questions_by_level_unit(
             QuestionModel.unit == unit,
             QuestionModel.is_active == True
         )
-    ).order_by(QuestionModel.question_no)
+    ).order_by(QuestionModel.part, QuestionModel.question_no)
     
     result = await db.execute(stmt)
     questions = result.scalars().all()
@@ -151,6 +153,8 @@ async def get_questions_by_level_unit(
             question_no=q.question_no,
             part=q.part,
             question=q.question,
+            translation=q.translation,
+            image_url=q.image_url,
             reference_answer=q.reference_answer,
             is_active=q.is_active
         )

@@ -92,6 +92,7 @@ CREATE TABLE tests (
     -- Part 2 Details
     part2_transcript    TEXT,          -- Qwen 转写结果 (Full)
     part2_audio_url     VARCHAR(500),  -- OSS 存储路径
+    part2_raw_result    JSONB,         -- Qwen 原始返回 (含建议)
     -- Part 1 Details
     part1_audio_url     VARCHAR(500),  -- OSS 存储路径
     part1_raw_result    JSONB,         -- 讯飞原始返回

@@ -353,7 +353,8 @@ async def get_full_report(
     
     # 解析建议（如果存储在 raw 中）
     part2_suggestions = []
-    # 可以从 part2_raw_result 中提取 overall_suggestion
+    if test.part2_raw_result and isinstance(test.part2_raw_result, dict):
+        part2_suggestions = test.part2_raw_result.get("overall_suggestion", [])
     
     return FullReportResponse(
         test_id=test.id,
