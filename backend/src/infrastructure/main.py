@@ -24,16 +24,17 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info("Application starting up...")
-    async with engine.begin() as conn:
-        # Create tables if they don't exist (dev only; use Alembic in prod)
-        # await conn.run_sync(Base.metadata.create_all)
-        pass
+    # Temporarily disable database connection for testing
+    # async with engine.begin() as conn:
+    #     # Create tables if they don't exist (dev only; use Alembic in prod)
+    #     # await conn.run_sync(Base.metadata.create_all)
+    #     pass
 
     yield
 
     # Shutdown
     logger.info("Application shutting down...")
-    await engine.dispose()
+    # await engine.dispose()
 
 
 app = FastAPI(
