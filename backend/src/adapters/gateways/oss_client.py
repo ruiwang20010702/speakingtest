@@ -4,6 +4,7 @@
 """
 import os
 import uuid
+import asyncio
 from datetime import datetime
 from typing import Optional
 from dataclasses import dataclass
@@ -86,8 +87,12 @@ class OSSClient:
         key = self._generate_key(test_id, part, extension)
         
         try:
-            # 上传文件
-            result = self.bucket.put_object(key, audio_data)
+            # 上传文件 (Run in executor to avoid blocking)
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, 
+                lambda: self.bucket.put_object(key, audio_data)
+            )
             
             if result.status == 200:
                 # 生成访问 URL

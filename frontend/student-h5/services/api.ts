@@ -370,7 +370,7 @@ export const submitPart1 = async (
 }> => {
   const formData = new FormData();
   formData.append('audio', audioBlob, 'part1.wav');
-  formData.append('text', text);
+  formData.append('reference_text', text);
 
   const response = await api.post(`/tests/${testId}/part1`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' }

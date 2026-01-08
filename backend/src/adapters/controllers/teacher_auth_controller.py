@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database import get_db
 from src.infrastructure.responses import ErrorResponse
+from src.infrastructure.audit import log_audit
 from src.use_cases.teacher_login import (
     SendVerificationCodeUseCase,
     TeacherLoginUseCase,
@@ -135,6 +136,7 @@ async def send_verification_code(
 )
 async def login_with_code(
     request: LoginRequestSchema,
+    http_request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -160,6 +162,17 @@ async def login_with_code(
             status_code=status_code,
             detail={"error": result.error, "message": result.message}
         )
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=result.user_id,
+        action="LOGIN",
+        target_type="user",
+        target_id=result.user_id,
+        details={"email": request.email, "role": result.role},
+        request=http_request
+    )
     
     return LoginResponseSchema(
         access_token=result.access_token,

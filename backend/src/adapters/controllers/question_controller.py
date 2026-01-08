@@ -6,7 +6,7 @@ from typing import List, Optional
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from pydantic import BaseModel
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ from src.infrastructure.database import get_db
 from src.infrastructure.auth import get_current_user_id, get_current_user_role
 from src.adapters.repositories.models import QuestionModel
 from src.adapters.gateways.oss_client import get_oss_client
+from src.infrastructure.audit import log_audit
 
 
 router = APIRouter()
@@ -170,6 +171,7 @@ async def get_questions_by_level_unit(
 )
 async def create_question(
     request: QuestionCreate,
+    http_request: Request,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db)
@@ -199,9 +201,19 @@ async def create_question(
     except Exception as e:
         await db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Question already exists or invalid data: {str(e)}"
         )
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=user_id,
+        action="CREATE_QUESTION",
+        target_type="question",
+        target_id=question.id,
+        details={"level": request.level, "unit": request.unit, "question_no": request.question_no},
+        request=http_request
+    )
     
     return QuestionResponse(
         id=question.id,
@@ -223,6 +235,7 @@ async def create_question(
 )
 async def batch_create_questions(
     request: QuestionBatchCreate,
+    http_request: Request,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db)
@@ -258,6 +271,18 @@ async def batch_create_questions(
             detail=f"Failed to create questions: {str(e)}"
         )
     
+
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=user_id,
+        action="BATCH_CREATE_QUESTIONS",
+        target_type="question",
+        details={"level": request.level, "unit": request.unit, "count": created_count},
+        request=http_request
+    )
+    
     return {"success": True, "created": created_count, "message": f"Created {created_count} questions for {request.level} - {request.unit}"}
 
 
@@ -270,6 +295,7 @@ async def batch_create_questions(
 async def update_question(
     question_id: int,
     request: QuestionUpdate,
+    http_request: Request,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db)
@@ -303,6 +329,17 @@ async def update_question(
     
     await db.commit()
     
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=user_id,
+        action="UPDATE_QUESTION",
+        target_type="question",
+        target_id=question.id,
+        details=request.dict(exclude_unset=True),
+        request=http_request
+    )
+    
     return QuestionResponse(
         id=question.id,
         level=question.level,
@@ -322,6 +359,7 @@ async def update_question(
 )
 async def delete_question(
     question_id: int,
+    http_request: Request,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db)
@@ -347,7 +385,18 @@ async def delete_question(
         )
     
     question.is_active = False
+    question.is_active = False
     await db.commit()
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=user_id,
+        action="DELETE_QUESTION",
+        target_type="question",
+        target_id=question.id,
+        request=http_request
+    )
     
     return {"success": True, "message": "Question deleted"}
 

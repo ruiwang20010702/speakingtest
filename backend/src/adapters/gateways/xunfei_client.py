@@ -236,7 +236,11 @@ class XunfeiGateway:
         return f"{self.API_URL}?{urlencode(params)}"
     
     def _build_first_frame(self, text: str) -> dict:
-        """Build the first frame with business parameters."""
+        """Build the first frame with business parameters (ssb command, no audio)."""
+        # Add UTF-8 BOM as required by Xunfei API
+        if not text.startswith("\ufeff"):
+            text = "\ufeff" + text
+        
         return {
             "common": {
                 "app_id": self.app_id
@@ -244,27 +248,46 @@ class XunfeiGateway:
             "business": {
                 "category": "read_chapter",  # 篇章朗读
                 "rstcd": "utf8",
-                "tte": "utf-8",
-                "cmd": "ssb",  # Start session
-                "aue": "raw",  # PCM audio
-                "auf": "audio/L16;rate=16000",  # 16kHz 16bit
-                "text": base64.b64encode(text.encode("utf-8")).decode("utf-8"),
-                # New parameters for primary school & percentage scores
                 "group": "pupil",
+                "sub": "ise",
+                "ent": "en_vip",
+                "tte": "utf-8",
+                "cmd": "ssb",  # Start session (参数帧)
+                "auf": "audio/L16;rate=16000",
+                "aue": "raw",
+                "ttp_skip": True,
                 "ise_unite": "1",
                 "rst": "entirety",
-                "extra_ability": "multi_dimension"
+                "extra_ability": "multi_dimension",
+                "text": text  # 直接传文本，不用 base64
             },
             "data": {
                 "status": 0  # First frame
             }
         }
     
-    def _build_audio_frame(self, audio_data: bytes, is_last: bool = False) -> dict:
-        """Build audio data frame."""
+    def _build_audio_frame(self, audio_data: bytes, seq: int, is_last: bool = False) -> dict:
+        """Build audio data frame with cmd:auw (matching test script protocol)."""
+        # aus: 1=first audio, 2=middle, 4=last
+        if is_last:
+            aus = 4
+        elif seq <= 1:
+            aus = 1
+        else:
+            aus = 2
+        
         return {
+            "common": {
+                "app_id": self.app_id
+            },
+            "business": {
+                "cmd": "auw",  # 音频上传命令
+                "aus": aus,
+                "aue": "raw",
+                "auf": "audio/L16;rate=16000"
+            },
             "data": {
-                "status": 2 if is_last else 1,  # 2 = last frame
+                "status": 2 if is_last else 1,
                 "data": base64.b64encode(audio_data).decode("utf-8")
             }
         }
@@ -295,36 +318,33 @@ class XunfeiGateway:
             
             try:
                 async with websockets.connect(url) as ws:
-                    # Send first frame with parameters
+                    # 1. Send first frame (ssb command, no audio)
                     first_frame = self._build_first_frame(reference_text)
                     await ws.send(json.dumps(first_frame))
-                    logger.debug("Sent first frame to Xunfei")
+                    logger.debug("Sent first frame (ssb) to Xunfei")
                     
-                    # Send audio frames
+                    # Wait for server to process parameters (important!)
+                    await asyncio.sleep(0.3)
+                    
+                    # 2. Send audio frames with cmd:auw
                     chunk_count = 0
+                    all_chunks = []
                     async for chunk in audio_iterator:
-                        is_last = False  # Will be set by iterator exhaustion
-                        
-                        # Check if this is the last chunk
-                        try:
-                            # Peek ahead - if StopAsyncIteration, this is last
-                            pass
-                        except StopAsyncIteration:
-                            is_last = True
-                        
-                        audio_frame = self._build_audio_frame(chunk, is_last=False)
+                        all_chunks.append(chunk)
+                    
+                    total_chunks = len(all_chunks)
+                    for i, chunk in enumerate(all_chunks):
+                        is_last = (i == total_chunks - 1)
+                        audio_frame = self._build_audio_frame(chunk, seq=i+1, is_last=is_last)
                         await ws.send(json.dumps(audio_frame))
                         chunk_count += 1
                         
                         if on_progress:
                             await on_progress(chunk_count)
                         
-                        # Small delay to prevent overwhelming
-                        await asyncio.sleep(0.04)  # ~40ms per 1280 bytes at 16kHz
+                        # Control send rate (~40ms per chunk)
+                        await asyncio.sleep(0.04)
                     
-                    # Send last frame
-                    last_frame = self._build_audio_frame(b"", is_last=True)
-                    await ws.send(json.dumps(last_frame))
                     logger.debug(f"Sent {chunk_count} audio frames, waiting for result")
                     
                     # Receive result
@@ -368,8 +388,8 @@ class XunfeiGateway:
         Returns:
             XunfeiEvaluationResult with scores
         """
-        # Split audio into chunks
-        chunk_size = 1280  # ~40ms at 16kHz 16bit
+        # Split audio into chunks (larger chunks for faster transmission)
+        chunk_size = 6400  # ~200ms at 16kHz 16bit, reduces number of round trips
         
         async def audio_generator():
             for i in range(0, len(audio_data), chunk_size):

@@ -68,7 +68,7 @@ def build_part2_user_prompt(questions: List[dict]) -> str:
 1. 输出整段逐字转写（保留原话，不要润色）
 2. 对 1-12 每题给出 0/1/2 分
 3. 每题给出评分理由和转写证据
-4. 给出 1-3 条总体改进建议
+4. 给出 1-3 条总体改进建议（请务必结合【学生背景信息】中的 Part 1 发音表现，给出综合性的提升建议）
 
 严格只输出 JSON，不要有其他内容。"""
 
@@ -113,7 +113,8 @@ class QwenOmniGateway:
         self,
         audio_data: bytes,
         audio_format: str,  # mp3, wav, etc.
-        questions: List[dict]
+        questions: List[dict],
+        part1_summary: Optional[str] = None
     ) -> Part2EvaluationResult:
         """
         评测 Part 2 录音
@@ -122,6 +123,7 @@ class QwenOmniGateway:
             audio_data: 音频二进制数据
             audio_format: 音频格式 (mp3, wav, m4a)
             questions: 12 道题目列表
+            part1_summary: Part 1 评测结果摘要 (可选)
             
         Returns:
             Part2EvaluationResult 包含转写和逐题评分
@@ -133,6 +135,11 @@ class QwenOmniGateway:
             mime_type = "audio/mpeg"
         data_url = f"data:{mime_type};base64,{audio_base64}"
         
+        # 构建 Prompt
+        user_prompt = build_part2_user_prompt(questions)
+        if part1_summary:
+            user_prompt = f"【学生背景信息】\n{part1_summary}\n\n" + user_prompt
+
         # 构建请求体
         request_body = {
             "model": self.model,
@@ -153,7 +160,7 @@ class QwenOmniGateway:
                         },
                         {
                             "type": "text",
-                            "text": build_part2_user_prompt(questions)
+                            "text": user_prompt
                         }
                     ]
                 }

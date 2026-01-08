@@ -3,12 +3,13 @@ Student Entry Controller
 Handles student entry token verification and session creation.
 """
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database import get_db
 from src.infrastructure.responses import ErrorResponse
+from src.infrastructure.audit import log_audit
 from src.use_cases.verify_student_token import (
     VerifyStudentEntryTokenUseCase,
     StudentSessionResponse,
@@ -201,6 +202,7 @@ class ImportResponse(BaseModel):
 )
 async def import_student(
     request: ImportRequest,
+    http_request: Request,
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db)
 ):
@@ -234,6 +236,17 @@ async def import_student(
             detail={"error": "ImportFailed", "message": result.message}
         )
         
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=user_id,
+        action="IMPORT_STUDENT",
+        target_type="student",
+        target_id=result.student_id,  # Assuming result has student_id, let me check ImportStudentResponse
+        details={"student_id": request.student_id, "is_new": result.is_new},
+        request=http_request
+    )
+        
     return ImportResponse(
         success=True,
         student_name=result.student_name,
@@ -265,6 +278,7 @@ class GenerateTokenResponseSchema(BaseModel):
 )
 async def generate_student_token(
     student_id: int,
+    http_request: Request,
     level: str = "L1",
     unit: str = "Unit 1",
     user_id: int = Depends(get_current_user_id),
@@ -305,6 +319,17 @@ async def generate_student_token(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=result.message
         )
+        
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=user_id,
+        action="GENERATE_TOKEN",
+        target_type="student_token",
+        target_id=student_id,
+        details={"level": level, "unit": unit, "token": result.token},
+        request=http_request
+    )
         
     return GenerateTokenResponseSchema(
         success=True,

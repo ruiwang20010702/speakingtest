@@ -147,31 +147,33 @@ export default function ReportPage() {
                 )}
 
                 {/* Detailed Items */}
-                <div className="details-section">
-                    <h3>详细评分</h3>
-                    <div className="items-list">
-                        {report.items.map((item) => (
-                            <div key={item.question_no} className="report-item">
-                                <div className="item-header">
-                                    <span className="q-no">Q{item.question_no}</span>
-                                    <span className={`score-tag score-${item.score}`}>
-                                        {item.score === 2 ? '优秀' : item.score === 1 ? '良好' : '需努力'}
-                                    </span>
+                {report.part2_items && report.part2_items.length > 0 && (
+                    <div className="details-section">
+                        <h3>详细评分</h3>
+                        <div className="items-list">
+                            {report.part2_items.map((item) => (
+                                <div key={item.question_no} className="report-item">
+                                    <div className="item-header">
+                                        <span className="q-no">Q{item.question_no}</span>
+                                        <span className={`score-tag score-${item.score}`}>
+                                            {item.score === 2 ? '优秀' : item.score === 1 ? '良好' : '需努力'}
+                                        </span>
+                                    </div>
+                                    {item.evidence && (
+                                        <div className="item-evidence">
+                                            "{item.evidence}"
+                                        </div>
+                                    )}
+                                    {item.feedback && (
+                                        <div className="item-feedback">
+                                            点评：{item.feedback}
+                                        </div>
+                                    )}
                                 </div>
-                                {item.evidence && (
-                                    <div className="item-evidence">
-                                        "{item.evidence}"
-                                    </div>
-                                )}
-                                {item.feedback && (
-                                    <div className="item-feedback">
-                                        点评：{item.feedback}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {/* Share Modal */}

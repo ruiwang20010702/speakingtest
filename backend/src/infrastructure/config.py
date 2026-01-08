@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     APP_NAME: str = "Speaking Test System"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
+    
+    # Frontend URLs
+    FRONTEND_STUDENT_URL: str = "http://localhost:3001/s"
 
     # Database (PostgreSQL)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/speakingtest"

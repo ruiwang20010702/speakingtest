@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
 from src.adapters.repositories.models import StudentEntryTokenModel, StudentProfileModel, TestModel
+from src.infrastructure.config import get_settings
+
+settings = get_settings()
 
 
 @dataclass
@@ -43,7 +46,7 @@ class GenerateStudentTokenUseCase:
     5. Return token and full entry URL
     """
     
-    BASE_URL = "http://localhost:3001/s"  # TODO: Move to config
+    BASE_URL = settings.FRONTEND_STUDENT_URL
     
     def __init__(self, db: AsyncSession):
         self.db = db

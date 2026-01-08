@@ -3,6 +3,8 @@ Part 2 评测用例
 编排完整的 Part 2 评测流程：提交任务、消费处理、保存结果
 """
 import uuid
+import os
+from urllib.parse import urlparse
 from datetime import datetime
 from typing import Optional
 from dataclasses import dataclass
@@ -155,17 +157,36 @@ class ProcessPart2TaskUseCase:
             return False
         
         # 3. 调用 Qwen API
-        # 根据 URL 判断格式
-        audio_format = "mp3"
-        if task.audio_url.endswith(".wav"):
+        # 根据 URL 判断格式 (Handle presigned URLs with query params)
+        parsed_url = urlparse(task.audio_url)
+        path = parsed_url.path
+        ext = os.path.splitext(path)[1].lower()
+        
+        audio_format = "mp3"  # Default
+        if ext == ".wav":
             audio_format = "wav"
-        elif task.audio_url.endswith(".m4a"):
+        elif ext == ".m4a":
             audio_format = "m4a"
+        elif ext == ".pcm":
+             audio_format = "pcm"
+        
+        # 准备 Part 1 摘要
+        part1_summary = ""
+        if test.part1_score is not None:
+            part1_summary = f"该学生 Part 1 (词汇朗读) 得分为 {test.part1_score}/20。"
+            if test.part1_raw_result and "words" in test.part1_raw_result:
+                weak_words = [
+                    w["word"] for w in test.part1_raw_result["words"]
+                    if w.get("score", 100) < 60
+                ]
+                if weak_words:
+                    part1_summary += f" 发音薄弱词汇包括：{', '.join(weak_words[:5])}。"
         
         qwen_result = await self.qwen.evaluate_part2(
             audio_data=audio_data,
             audio_format=audio_format,
-            questions=task.questions
+            questions=task.questions,
+            part1_summary=part1_summary
         )
         
         # 4. 处理结果

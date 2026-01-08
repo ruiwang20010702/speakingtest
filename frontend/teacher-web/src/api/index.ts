@@ -36,7 +36,7 @@ export const authApi = {
     api.post('/auth/send-code', { email }),
 
   login: (email: string, code: string) =>
-    api.post<{ access_token: string; user_id: number; role: string; name: string }>('/auth/login', { email, code }),
+    api.post<{ access_token: string; token_type: string; user_id: number; role: string; name: string }>('/auth/login', { email, code }),
 };
 
 // Students API
@@ -57,7 +57,7 @@ export const studentsApi = {
 // Tests API
 export const testsApi = {
   getReport: (testId: number) =>
-    api.get(`/tests/${testId}`),
+    api.get(`/tests/${testId}/report`),
 
   getInterpretation: (testId: number) =>
     api.get(`/tests/${testId}/interpretation`),
@@ -94,7 +94,6 @@ export interface CostStats {
 }
 
 export interface StudentListItem {
-  id: number;
   user_id: number;
   external_user_id?: string;
   student_name: string;
@@ -104,6 +103,16 @@ export interface StudentListItem {
   main_last_buy_unit_name?: string;
   teacher_name?: string;
   ss_crm_name?: string;
+}
+
+export interface EntryResponse {
+  access_token: string;
+  token_type: string;
+  student_id: number;
+  student_name: string;
+  level: string;
+  unit: string;
+  test_id: number;
 }
 
 export interface TestSummary {
@@ -121,22 +130,21 @@ export interface TestSummary {
 }
 
 export interface TestReport {
-  id: number;
-  student_id: number;
-  student_name: string;
+  test_id: number;
+  status: string;
+  student_name?: string;
   level: string;
   unit: string;
-  status: string;
   total_score?: number;
-  part1_score?: number;
-  part2_score?: number;
   star_level?: number;
-  part1_audio_url?: string;
-  part2_audio_url?: string;
+  part1_score?: number;
+  part1_fluency?: number;
+  part1_pronunciation?: number;
+  part2_score?: number;
   part2_transcript?: string;
-  part1_raw_result?: Record<string, unknown>;
-  items: TestItem[];
-  created_at: string;
+  part2_items: TestItem[];
+  part2_suggestions: string[];
+  created_at?: string;
   completed_at?: string;
 }
 

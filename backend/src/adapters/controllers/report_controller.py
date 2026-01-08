@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from src.infrastructure.auth import get_current_user_id, get_current_user_role
 from src.adapters.repositories.models import (
     TestModel, TestItemModel, StudentProfileModel, ReportShareTokenModel
 )
+from src.infrastructure.audit import log_audit
 
 
 router = APIRouter()
@@ -260,6 +261,7 @@ async def get_test_report(
 )
 async def generate_share_link(
     test_id: int,
+    http_request: Request,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db)
@@ -308,6 +310,17 @@ async def generate_share_link(
     
     # TODO: Move base URL to config
     share_url = f"http://localhost:3000/p/{token}"
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=user_id,
+        action="SHARE_REPORT",
+        target_type="test",
+        target_id=test_id,
+        details={"token": token},
+        request=http_request
+    )
     
     return ShareLinkResponse(
         token=token,

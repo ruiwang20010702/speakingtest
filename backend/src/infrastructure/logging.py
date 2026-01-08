@@ -23,44 +23,26 @@ request_context: ContextVar[dict] = ContextVar("request_context", default={})
 def setup_logging():
     """
     Configure Loguru logger.
-    - Console output with colors (dev)
-    - JSON output for production
-    - File rotation
+    - Human-readable colored output for console
+    - Detailed traceback for errors
     """
     # Remove default handler
     logger.remove()
     
-    # Determine log level and format
+    # Determine log level
     log_level = "DEBUG" if settings.DEBUG else "INFO"
-    json_logs = not settings.DEBUG  # JSON in production
     
-    # Console handler
-    if json_logs:
-        logger.add(
-            sys.stdout,
-            format="{message}",
-            serialize=True,  # JSON output
-            level=log_level,
-        )
-    else:
-        logger.add(
-            sys.stdout,
-            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-            level=log_level,
-            colorize=True,
-        )
+    # Human-readable format for all levels
+    logger.add(
+        sys.stdout,
+        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+        level=log_level,
+        colorize=True,
+        backtrace=True,  # Show full traceback on errors
+        diagnose=True,   # Show variable values in traceback
+    )
     
-    # File handler with rotation (optional, enable in production)
-    # logger.add(
-    #     "logs/app.log",
-    #     rotation="100 MB",
-    #     retention="7 days",
-    #     compression="gz",
-    #     level=log_level,
-    #     serialize=json_logs,
-    # )
-    
-    logger.info(f"Logging configured: level={log_level}, json={json_logs}")
+    logger.info(f"Logging configured: level={log_level}")
     return logger
 
 

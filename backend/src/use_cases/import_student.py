@@ -57,7 +57,25 @@ class ImportStudentUseCase:
                 message="未找到该学生信息，请检查 ID 是否正确或是否在您名下"
             )
         
-        # 2. Check if student exists
+        # 1.5 Ensure User exists in users table
+        stmt_user = select(UserModel).where(UserModel.id == crm_data.user_id)
+        result_user = await self.db.execute(stmt_user)
+        user = result_user.scalar_one_or_none()
+        
+        if not user:
+            logger.info(f"Creating new user for student: {crm_data.user_id}")
+            user = UserModel(
+                id=crm_data.user_id,
+                role="student",
+                status=1,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            self.db.add(user)
+            # Flush to ensure user exists for foreign key constraint if we were to commit partially,
+            # but here we commit at the end. SQLAlchemy should handle order if we add both.
+        
+        # 2. Check if student profile exists
         stmt = select(StudentProfileModel).where(StudentProfileModel.user_id == request.student_id)
         result = await self.db.execute(stmt)
         student = result.scalar_one_or_none()

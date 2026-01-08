@@ -2,7 +2,7 @@
 Student Entry Token Use Case
 Validates entry token and creates a session for the student.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import dataclass
 
@@ -69,13 +69,9 @@ class VerifyStudentEntryTokenUseCase:
 
         # 2. Check if expired
         # Ensure current time is timezone-aware (UTC) to match database
-        now = datetime.utcnow().replace(tzinfo=datetime.utcnow().astimezone().tzinfo)
-        # Or simpler: use entry_token.expires_at.replace(tzinfo=None) if DB returns aware
+        now = datetime.now(timezone.utc)
         
-        # Best practice: make both aware or both naive. 
-        # Since DB returns aware (DateTime(timezone=True)), let's make current time aware.
-        from datetime import timezone
-        if entry_token.expires_at < datetime.now(timezone.utc):
+        if entry_token.expires_at < now:
             return TokenVerificationError(
                 error="TokenExpired",
                 message="入口链接已过期，请联系老师获取新链接"
