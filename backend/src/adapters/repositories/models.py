@@ -47,12 +47,21 @@ class StudentProfileModel(Base):
     external_source = Column(String(20), default="crm_domestic_ss")
     external_user_id = Column(String(50), nullable=True)
     teacher_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
+    
+    # SS Info
     ss_email_addr = Column(String(100), nullable=True)
     ss_crm_name = Column(String(100), nullable=True)
+    ss_name = Column(String(100), nullable=True)      # New
+    ss_sm_name = Column(String(100), nullable=True)   # New
+    ss_dept4_name = Column(String(100), nullable=True)# New
+    ss_group = Column(String(100), nullable=True)     # New
+    
+    # Student Info
     cur_age = Column(Integer, nullable=True)
     cur_grade = Column(String(20), nullable=True)
     cur_level_desc = Column(String(50), nullable=True)
     main_last_buy_unit_name = Column(String(100), nullable=True)
+    is_upgrade = Column(Integer, default=0)           # New
     last_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)

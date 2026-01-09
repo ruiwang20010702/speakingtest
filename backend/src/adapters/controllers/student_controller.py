@@ -105,6 +105,11 @@ class StudentResponse(BaseModel):
     teacher_id: int
     teacher_name: Optional[str] = None  # For admin view
     ss_crm_name: Optional[str] = None   # CRM account name
+    ss_name: Optional[str] = None       # New
+    ss_sm_name: Optional[str] = None    # New
+    ss_dept4_name: Optional[str] = None # New
+    ss_group: Optional[str] = None      # New
+    is_upgrade: int = 0                 # New
 
 @router.get(
     "",
@@ -169,7 +174,12 @@ async def list_students(
             main_last_buy_unit_name=s.main_last_buy_unit_name,
             teacher_id=s.teacher_id,
             teacher_name=teacher_name,
-            ss_crm_name=s.ss_crm_name
+            ss_crm_name=s.ss_crm_name,
+            ss_name=s.ss_name,              # New
+            ss_sm_name=s.ss_sm_name,        # New
+            ss_dept4_name=s.ss_dept4_name,  # New
+            ss_group=s.ss_group,            # New
+            is_upgrade=s.is_upgrade         # New
         ))
         
     return response

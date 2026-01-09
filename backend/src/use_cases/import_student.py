@@ -94,10 +94,15 @@ class ImportStudentUseCase:
                 teacher_id=request.teacher_id,
                 ss_email_addr=crm_data.ss_email_addr,
                 ss_crm_name=crm_data.ss_crm_name,
+                ss_name=crm_data.ss_name,              # New
+                ss_sm_name=crm_data.ss_sm_name,        # New
+                ss_dept4_name=crm_data.ss_dept4_name,  # New
+                ss_group=crm_data.ss_group,            # New
                 cur_age=crm_data.cur_age,
                 cur_grade=crm_data.cur_grade,
                 cur_level_desc=crm_data.cur_level_desc,
                 main_last_buy_unit_name=crm_data.main_last_buy_unit_name,
+                is_upgrade=crm_data.is_upgrade,        # New
                 last_synced_at=now,
                 created_at=now,
                 updated_at=now
@@ -110,10 +115,15 @@ class ImportStudentUseCase:
             student.teacher_id = request.teacher_id  # Update teacher if changed
             student.ss_email_addr = crm_data.ss_email_addr
             student.ss_crm_name = crm_data.ss_crm_name
+            student.ss_name = crm_data.ss_name              # New
+            student.ss_sm_name = crm_data.ss_sm_name        # New
+            student.ss_dept4_name = crm_data.ss_dept4_name  # New
+            student.ss_group = crm_data.ss_group            # New
             student.cur_age = crm_data.cur_age
             student.cur_grade = crm_data.cur_grade
             student.cur_level_desc = crm_data.cur_level_desc
             student.main_last_buy_unit_name = crm_data.main_last_buy_unit_name
+            student.is_upgrade = crm_data.is_upgrade        # New
             student.last_synced_at = now
             student.updated_at = now
             logger.info(f"Updating student profile: {crm_data.user_id}")

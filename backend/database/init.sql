@@ -58,6 +58,13 @@ CREATE TABLE student_profiles (
     cur_age             INT,
     cur_grade           VARCHAR(20),
     cur_level_desc      VARCHAR(50),
+    main_last_buy_unit_name VARCHAR(100),
+    -- New Fields (2026-01-08)
+    is_upgrade          INT DEFAULT 0,
+    ss_name             VARCHAR(100),
+    ss_sm_name          VARCHAR(100),
+    ss_dept4_name       VARCHAR(100),
+    ss_group            VARCHAR(100),
     last_synced_at      TIMESTAMPTZ,
     created_at          TIMESTAMPTZ DEFAULT NOW(),
     updated_at          TIMESTAMPTZ DEFAULT NOW()
