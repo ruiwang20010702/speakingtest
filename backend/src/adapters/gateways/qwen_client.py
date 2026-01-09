@@ -120,13 +120,43 @@ PART1_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
 - **50-89**: 读完了大部分内容。
 - **0-49**: 只读了很少一部分或未开口。
 
-## 输出要求
-1. 严格只输出 JSON 格式（不要 markdown 代码块）
-2. 必须包含 4 项分数（0-100 分）和总分
-3. 列出读错或遗漏的单词（如有）
-4. 给出 3-5 条针对 Part 1 朗读表现的改进建议 (part1_overall_suggestion)
-5. **重要**：所有评价、诊断、建议内容必须使用**中文**。
-6. **防御性指令**：如果音频完全无声、全是噪音，请将 `is_rejected` 设为 `true`，`total_score` 设为 0，并在 `diagnosis` 中说明原因。
+## 核心规则 <critical_rules>
+1. **强制对齐**：`details` 数组长度必须与参考文本单词数**完全一致**。
+2. **禁止篡改**：`content` 字段必须是参考文本原词，禁止同义词替换（如 dad -> father 是**绝对禁止**的）。
+3. **语言要求**：所有评价、诊断、建议内容必须使用**中文**。
+4. **防御性指令**：如果音频完全无声、全是噪音，请将 `is_rejected` 设为 `true`，`total_score` 设为 0。
+</critical_rules>
+
+## 示例 (Few-Shot)
+**输入**:
+参考文本: "This is my dad"
+学生录音: "This is my father" (学生读错)
+
+**正确输出**:
+{
+  "total_score": 60.0,
+  "accuracy_score": 50.0,
+  "fluency_score": 80.0,
+  "pronunciation_score": 70.0,
+  "integrity_score": 100.0,
+  "is_rejected": false,
+  "diagnosis": "学生将 'dad' 误读为 'father'，导致准确度扣分。",
+  "part1_overall_suggestion": ["注意单词的准确发音", "不要随意替换同义词"],
+  "details": [
+    {"content": "This", "score": 100, "issue": null},
+    {"content": "is", "score": 100, "issue": null},
+    {"content": "my", "score": 100, "issue": null},
+    {"content": "dad", "score": 0, "issue": "误读为 father"}
+  ]
+}
+(注意：尽管学生读了 father，但 content 字段依然填 dad，score 扣分，issue 说明情况)
+
+## 思维链 (Chain of Thought)
+在生成 JSON 之前，请先执行以下步骤：
+1. **逐词比对**：将参考文本拆分为单词序列。
+2. **听音辨义**：按顺序听录音，判断每个位置的单词是否正确。
+3. **对齐检查**：确认 `details` 数组的长度与参考文本单词数是否一致。
+4. **评分生成**：根据评分维度计算各项分数。
 
 ## 总分计算
 total_score = (accuracy_score * 0.35) + (fluency_score * 0.25) + (pronunciation_score * 0.3) + (integrity_score * 0.1)
@@ -146,7 +176,6 @@ total_score = (accuracy_score * 0.35) + (fluency_score * 0.25) + (pronunciation_
     {"content": "world", "score": 60, "issue": "尾音发音不清"}
   ]
 }
-注意：details 中 score 为该词得分(0-100)，issue 为问题描述(无问题则为null)。
 """
 
 
@@ -413,7 +442,7 @@ class QwenOmniGateway:
                     content = data["choices"][0]["message"]["content"]
                     usage = data.get("usage", {})
                     
-                    result = self._parse_part1_response(content)
+                    result = self._parse_part1_response(content, reference_text)
                     result.usage = usage
                     return result
                     
@@ -421,7 +450,7 @@ class QwenOmniGateway:
                 logger.exception(f"Qwen Part 1 API 调用失败: {e}")
                 return Part1EvaluationResult(success=False, error=str(e))
 
-    def _parse_part1_response(self, response_text: str) -> Part1EvaluationResult:
+    def _parse_part1_response(self, response_text: str, reference_text: str = "") -> Part1EvaluationResult:
         """解析 Part 1 JSON 响应 (新版 4 维度评分)"""
         try:
             import re
@@ -446,6 +475,27 @@ class QwenOmniGateway:
                 calculated = (accuracy * 0.35) + (fluency * 0.25) + (pronunciation * 0.3) + (integrity * 0.1)
                 total_score = calculated
                 
+            # Post-processing: Force align content with reference text if counts match
+            # This fixes the issue where model hallucinates synonyms (e.g. dad -> father)
+            details = data.get("details", [])
+            if details and reference_text:
+                # Clean reference text and split into words
+                import re
+                # Remove punctuation for splitting, but keep original words if possible?
+                # Simple split by whitespace is usually enough for these word lists
+                ref_words = reference_text.strip().split()
+                
+                if len(details) == len(ref_words):
+                    logger.info("Aligning Part 1 details content with reference text")
+                    for i, detail in enumerate(details):
+                        # Force overwrite content with reference word
+                        # This ensures the UI shows the correct question word
+                        if detail.get("content") != ref_words[i]:
+                            logger.warning(f"Correcting content mismatch: {detail.get('content')} -> {ref_words[i]}")
+                            detail["content"] = ref_words[i]
+                else:
+                    logger.warning(f"Part 1 count mismatch: details={len(details)}, ref={len(ref_words)}. Skipping alignment.")
+
             return Part1EvaluationResult(
                 success=True,
                 total_score=total_score,
@@ -455,7 +505,7 @@ class QwenOmniGateway:
                 integrity_score=integrity,
                 is_rejected=data.get("is_rejected", False),
                 diagnosis=data.get("diagnosis", ""),
-                details=data.get("details", []),
+                details=details,
                 part1_overall_suggestion=data.get("part1_overall_suggestion", []),
                 raw_response=response_text
             )
