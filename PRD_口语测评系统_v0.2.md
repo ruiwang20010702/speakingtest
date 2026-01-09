@@ -235,13 +235,13 @@ graph TD
 | Part 2 | 问答表达 | 24 分 | 12 题，每题 0/1/2 分 |
 | **总计** | - | **44 分** | - |
 
-- **评分引擎**：Part1=讯飞语音评测（流式版；WebSocket 流式），Part2=Qwen-Omni（本期不接入 Gemini/其他模型）
+- **评分引擎**：Part1=Qwen-Omni（原讯飞方案已废弃），Part2=Qwen-Omni（本期不接入 Gemini/其他模型）
 
 ### 3.2 评分引擎（更新）
 
 | 引擎 | 用途 | 状态 |
 |------|------|------|
-| **讯飞语音评测（流式版；WebSocket 流式）** | Part1 词汇朗读评测（精准发音评分） | ✅ 已对接 |
+| **阿里云 Qwen-Omni** | Part1 词汇朗读评测（发音+流利度） | ✅ 已对接 |
 | **阿里云 Qwen-Omni** | Part2 问答表达评测（语义理解+评分） | ✅ 已验证 |
 
 > **技术方案更新**：经实测验证，阿里云 Qwen-Omni 模型能够直接理解音频内容并给出评测反馈，适合用于 Part2 的语义评测场景。
@@ -288,11 +288,11 @@ graph TD
 1. 扫码进入：访问 `/s/{token}`（token 与某个 `student_id` 绑定；过期/已使用/已作废则提示联系老师）
 2. 进入本次测试（按老师布置的 Level/Unit；或 token 直接绑定到固定 Level/Unit）
 3. 录音：
-   - **Part1**：一次作答覆盖全部词汇；**讯飞语音评测（流式版）采用 WebSocket 流式评测**（音频按帧/分片推送；可边录边推或录完后从文件分片推流）
+   - **Part1**：一次作答覆盖全部词汇；**Qwen-Omni 评测**（音频同步上传 OSS）
    - **Part2**：**整段录音一次上传**（12 题连续作答，不逐题分割）
 4. 提交
 5. 后端并行触发评测：
-   - **Part1**：调用讯飞语音评测（流式版）**WebSocket 流式**评测（发音/流利/完整度等维度）
+   - **Part1**：调用 Qwen-Omni 评测（发音/流利/完整度等维度）
    - **Part2**：调用 Qwen-Omni 评测（整段音频一次评：转写 + 12 题逐题 0/1/2 + 评语/建议）
 6. **展示简要结果**：
    - 显示 Part1 得分（如 18/20）
@@ -597,11 +597,36 @@ for chunk in completion:
 **月度成本估算**（1000 学生 × 4 次/月）：
 - 4000 次评测 × ¥0.01 = **¥40/月**
 
-### 6.6 与讯飞语音评测（流式版）的分工
+### 6.6 费用统计 (Cost Tracking) - 新增
+
+> **计费标准** (Qwen3-Omni-Flash):
+> - **输入 (音频)**: ¥15.8 / 百万 Tokens
+> - **输入 (文本)**: ¥1.8 / 百万 Tokens
+> - **输出 (文本)**: ¥12.7 / 百万 Tokens
+
+**统计策略**：
+- 在 `tests` 表中新增 `cost` (Numeric) 和 `tokens_used` (JSONB) 字段。
+- `tokens_used` 记录详细消耗：
+  ```json
+  {
+    "part1": {
+      "prompt_tokens": 120,
+      "completion_tokens": 50,
+      "audio_tokens": 100,
+      "text_tokens": 20,
+      "total_tokens": 170,
+      "cost": 0.002251
+    },
+    "part2": { ... },
+    "total_cost": 0.027091
+  }
+  ```
+
+### 6.7 引擎分工更新
 
 | 场景 | 推荐引擎 | 原因 |
 |------|----------|------|
-| **Part1 词汇朗读** | 讯飞语音评测（流式版） | 音素级发音评分更精准，支持逐词评分 |
+| **Part1 词汇朗读** | Qwen-Omni | 统一技术栈，降低维护成本，效果满足需求 |
 | **Part2 问答表达** | Qwen-Omni | 语义理解能力强，可评估回答内容是否正确 |
 | **录音转写** | Qwen-Omni | 端到端 ASR + 评测，减少调用链路 |
 | **个性化反馈** | Qwen-Omni | 可根据学生表现生成针对性建议 |
@@ -705,6 +730,7 @@ erDiagram
 ### 9.2 核心表结构定义
 
 > **规范**：所有表必须包含 `created_at`, `updated_at`；逻辑删除字段 `is_deleted` (可选)；主键推荐使用 `BigInt` 自增或 `Snowflake ID`。
+> **时间标准**：所有时间字段（TIMESTAMP）均存储为 **UTC 时间**。前端展示时需根据用户时区（如东八区）进行转换。
 
 #### 1. User (用户基础表)
 - **Indexes**: `uk_email`
@@ -734,11 +760,16 @@ CREATE TABLE student_profiles (
     teacher_id BIGINT NOT NULL, -- 关联 users.id (Teacher)
     ss_email_addr VARCHAR(100), -- 冗余字段，用于快速校验
     ss_crm_name VARCHAR(100), -- 老师 CRM 账号名
+    ss_name VARCHAR(100), -- SS 姓名 (New)
+    ss_sm_name VARCHAR(100), -- SM 姓名 (New)
+    ss_dept4_name VARCHAR(100), -- 部门名称 (New)
+    ss_group VARCHAR(100), -- 组名 (New)
     -- 冗余 CRM 字段 (用于展示与筛选)
     cur_age INT,
     cur_grade VARCHAR(20),
     cur_level_desc VARCHAR(50),
     main_last_buy_unit_name VARCHAR(100), -- 最后购买单元
+    is_upgrade INT DEFAULT 0, -- 是否升舱 (New)
     last_synced_at TIMESTAMP,
     INDEX idx_teacher_id (teacher_id),
     INDEX idx_external_user_id (external_user_id)
@@ -760,8 +791,16 @@ CREATE TABLE tests (
     part2_score DECIMAL(5,2),
     star_level TINYINT, -- 1-5
     part2_transcript TEXT, -- Qwen 转写结果
+    part1_audio_url VARCHAR(500), -- Part 1 音频 URL (New)
+    part2_audio_url VARCHAR(500), -- Part 2 音频 URL (New)
+    part1_raw_result JSONB, -- Part 1 原始结果 (New)
+    part2_raw_result JSONB, -- Part 2 原始结果 (New)
     failure_reason VARCHAR(255),
+    retry_count SMALLINT DEFAULT 0, -- 重试次数 (New)
+    cost DECIMAL(10, 6), -- 费用 (New)
+    tokens_used JSONB DEFAULT '{}', -- Token 用量 (New)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP, -- 完成时间 (New)
     INDEX idx_student_id (student_id),
     INDEX idx_status (status)
 );
@@ -840,16 +879,15 @@ CREATE TABLE audit_logs (
 ### 存储内容
 
 - ✅ 原始录音（webm/wav）
-- ✅ 转码后 mp3（用于回放/下载；**讯飞评测输入在后端转为 PCM 后按 WebSocket 流式推送**，无需单独落库）
+- ✅ 转码后 mp3（用于回放/下载）
 
-### 音频格式要求（讯飞语音评测（流式版））
+### 音频格式要求
 
 | 参数 | 要求 |
 |------|------|
-| 输入方式 | WebSocket **流式**（音频分片 base64 推送） |
-| 编码 | PCM（如 16kHz/16bit/mono；以官方文档为准） |
-| 格式 | pcm / wav / mp3（`aue=lame`）/ speex-wb（以官方文档为准） |
-| 限制 | 音频数据发送会话时长 ≤ 5 分钟（以官方限制为准） |
+| 输入方式 | Qwen-Omni API (Base64 Data URL) |
+| 格式 | mp3, wav, flac, m4a, pcm |
+| 限制 | 单文件 ≤ 20MB |
 
 ### 上传策略
 
@@ -1065,11 +1103,11 @@ POST /tests/{id}/submit-part2
 - ⚠️ **风险**：逐题评分为模型基于整段内容的结构化输出，需要通过 prompt 约束与样本回归测试保障稳定性（尤其是跑题/漏题/题号错位）。
 - ✅ **缓解**：后端做结构校验（必须含 1-12 题；缺失则重试/降级为整体分），并保留 raw 结果用于追溯质检。
 
-### 讯飞语音评测（流式版）接口依赖
+### Qwen-Omni 接口依赖
 
-- ✅ 已确认使用讯飞语音评测（流式版）WebSocket 流式接口
-- 待获取实际返回 JSON 样例以确定报告可展示字段
-- 音频按讯飞协议做 **PCM 转码 + 分片（流式）发送**；会话时长 ≤ 5 分钟（以官方限制为准）
+- ✅ 已确认使用 Qwen-Omni 流式接口
+- 音频需转换为 base64 格式发送
+- **限流风险**：Qwen-Omni 限流 **60 RPM**。需严格执行并发控制（Waiting Room / 队列）。
 
 ### 学生名单外部依赖（CRM/国内 SS 学生列表接口）
 
@@ -1114,10 +1152,10 @@ POST /tests/{id}/submit-part2
 
 ### 13.3 Part 1 并发控制 (Waiting Room)
 
-> **约束**：讯飞语音评测 API 默认并发限制为 **50 路**。为防止超限导致服务不可用，必须实施严格的排队机制。
+> **约束**：Qwen-Omni API 限流 **60 RPM**。为防止超限导致服务不可用，必须实施严格的排队机制。
 
 - **令牌桶机制 (Token Bucket)**：
-  - 后端维护全局计数器 (Redis Atomic)，最大允许 50 个活跃 Part 1 会话。
+  - 后端维护全局计数器 (Redis Atomic)，控制请求速率。
   - 学生点击“开始录音”时，申请令牌。
   - **有令牌**：进入录音页面，开始 WebSocket 推流。
   - **无令牌**：进入“排队室 (Waiting Room)”。
@@ -1195,7 +1233,7 @@ POST /tests/{id}/submit-part2
 ---
 
 *文档版本：v1.0*  
-*最后更新：2026-01-04*
+*最后更新：2026-01-09*
 
 ---
 
@@ -1207,4 +1245,5 @@ POST /tests/{id}/submit-part2
 | v0.2 | 2025-12-29 | 新增阿里云 Qwen-Omni 评测方案（第6章），验证通过；补齐外部单学生接口（upgrade-28）、RBAC/单次测评重置口径、录音 6 个月过期降级 |
 | v1.0 | 2026-01-04 | **生产级发布**：全面升级为 V1.0 Production 标准（NFR/HA/Schema）；新增系统架构与部署架构图；优化学生端结果页体验（Part 1 即时反馈） |
 | v1.1 | 2026-01-07 | **代码对齐更新**：同步 Python(FastAPI) + React 技术栈；更新星级评分阈值（40/32/24/16）；明确 Part 1 评分映射逻辑；新增管理员端与题库管理功能描述；同步数据库字段（ss_crm_name 等）。 |
+| v1.2 | 2026-01-09 | **全链路 Qwen-Omni 升级**：Part 1/2 统一使用 Qwen-Omni；新增费用统计 (Cost Tracking) 与 Token 用量明细；数据库结构同步 (CRM 字段、URL、Raw Result)；统一 UTC 时间标准；更新 OSS 上传策略。 |
 

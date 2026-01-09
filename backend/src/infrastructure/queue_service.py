@@ -194,3 +194,134 @@ async def enqueue_part2_task(task: Part2Task):
         await producer.publish(task)
     finally:
         await producer.close()
+
+
+# ============================================
+# Part 1 任务队列 (结构类似 Part 2)
+# ============================================
+
+@dataclass
+class Part1Task:
+    """Part 1 评测任务"""
+    task_id: str
+    test_id: int
+    audio_url: str  # OSS URL
+    reference_text: str  # 朗读参考文本
+    
+    def to_dict(self) -> dict:
+        return {
+            "task_id": self.task_id,
+            "test_id": self.test_id,
+            "audio_url": self.audio_url,
+            "reference_text": self.reference_text
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "Part1Task":
+        return cls(
+            task_id=data["task_id"],
+            test_id=data["test_id"],
+            audio_url=data["audio_url"],
+            reference_text=data["reference_text"]
+        )
+
+
+class Part1TaskProducer:
+    """Part 1 任务生产者"""
+    
+    QUEUE_NAME = "part1_evaluation_tasks"
+    
+    def __init__(self, rabbitmq_url: str = None):
+        self.url = rabbitmq_url or settings.RABBITMQ_URL
+        self.connection = None
+        self.channel = None
+    
+    async def connect(self):
+        self.connection = await connect_robust(self.url)
+        self.channel = await self.connection.channel()
+        await self.channel.declare_queue(self.QUEUE_NAME, durable=True)
+        logger.info(f"Part1TaskProducer 已连接到 {self.QUEUE_NAME}")
+    
+    async def publish(self, task: Part1Task):
+        if not self.channel:
+            await self.connect()
+        
+        message = Message(
+            body=json.dumps(task.to_dict()).encode(),
+            delivery_mode=DeliveryMode.PERSISTENT,
+        )
+        
+        await self.channel.default_exchange.publish(
+            message,
+            routing_key=self.QUEUE_NAME,
+        )
+        logger.info(f"已发布 Part1 任务: task_id={task.task_id}, test_id={task.test_id}")
+    
+    async def close(self):
+        if self.connection:
+            await self.connection.close()
+
+
+class Part1TaskConsumer:
+    """Part 1 任务消费者"""
+    
+    QUEUE_NAME = "part1_evaluation_tasks"
+    RPM_LIMIT = 60
+    
+    def __init__(
+        self,
+        process_func: Callable[[Part1Task], Awaitable[bool]],
+        rabbitmq_url: str = None
+    ):
+        self.url = rabbitmq_url or settings.RABBITMQ_URL
+        self.process_func = process_func
+        self.connection = None
+        self.channel = None
+        self.interval = 60.0 / self.RPM_LIMIT
+    
+    async def connect(self):
+        self.connection = await connect_robust(self.url)
+        self.channel = await self.connection.channel()
+        await self.channel.set_qos(prefetch_count=1)
+        self.queue = await self.channel.declare_queue(self.QUEUE_NAME, durable=True)
+        logger.info(f"Part1TaskConsumer 已连接，限速: {self.RPM_LIMIT} RPM")
+    
+    async def _on_message(self, message: IncomingMessage):
+        async with message.process():
+            try:
+                task_data = json.loads(message.body.decode())
+                task = Part1Task.from_dict(task_data)
+                logger.info(f"开始处理 Part1 任务: {task.task_id}")
+                
+                success = await self.process_func(task)
+                
+                if success:
+                    logger.info(f"Part1 任务完成: {task.task_id}")
+                else:
+                    logger.warning(f"Part1 任务失败: {task.task_id}")
+                    
+            except Exception as e:
+                logger.exception(f"Part1 任务处理异常: {e}")
+                raise
+            finally:
+                await asyncio.sleep(self.interval)
+    
+    async def start(self):
+        await self.connect()
+        await self.queue.consume(self._on_message)
+        logger.info("Part1TaskConsumer 已启动，等待任务...")
+        await asyncio.Future()
+    
+    async def close(self):
+        if self.connection:
+            await self.connection.close()
+
+
+async def enqueue_part1_task(task: Part1Task):
+    """快速入队一个 Part1 任务"""
+    producer = Part1TaskProducer()
+    try:
+        await producer.connect()
+        await producer.publish(task)
+    finally:
+        await producer.close()

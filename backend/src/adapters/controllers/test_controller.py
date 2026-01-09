@@ -10,24 +10,21 @@ from typing import Optional
 from src.infrastructure.database import get_db
 from src.infrastructure.auth import get_current_user_id
 from src.infrastructure.responses import ErrorResponse
-from src.adapters.gateways.qwen_client import QwenOmniGateway
+from src.adapters.gateways.oss_client import get_oss_client
 from src.use_cases.evaluate_part1 import (
-    EvaluatePart1UseCase,
-    Part1EvaluationRequest,
-    Part1EvaluationResponse
+    SubmitPart1UseCase,
+    SubmitPart1Request,
 )
 
 router = APIRouter()
 
 
-class Part1ScoreResponse(BaseModel):
-    """Response for Part 1 score."""
+class Part1SubmitResponse(BaseModel):
+    """Response for Part 1 async submission."""
     success: bool
     test_id: int
-    score: Optional[float] = None
-    fluency_score: Optional[float] = None
-    pronunciation_score: Optional[float] = None
-    message: str = "Evaluation completed"
+    task_id: Optional[str] = None
+    message: str = "评测任务已提交"
 
 
 class TestStatusResponse(BaseModel):
@@ -42,7 +39,7 @@ class TestStatusResponse(BaseModel):
 
 @router.post(
     "/{test_id}/part1",
-    response_model=Part1ScoreResponse,
+    response_model=Part1SubmitResponse,
     responses={
         400: {"model": ErrorResponse},
         404: {"model": ErrorResponse}
@@ -51,17 +48,20 @@ class TestStatusResponse(BaseModel):
 async def submit_part1(
     test_id: int,
     reference_text: str = Form(..., description="The text student should read"),
-    audio: UploadFile = File(..., description="Audio file (PCM 16kHz 16bit)"),
+    audio: UploadFile = File(..., description="Audio file"),
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Submit Part 1 audio for evaluation.
+    Submit Part 1 audio for evaluation (ASYNC).
     
-    The audio is sent to Xunfei for real-time evaluation.
-    Returns immediately with the score.
+    1. Upload audio to OSS
+    2. Enqueue evaluation task
+    3. Return immediately with task_id
+    
+    The evaluation runs in the background. Check test status for results.
     """
-    # Read audio data
+    # 1. Read audio data
     audio_data = await audio.read()
     
     if len(audio_data) < 1000:
@@ -70,32 +70,49 @@ async def submit_part1(
             detail={"error": "AudioTooShort", "message": "录音时间太短，请重试"}
         )
     
-    # Create use case and execute
-    # Create use case and execute
-    qwen_gateway = QwenOmniGateway()
-    use_case = EvaluatePart1UseCase(db, qwen_gateway)
+    # 2. Get extension
+    extension = "mp3"
+    if audio.filename:
+        ext = audio.filename.split(".")[-1].lower()
+        if ext in ["mp3", "wav", "m4a", "webm"]:
+            extension = ext
     
+    # 3. Upload to OSS first (this is fast, ~1-2s)
+    oss_client = get_oss_client()
+    oss_result = await oss_client.upload_audio(
+        audio_data=audio_data,
+        test_id=test_id,
+        part="part1",
+        extension=extension
+    )
+    
+    if not oss_result.success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "UploadFailed", "message": oss_result.error}
+        )
+    
+    # 4. Enqueue evaluation task (立即返回)
+    use_case = SubmitPart1UseCase(db)
     result = await use_case.execute(
-        Part1EvaluationRequest(
+        SubmitPart1Request(
             test_id=test_id,
-            reference_text=reference_text,
-            audio_data=audio_data
+            audio_url=oss_result.url,
+            reference_text=reference_text
         )
     )
     
     if not result.success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "EvaluationFailed", "message": result.error}
+            detail={"error": "SubmitFailed", "message": result.message}
         )
     
-    return Part1ScoreResponse(
+    return Part1SubmitResponse(
         success=True,
-        test_id=result.test_id,
-        score=result.score,
-        fluency_score=result.fluency_score,
-        pronunciation_score=result.pronunciation_score,
-        message="Part 1 评分完成"
+        test_id=test_id,
+        task_id=result.task_id,
+        message="Part 1 评测任务已提交，正在后台处理"
     )
 
 

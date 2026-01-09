@@ -74,7 +74,7 @@ async def upload_audio(
     
     # 上传到 OSS
     oss_client = get_oss_client()
-    result = oss_client.upload_audio(
+    result = await oss_client.upload_audio(
         audio_data=audio_data,
         test_id=test_id,
         part=part,

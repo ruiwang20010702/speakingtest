@@ -3,6 +3,7 @@ Question Controller
 Handles question bank CRUD operations for different levels and units.
 """
 from typing import List, Optional
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -460,7 +461,10 @@ async def upload_question_image(
     # Upload to OSS
     oss_client = get_oss_client()
     try:
-        upload_result = oss_client.bucket.put_object(oss_key, content)
+        # 使用 asyncio.to_thread 避免阻塞事件循环
+        upload_result = await asyncio.to_thread(
+            oss_client.bucket.put_object, oss_key, content
+        )
         
         if upload_result.status != 200:
             raise HTTPException(

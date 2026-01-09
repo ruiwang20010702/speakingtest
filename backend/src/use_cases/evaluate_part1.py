@@ -136,6 +136,7 @@ class EvaluatePart1UseCase:
             )
 
         # 6. Store scores + audio URL + Cost
+        # 直接存储 Qwen 返回的百分制分数 (0-100)
         test.part1_score = evaluation_result.total_score
         test.part1_raw_result = evaluation_result.to_dict()
         test.part1_audio_url = audio_url  # 保存音频 URL
@@ -213,3 +214,182 @@ class EvaluatePart1UseCase:
             audio_url=audio_url
         )
 
+
+# ============================================
+# 异步版本：用于队列处理
+# ============================================
+
+import uuid
+from src.infrastructure.queue_service import Part1Task, enqueue_part1_task
+
+
+@dataclass
+class SubmitPart1Request:
+    """Part 1 提交请求（异步模式）"""
+    test_id: int
+    audio_url: str  # OSS URL (已上传)
+    reference_text: str
+
+
+@dataclass
+class SubmitPart1Response:
+    """Part 1 提交响应（异步模式）"""
+    success: bool
+    task_id: Optional[str] = None
+    message: str = ""
+
+
+class SubmitPart1UseCase:
+    """
+    提交 Part 1 评测任务（入队，立即返回）
+    """
+    
+    def __init__(self, db: AsyncSession):
+        self.db = db
+    
+    async def execute(self, request: SubmitPart1Request) -> SubmitPart1Response:
+        # 1. 查找测评
+        stmt = select(TestModel).where(TestModel.id == request.test_id)
+        result = await self.db.execute(stmt)
+        test = result.scalar_one_or_none()
+        
+        if not test:
+            return SubmitPart1Response(success=False, message="测评记录不存在")
+        
+        if test.status != "pending":
+            return SubmitPart1Response(
+                success=False,
+                message=f"无法提交 Part 1：当前状态为 {test.status}"
+            )
+        
+        # 2. 创建任务
+        task_id = str(uuid.uuid4())[:8]
+        task = Part1Task(
+            task_id=task_id,
+            test_id=request.test_id,
+            audio_url=request.audio_url,
+            reference_text=request.reference_text
+        )
+        
+        # 3. 入队
+        try:
+            await enqueue_part1_task(task)
+        except Exception as e:
+            logger.exception(f"Part 1 任务入队失败: {e}")
+            return SubmitPart1Response(
+                success=False,
+                message=f"任务入队失败: {str(e)}"
+            )
+        
+        # 4. 更新状态
+        test.status = "part1_processing"
+        test.part1_audio_url = request.audio_url  # 保存音频 URL
+        test.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        
+        logger.info(f"Part 1 任务已入队: task_id={task_id}, test_id={request.test_id}")
+        
+        return SubmitPart1Response(
+            success=True,
+            task_id=task_id,
+            message="评测任务已提交，正在后台处理"
+        )
+
+
+class ProcessPart1TaskUseCase:
+    """
+    处理 Part 1 评测任务（消费者调用）
+    """
+    
+    def __init__(self, db: AsyncSession, qwen_gateway: QwenOmniGateway):
+        self.db = db
+        self.qwen = qwen_gateway
+    
+    async def execute(self, task: Part1Task) -> bool:
+        # 1. 查找测评
+        stmt = select(TestModel).where(TestModel.id == task.test_id)
+        result = await self.db.execute(stmt)
+        test = result.scalar_one_or_none()
+        
+        if not test:
+            logger.error(f"测评不存在: {task.test_id}")
+            return False
+        
+        # 2. 下载音频
+        import httpx
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(task.audio_url, timeout=60)
+                response.raise_for_status()
+                audio_data = response.content
+        except Exception as e:
+            logger.error(f"下载音频失败: {e}")
+            test.failure_reason = f"音频下载失败: {str(e)}"
+            test.retry_count += 1
+            await self.db.commit()
+            return False
+        
+        # 3. 调用 Qwen API
+        try:
+            evaluation_result = await self.qwen.evaluate_part1_reading(
+                audio_data=audio_data,
+                reference_text=task.reference_text,
+                audio_format="mp3"  # OSS 上传的是 mp3
+            )
+        except Exception as e:
+            logger.exception(f"Qwen Part 1 API error: {e}")
+            test.failure_reason = str(e)
+            test.retry_count += 1
+            await self.db.commit()
+            return False
+        
+        # 4. 处理结果
+        if not evaluation_result.success:
+            test.failure_reason = evaluation_result.error
+            test.retry_count += 1
+            await self.db.commit()
+            return False
+        
+        # 5. 存储分数
+        test.part1_score = evaluation_result.total_score
+        test.part1_raw_result = evaluation_result.to_dict()
+        test.status = "part1_done"
+        test.updated_at = datetime.now(timezone.utc)
+        
+        # 6. 计算成本
+        if evaluation_result.usage:
+            usage = evaluation_result.usage
+            prompt_tokens = usage.get("prompt_tokens", 0)
+            completion_tokens = usage.get("completion_tokens", 0)
+            prompt_details = usage.get("prompt_tokens_details", {})
+            audio_tokens = prompt_details.get("audio_tokens", 0)
+            text_tokens = prompt_details.get("text_tokens", 0)
+            
+            if audio_tokens == 0 and text_tokens == 0 and prompt_tokens > 0:
+                audio_tokens = prompt_tokens
+            
+            cost = (
+                (text_tokens * 0.0018 / 1000) +
+                (audio_tokens * 0.0158 / 1000) +
+                (completion_tokens * 0.0127 / 1000)
+            )
+            
+            test.cost = (test.cost or 0) + cost
+            current_usage = test.tokens_used or {}
+            if not isinstance(current_usage, dict):
+                current_usage = {}
+            current_usage["part1"] = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "audio_tokens": audio_tokens,
+                "text_tokens": text_tokens,
+                "total_tokens": usage.get("total_tokens", 0),
+                "cost": float(f"{cost:.6f}")
+            }
+            test.tokens_used = current_usage
+            
+            logger.info(f"Part 1 Cost: {cost:.4f} RMB")
+        
+        await self.db.commit()
+        logger.info(f"Part 1 评测完成: test_id={task.test_id}, score={test.part1_score}")
+        return True

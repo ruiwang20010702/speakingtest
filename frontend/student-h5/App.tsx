@@ -14,6 +14,35 @@ const TestContainer: React.FC = () => {
   const unit = localStorage.getItem('unit') || 'All'; // Default to All for L0
   const [submitting, setSubmitting] = React.useState(false);
 
+  // 存储 Part 1 评分 Promise，以便在 Part 2 完成后 await
+  const part1PromiseRef = React.useRef<Promise<void> | null>(null);
+
+  // Part 1 完成后立即调用（静默后台评分）
+  const handlePart1Complete = async (audio: Blob) => {
+    try {
+      const testIdStr = localStorage.getItem('testId');
+      if (!testIdStr) throw new Error('No test ID found');
+      const testId = parseInt(testIdStr);
+
+      const { getQuestions, submitPart1 } = await import('./services/api');
+      const questions = await getQuestions(level, unit);
+      const part1Text = questions.slice(0, 20).map(q => q.text).join(' ');
+
+      // 创建 Promise 并存储引用（静默执行，不显示状态）
+      part1PromiseRef.current = submitPart1(testId, audio, part1Text)
+        .then(() => {
+          console.log('Part 1 evaluation completed');
+        })
+        .catch((err) => {
+          console.error('Part 1 evaluation failed:', err);
+        });
+
+    } catch (error) {
+      console.error('Part 1 submission failed:', error);
+    }
+  };
+
+  // Part 2 完成后调用
   const handleComplete = async (audios: Blob[]) => {
     if (submitting) return;
     setSubmitting(true);
@@ -23,27 +52,21 @@ const TestContainer: React.FC = () => {
       if (!testIdStr) throw new Error('No test ID found');
       const testId = parseInt(testIdStr);
 
-      // 1. Fetch questions to get reference text for Part 1
-      // Note: In a real app, we might want to pass this from TestPage or store it in context
-      const { getQuestions, submitPart1, submitPart2 } = await import('./services/api');
-      const questions = await getQuestions(level, unit);
+      const { submitPart2 } = await import('./services/api');
 
-      // Part 1 is the first 20 words
-      const part1Text = questions.slice(0, 20).map(q => q.text).join(' ');
-
-      // 2. Submit Part 1
-      if (audios[0]) {
-        console.log('Submitting Part 1...');
-        await submitPart1(testId, audios[0], part1Text);
-      }
-
-      // 3. Submit Part 2
+      // 1. 提交 Part 2
       if (audios[1]) {
         console.log('Submitting Part 2...');
         await submitPart2(testId, audios[1]);
       }
 
-      // 4. Navigate to result
+      // 2. 等待 Part 1 完成（如果还在处理中）
+      if (part1PromiseRef.current) {
+        console.log('Waiting for Part 1 to complete...');
+        await part1PromiseRef.current;
+      }
+
+      // 3. 跳转到结果页
       window.location.href = '/result';
 
     } catch (error) {
@@ -69,6 +92,7 @@ const TestContainer: React.FC = () => {
       unit={unit}
       onExit={() => window.location.href = '/'}
       onComplete={handleComplete}
+      onPart1Complete={handlePart1Complete}
     />
   );
 };

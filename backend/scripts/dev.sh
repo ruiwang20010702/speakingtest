@@ -1,6 +1,6 @@
 #!/bin/bash
 # 开发环境启动脚本
-# 自动启动 RabbitMQ、后端 API、Part 2 Worker
+# 自动启动 RabbitMQ、后端 API、Part 1 Worker、Part 2 Worker
 
 set -e
 
@@ -11,7 +11,8 @@ BACKEND_DIR="$(dirname "$SCRIPT_DIR")"
 export PATH="/opt/homebrew/opt/erlang/bin:$PATH"
 
 # 存储子进程 PID
-WORKER_PID=""
+WORKER1_PID=""
+WORKER2_PID=""
 
 # RabbitMQ 控制函数
 start_rabbitmq() {
@@ -37,28 +38,38 @@ stop_rabbitmq() {
     echo "   ✅ RabbitMQ 已关闭"
 }
 
-start_worker() {
-    echo "👷 启动 Part 2 Worker..."
+start_workers() {
     cd "$BACKEND_DIR"
     source venv/bin/activate
+    
+    echo "👷 启动 Part 1 Worker..."
+    python scripts/part1_worker.py &
+    WORKER1_PID=$!
+    echo "   ✅ Part 1 Worker PID: $WORKER1_PID"
+    
+    echo "👷 启动 Part 2 Worker..."
     python scripts/part2_worker.py &
-    WORKER_PID=$!
-    echo "   ✅ Worker PID: $WORKER_PID"
+    WORKER2_PID=$!
+    echo "   ✅ Part 2 Worker PID: $WORKER2_PID"
 }
 
-stop_worker() {
-    if [ -n "$WORKER_PID" ]; then
-        echo "👷 关闭 Part 2 Worker..."
-        kill $WORKER_PID 2>/dev/null || true
-        echo "   ✅ Worker 已关闭"
+stop_workers() {
+    if [ -n "$WORKER1_PID" ]; then
+        echo "👷 关闭 Part 1 Worker..."
+        kill $WORKER1_PID 2>/dev/null || true
     fi
+    if [ -n "$WORKER2_PID" ]; then
+        echo "👷 关闭 Part 2 Worker..."
+        kill $WORKER2_PID 2>/dev/null || true
+    fi
+    echo "   ✅ Workers 已关闭"
 }
 
 # 捕获退出信号
 cleanup() {
     echo ""
     echo "🛑 收到退出信号，清理资源..."
-    stop_worker
+    stop_workers
     stop_rabbitmq
     exit 0
 }
@@ -67,7 +78,7 @@ trap cleanup SIGINT SIGTERM EXIT
 
 # 启动服务
 start_rabbitmq
-start_worker
+start_workers
 
 # 启动后端 API
 echo ""

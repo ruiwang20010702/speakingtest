@@ -11,6 +11,7 @@ interface TestPageProps {
   unit: string;
   onExit: () => void;
   onComplete: (audios: Blob[]) => void;
+  onPart1Complete?: (audio: Blob) => void; // 新增：Part 1 完成后立即回调
 }
 
 
@@ -88,7 +89,7 @@ const CircularRecordButton = ({
   );
 };
 
-const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, onComplete }) => {
+const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, onComplete, onPart1Complete }) => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentPart, setCurrentPart] = useState(1);
@@ -151,6 +152,10 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
         setIsRecording(false);
 
         if (currentPart === 1) {
+          // Part 1 完成，立即触发回调开始后台评分
+          if (onPart1Complete) {
+            onPart1Complete(blob);
+          }
           setShowTransition(true);
         } else {
           onComplete(newAudios);

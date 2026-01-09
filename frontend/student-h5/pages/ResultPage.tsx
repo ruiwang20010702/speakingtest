@@ -79,7 +79,7 @@ const ResultPage: React.FC<ResultPageProps> = ({ onRestart }) => {
                 <p className="text-sm font-bold text-[#1E293B]/60 mb-1">词汇朗读得分</p>
                 <div className="flex items-baseline gap-1">
                   <span className="text-5xl font-black text-[#1E293B]">{report.part1_score}</span>
-                  <span className="text-2xl font-black text-[#1E293B]/40">/20</span>
+                  <span className="text-2xl font-black text-[#1E293B]/40">/100</span>
                 </div>
               </div>
               <div className="w-16 h-16 bg-[#FFD200] rounded-full flex items-center justify-center shadow-lg">
