@@ -18,7 +18,7 @@ settings = get_settings()
 
 
 # ============================================
-# Part 2 评分 Prompt 模板
+# Part 1/2 评分 Prompt 模板
 # 基于 /prompt-engineering-patterns - Progressive Disclosure + Structured Output
 # ============================================
 
@@ -65,7 +65,10 @@ PART2_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
 1. 严格输出 JSON 格式
 2. 必须包含 5 个维度分数（0-100）和总分
 3. 对 12 道题进行转写，并给出简短反馈（无需单独打分，只需指出问题）
-4. 给出 3-5 条针对 Part 2 问答表现的改进建议 (part2_overall_suggestion)
+4. 给出 3-5 条针对 Part 2 问答表现的总体改进建议 (part2_overall_suggestion)
+5. **重要**：所有评价、诊断、建议内容必须使用**中文**。
+6. **思维链 (Chain of Thought)**：在给出最终分数前，请先在内心分析学生的流利度、发音、自信度、词汇和句式。确保分数能准确反映学生的实际水平。
+7. **防御性指令**：如果音频完全无声、全是噪音或无法识别为英语作答，请在 `error` 字段中说明原因，并将 `success` 设为 `false`。
 
 ## 总分计算
 total_score = (fluency_score + pronunciation_score + confidence_score + vocabulary_score + sentence_score) / 5
@@ -96,6 +99,7 @@ PART1_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
 - **40-59 (良好)**: 大部分单词读对，有少量错读或吞音。
 - **20-39 (及格)**: 能读对一半以上单词，但有明显的错读、漏读。
 - **0-19 (不及格)**: 大量单词读错或无法朗读。
+- **扣分细则**: 每错读/漏读/增读一个核心词汇，建议扣除 5-10 分；非核心词汇扣除 2-5 分。
 
 ### 2. 流畅度 (fluency_score)
 - **80-100 (杰出)**: 朗读过程流畅自然，单词之间衔接紧凑，反应迅速无迟疑。
@@ -120,8 +124,9 @@ PART1_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
 1. 严格只输出 JSON 格式（不要 markdown 代码块）
 2. 必须包含 4 项分数（0-100 分）和总分
 3. 列出读错或遗漏的单词（如有）
-4. 给出 1-3 条针对 Part 1 朗读表现的改进建议 (part1_overall_suggestion)
+4. 给出 3-5 条针对 Part 1 朗读表现的改进建议 (part1_overall_suggestion)
 5. **重要**：所有评价、诊断、建议内容必须使用**中文**。
+6. **防御性指令**：如果音频完全无声、全是噪音，请将 `is_rejected` 设为 `true`，`total_score` 设为 0，并在 `diagnosis` 中说明原因。
 
 ## 总分计算
 total_score = (accuracy_score * 0.35) + (fluency_score * 0.25) + (pronunciation_score * 0.3) + (integrity_score * 0.1)
@@ -169,7 +174,7 @@ def build_part2_user_prompt(questions: List[dict]) -> str:
 1. 输出整段逐字转写（保留原话，不要润色）
 2. 给出 5 个维度的评分（0-100分）及总分
 3. 对 1-12 每题给出简短反馈（指出回答是否切题、主要语法错误等），无需单独打分
-4. 给出 1-3 条针对 Part 2 问答表现的总体改进建议 (part2_overall_suggestion)
+4. 给出 3-5 条针对 Part 2 问答表现的总体改进建议 (part2_overall_suggestion)
 5. **重要**：所有反馈、建议内容必须使用**中文**（题目和转写除外）。
 
 严格只输出 JSON，不要有其他内容。"""
