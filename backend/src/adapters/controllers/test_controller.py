@@ -286,14 +286,22 @@ class FullReportResponse(BaseModel):
     
     # Part 1
     part1_score: Optional[float] = None
+    part1_accuracy: Optional[float] = None
     part1_fluency: Optional[float] = None
     part1_pronunciation: Optional[float] = None
+    part1_integrity: Optional[float] = None
+    part1_overall_suggestion: list[str] = []
     
     # Part 2
     part2_score: Optional[float] = None
+    part2_fluency: Optional[float] = None
+    part2_pronunciation: Optional[float] = None
+    part2_confidence: Optional[float] = None
+    part2_vocabulary: Optional[float] = None
+    part2_sentence: Optional[float] = None
     part2_transcript: Optional[str] = None
     part2_items: list[TestItemResponse] = []
-    part2_suggestions: list[str] = []
+    part2_overall_suggestion: list[str] = []
     
     # 时间
     created_at: Optional[str] = None
@@ -350,13 +358,36 @@ async def get_full_report(
         student_name = profile.student_name
     
     # 解析 Part 1 详细分数
+    part1_accuracy = None
     part1_fluency = None
     part1_pronunciation = None
+    part1_integrity = None
+    part1_overall_suggestion = []
     if test.part1_raw_result:
         raw = test.part1_raw_result
         if isinstance(raw, dict):
+            part1_accuracy = raw.get("accuracy_score")
             part1_fluency = raw.get("fluency_score")
             part1_pronunciation = raw.get("pronunciation_score")
+            part1_integrity = raw.get("integrity_score")
+            part1_overall_suggestion = raw.get("part1_overall_suggestion", [])
+    
+    # 解析 Part 2 详细分数
+    part2_fluency = None
+    part2_pronunciation = None
+    part2_confidence = None
+    part2_vocabulary = None
+    part2_sentence = None
+    part2_overall_suggestion = []
+    
+    if test.part2_raw_result and isinstance(test.part2_raw_result, dict):
+        raw = test.part2_raw_result
+        part2_fluency = raw.get("fluency_score")
+        part2_pronunciation = raw.get("pronunciation_score")
+        part2_confidence = raw.get("confidence_score")
+        part2_vocabulary = raw.get("vocabulary_score")
+        part2_sentence = raw.get("sentence_score")
+        part2_overall_suggestion = raw.get("part2_overall_suggestion", [])
     
     # 构建 Part 2 逐题响应
     part2_items = [
@@ -369,11 +400,6 @@ async def get_full_report(
         for item in sorted(test.items, key=lambda x: x.question_no)
     ]
     
-    # 解析建议（如果存储在 raw 中）
-    part2_suggestions = []
-    if test.part2_raw_result and isinstance(test.part2_raw_result, dict):
-        part2_suggestions = test.part2_raw_result.get("overall_suggestion", [])
-    
     return FullReportResponse(
         test_id=test.id,
         status=test.status,
@@ -383,12 +409,20 @@ async def get_full_report(
         total_score=float(test.total_score) if test.total_score else None,
         star_level=test.star_level,
         part1_score=float(test.part1_score) if test.part1_score else None,
+        part1_accuracy=part1_accuracy,
         part1_fluency=part1_fluency,
         part1_pronunciation=part1_pronunciation,
+        part1_integrity=part1_integrity,
+        part1_overall_suggestion=part1_overall_suggestion,
         part2_score=float(test.part2_score) if test.part2_score else None,
+        part2_fluency=part2_fluency,
+        part2_pronunciation=part2_pronunciation,
+        part2_confidence=part2_confidence,
+        part2_vocabulary=part2_vocabulary,
+        part2_sentence=part2_sentence,
         part2_transcript=test.part2_transcript,
         part2_items=part2_items,
-        part2_suggestions=part2_suggestions,
+        part2_overall_suggestion=part2_overall_suggestion,
         created_at=test.created_at.isoformat() if test.created_at else None,
         completed_at=test.completed_at.isoformat() if test.completed_at else None
     )

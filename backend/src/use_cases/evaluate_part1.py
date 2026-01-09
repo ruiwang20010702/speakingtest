@@ -29,8 +29,11 @@ class Part1EvaluationResponse:
     success: bool
     test_id: int 
     score: Optional[float] = None
+    accuracy_score: Optional[float] = None
     fluency_score: Optional[float] = None
     pronunciation_score: Optional[float] = None
+    integrity_score: Optional[float] = None
+    part1_overall_suggestion: list[str] = None
     audio_url: Optional[str] = None  # 新增：OSS URL
     error: Optional[str] = None
 
@@ -209,8 +212,11 @@ class EvaluatePart1UseCase:
             success=True,
             test_id=request.test_id,
             score=evaluation_result.total_score,
+            accuracy_score=evaluation_result.accuracy_score,
             fluency_score=evaluation_result.fluency_score,
             pronunciation_score=evaluation_result.pronunciation_score,
+            integrity_score=evaluation_result.integrity_score,
+            part1_overall_suggestion=evaluation_result.part1_overall_suggestion,
             audio_url=audio_url
         )
 

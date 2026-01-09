@@ -171,23 +171,10 @@ class ProcessPart2TaskUseCase:
             elif ext == ".pcm":
                  audio_format = "pcm"
             
-            # 准备 Part 1 摘要
-            part1_summary = ""
-            if test.part1_score is not None:
-                part1_summary = f"该学生 Part 1 (词汇朗读) 得分为 {test.part1_score}/20。"
-                if test.part1_raw_result and "words" in test.part1_raw_result:
-                    weak_words = [
-                        w["word"] for w in test.part1_raw_result["words"]
-                        if w.get("score", 100) < 60
-                    ]
-                    if weak_words:
-                        part1_summary += f" 发音薄弱词汇包括：{', '.join(weak_words[:5])}。"
-            
             qwen_result = await self.qwen.evaluate_part2(
                 audio_data=audio_data,
                 audio_format=audio_format,
-                questions=task.questions,
-                part1_summary=part1_summary
+                questions=task.questions
             )
             
             # 4. 处理结果
@@ -213,8 +200,13 @@ class ProcessPart2TaskUseCase:
             test.part2_score = qwen_result.total_score
             test.part2_transcript = qwen_result.transcript
             test.part2_audio_url = task.audio_url  # 保存音频 URL
-            test.part2_raw_result = qwen_result.raw_response  # 保存完整原始响应 (含建议)
-            test.total_score = (float(test.part1_score or 0) + float(qwen_result.total_score or 0))
+            test.part2_raw_result = qwen_result.to_dict()  # 保存完整结果 (含 5 维度分数)
+            
+            # 计算总分 (Part 1 和 Part 2 都是 0-100 分，取平均)
+            p1_score = float(test.part1_score or 0)
+            p2_score = float(qwen_result.total_score or 0)
+            test.total_score = (p1_score + p2_score) / 2
+            
             test.star_level = self._calculate_star_level(test.total_score)
             test.status = "completed"
             test.completed_at = datetime.now(timezone.utc)
@@ -295,15 +287,14 @@ class ProcessPart2TaskUseCase:
             return False
     
     def _calculate_star_level(self, total_score: float) -> int:
-        """根据总分百分比 (score/44) 计算星级 (1-5)"""
-        pct = total_score / 44.0
-        if pct >= 0.90:
+        """根据总分 (0-100) 计算星级 (1-5)"""
+        if total_score >= 90:
             return 5
-        elif pct >= 0.80:
+        elif total_score >= 80:
             return 4
-        elif pct >= 0.65:
+        elif total_score >= 60:
             return 3
-        elif pct >= 0.50:
+        elif total_score >= 40:
             return 2
         else:
             return 1
