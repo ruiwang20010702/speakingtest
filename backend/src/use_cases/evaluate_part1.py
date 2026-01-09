@@ -188,7 +188,7 @@ class EvaluatePart1UseCase:
             test.cost = float(test.cost or 0) + cost
             
             # Update tokens_used with structured data
-            current_usage = test.tokens_used or {}
+            current_usage = dict(test.tokens_used or {})
             if not isinstance(current_usage, dict):
                 current_usage = {}
                 
