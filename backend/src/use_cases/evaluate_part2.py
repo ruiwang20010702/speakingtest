@@ -142,134 +142,157 @@ class ProcessPart2TaskUseCase:
             logger.error(f"测评不存在: {task.test_id}")
             return False
         
-        # 2. 下载音频
-        import httpx
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(task.audio_url, timeout=60)
-                response.raise_for_status()
-                audio_data = response.content
-        except Exception as e:
-            logger.exception(f"下载音频失败: {e}")
-            test.status = "failed"
-            test.failure_reason = f"下载音频失败: {str(e)}"
-            await self.db.commit()
-            return False
-        
-        # 3. 调用 Qwen API
-        # 根据 URL 判断格式 (Handle presigned URLs with query params)
-        parsed_url = urlparse(task.audio_url)
-        path = parsed_url.path
-        ext = os.path.splitext(path)[1].lower()
-        
-        audio_format = "mp3"  # Default
-        if ext == ".wav":
-            audio_format = "wav"
-        elif ext == ".m4a":
-            audio_format = "m4a"
-        elif ext == ".pcm":
-             audio_format = "pcm"
-        
-        # 准备 Part 1 摘要
-        part1_summary = ""
-        if test.part1_score is not None:
-            part1_summary = f"该学生 Part 1 (词汇朗读) 得分为 {test.part1_score}/20。"
-            if test.part1_raw_result and "words" in test.part1_raw_result:
-                weak_words = [
-                    w["word"] for w in test.part1_raw_result["words"]
-                    if w.get("score", 100) < 60
-                ]
-                if weak_words:
-                    part1_summary += f" 发音薄弱词汇包括：{', '.join(weak_words[:5])}。"
-        
-        qwen_result = await self.qwen.evaluate_part2(
-            audio_data=audio_data,
-            audio_format=audio_format,
-            questions=task.questions,
-            part1_summary=part1_summary
-        )
-        
-        # 4. 处理结果
-        if not qwen_result.success:
-            test.status = "failed"
-            test.failure_reason = qwen_result.error
-            test.retry_count += 1
-            await self.db.commit()
-            return False
-        
-        # 5. 保存逐题评分
-        for item_data in qwen_result.items:
-            item = TestItemModel(
-                test_id=task.test_id,
-                question_no=item_data.get("no"),
-                score=item_data.get("score_0_2", 0),
-                feedback=item_data.get("reason", ""),
-                evidence=item_data.get("evidence", "")
-            )
-            self.db.add(item)
-        
-        # 6. 更新测评记录
-        test.part2_score = qwen_result.total_score
-        test.part2_transcript = qwen_result.transcript
-        test.part2_audio_url = task.audio_url  # 保存音频 URL
-        test.part2_raw_result = qwen_result.raw_response  # 保存完整原始响应 (含建议)
-        test.total_score = (float(test.part1_score or 0) + float(qwen_result.total_score or 0))
-        test.star_level = self._calculate_star_level(test.total_score)
-        test.status = "completed"
-        test.completed_at = datetime.now(timezone.utc)
-        test.updated_at = datetime.now(timezone.utc)
-        
-        # Calculate Cost for Part 2
-        if qwen_result.usage:
-            usage = qwen_result.usage
-            prompt_tokens = usage.get("prompt_tokens", 0)
-            completion_tokens = usage.get("completion_tokens", 0)
+            # 2. 下载音频
+            import httpx
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(task.audio_url, timeout=60)
+                    response.raise_for_status()
+                    audio_data = response.content
+            except Exception as e:
+                logger.exception(f"下载音频失败: {e}")
+                test.status = "failed"
+                test.failure_reason = f"下载音频失败: {str(e)}"
+                await self.db.commit()
+                return False
             
-            prompt_details = usage.get("prompt_tokens_details", {})
-            audio_tokens = prompt_details.get("audio_tokens", 0)
-            text_tokens = prompt_details.get("text_tokens", 0)
+            # 3. 调用 Qwen API
+            # 根据 URL 判断格式 (Handle presigned URLs with query params)
+            parsed_url = urlparse(task.audio_url)
+            path = parsed_url.path
+            ext = os.path.splitext(path)[1].lower()
             
-            if audio_tokens == 0 and text_tokens == 0 and prompt_tokens > 0:
-                audio_tokens = prompt_tokens # Fallback assumption
+            audio_format = "mp3"  # Default
+            if ext == ".wav":
+                audio_format = "wav"
+            elif ext == ".m4a":
+                audio_format = "m4a"
+            elif ext == ".pcm":
+                 audio_format = "pcm"
             
-            cost = (
-                (text_tokens * 0.0018 / 1000) +
-                (audio_tokens * 0.0158 / 1000) +
-                (completion_tokens * 0.0127 / 1000)
+            # 准备 Part 1 摘要
+            part1_summary = ""
+            if test.part1_score is not None:
+                part1_summary = f"该学生 Part 1 (词汇朗读) 得分为 {test.part1_score}/20。"
+                if test.part1_raw_result and "words" in test.part1_raw_result:
+                    weak_words = [
+                        w["word"] for w in test.part1_raw_result["words"]
+                        if w.get("score", 100) < 60
+                    ]
+                    if weak_words:
+                        part1_summary += f" 发音薄弱词汇包括：{', '.join(weak_words[:5])}。"
+            
+            qwen_result = await self.qwen.evaluate_part2(
+                audio_data=audio_data,
+                audio_format=audio_format,
+                questions=task.questions,
+                part1_summary=part1_summary
             )
             
-            test.cost = (test.cost or 0) + cost
+            # 4. 处理结果
+            if not qwen_result.success:
+                test.status = "failed"
+                test.failure_reason = qwen_result.error
+                test.retry_count += 1
+                await self.db.commit()
+                return False
             
-            # Update tokens_used with structured data
-            current_usage = test.tokens_used or {}
-            if not isinstance(current_usage, dict):
-                current_usage = {}
+            # 5. 保存逐题评分
+            for item_data in qwen_result.items:
+                item = TestItemModel(
+                    test_id=task.test_id,
+                    question_no=item_data.get("no"),
+                    score=item_data.get("score_0_2", 0),
+                    feedback=item_data.get("reason", ""),
+                    evidence=item_data.get("evidence", "")
+                )
+                self.db.add(item)
+            
+            # 6. 更新测评记录
+            test.part2_score = qwen_result.total_score
+            test.part2_transcript = qwen_result.transcript
+            test.part2_audio_url = task.audio_url  # 保存音频 URL
+            test.part2_raw_result = qwen_result.raw_response  # 保存完整原始响应 (含建议)
+            test.total_score = (float(test.part1_score or 0) + float(qwen_result.total_score or 0))
+            test.star_level = self._calculate_star_level(test.total_score)
+            test.status = "completed"
+            test.completed_at = datetime.now(timezone.utc)
+            test.updated_at = datetime.now(timezone.utc)
+            
+            # Calculate Cost for Part 2
+            if qwen_result.usage:
+                usage = qwen_result.usage
+                prompt_tokens = usage.get("prompt_tokens", 0)
+                completion_tokens = usage.get("completion_tokens", 0)
                 
-            current_usage["part2"] = {
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "audio_tokens": audio_tokens,
-                "text_tokens": text_tokens,
-                "total_tokens": usage.get("total_tokens", 0),
-                "cost": float(f"{cost:.6f}")
-            }
-            # Calculate total cost in JSON
-            total_cost = (current_usage.get("part1", {}).get("cost", 0) + cost)
-            current_usage["total_cost"] = float(f"{total_cost:.6f}")
+                prompt_details = usage.get("prompt_tokens_details", {})
+                audio_tokens = prompt_details.get("audio_tokens", 0)
+                text_tokens = prompt_details.get("text_tokens", 0)
+                
+                if audio_tokens == 0 and text_tokens == 0 and prompt_tokens > 0:
+                    audio_tokens = prompt_tokens # Fallback assumption
+                
+                cost = (
+                    (text_tokens * 0.0018 / 1000) +
+                    (audio_tokens * 0.0158 / 1000) +
+                    (completion_tokens * 0.0127 / 1000)
+                )
+                
+                test.cost = float(test.cost or 0) + cost
+                
+                # Update tokens_used with structured data
+                current_usage = test.tokens_used or {}
+                if not isinstance(current_usage, dict):
+                    current_usage = {}
+                    
+                current_usage["part2"] = {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "audio_tokens": audio_tokens,
+                    "text_tokens": text_tokens,
+                    "total_tokens": usage.get("total_tokens", 0),
+                    "cost": float(f"{cost:.6f}")
+                }
+                # Calculate total cost in JSON
+                total_cost = (current_usage.get("part1", {}).get("cost", 0) + cost)
+                current_usage["total_cost"] = float(f"{total_cost:.6f}")
+                
+                test.tokens_used = current_usage
+                
+                logger.info(f"Part 2 Cost: {cost:.4f} RMB, Usage: {current_usage['part2']}")
             
-            test.tokens_used = current_usage
+            await self.db.commit()
             
-            logger.info(f"Part 2 Cost: {cost:.4f} RMB, Usage: {current_usage['part2']}")
-        
-        await self.db.commit()
-        
-        logger.info(
-            f"Part 2 评测完成: test_id={task.test_id}, "
-            f"part2_score={qwen_result.total_score}, "
-            f"total_score={test.total_score}"
-        )
-        
-        return True
+            logger.info(
+                f"Part 2 评测完成: test_id={task.test_id}, "
+                f"part2_score={qwen_result.total_score}, "
+                f"total_score={test.total_score}"
+            )
+            
+            return True
+            
+        except Exception as e:
+            # 全局异常捕获：确保任何异常都记录 failure_reason
+            logger.exception(f"Part 2 处理异常: {e}")
+            try:
+                test.status = "failed"
+                test.failure_reason = f"处理异常: {str(e)}"
+                test.part2_audio_url = task.audio_url  # 保存音频 URL 以便排查
+                test.retry_count = (test.retry_count or 0) + 1
+                
+                # 尝试保存已计算的评分数据（如果 Qwen 返回成功但后续处理失败）
+                # 检查 qwen_result 是否存在（通过检查 locals）
+                if 'qwen_result' in dir() and qwen_result and qwen_result.success:
+                    test.part2_score = qwen_result.total_score
+                    test.part2_transcript = qwen_result.transcript
+                    test.part2_raw_result = qwen_result.raw_response
+                    logger.info(f"异常恢复：保存了 Part 2 评分结果 score={qwen_result.total_score}")
+                
+                await self.db.commit()
+            except Exception as commit_error:
+                logger.error(f"保存失败原因时出错: {commit_error}")
+            return False
     
     def _calculate_star_level(self, total_score: float) -> int:
         """根据总分百分比 (score/44) 计算星级 (1-5)"""

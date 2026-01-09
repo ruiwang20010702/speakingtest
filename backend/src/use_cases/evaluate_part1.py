@@ -182,7 +182,7 @@ class EvaluatePart1UseCase:
             )
             
             # Update TestModel
-            test.cost = (test.cost or 0) + cost
+            test.cost = float(test.cost or 0) + cost
             
             # Update tokens_used with structured data
             current_usage = test.tokens_used or {}
@@ -374,7 +374,7 @@ class ProcessPart1TaskUseCase:
                 (completion_tokens * 0.0127 / 1000)
             )
             
-            test.cost = (test.cost or 0) + cost
+            test.cost = float(test.cost or 0) + cost
             current_usage = test.tokens_used or {}
             if not isinstance(current_usage, dict):
                 current_usage = {}

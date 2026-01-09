@@ -11,7 +11,7 @@ interface TestPageProps {
   unit: string;
   onExit: () => void;
   onComplete: (audios: Blob[]) => void;
-  onPart1Complete?: (audio: Blob) => void; // 新增：Part 1 完成后立即回调
+  onPart1Complete?: (audio: Blob, part1Questions: Question[]) => void; // 传递题目列表避免重复请求
 }
 
 
@@ -152,9 +152,9 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
         setIsRecording(false);
 
         if (currentPart === 1) {
-          // Part 1 完成，立即触发回调开始后台评分
+          // Part 1 完成，立即触发回调开始后台评分（传递题目列表）
           if (onPart1Complete) {
-            onPart1Complete(blob);
+            onPart1Complete(blob, questions.slice(0, 20));
           }
           setShowTransition(true);
         } else {

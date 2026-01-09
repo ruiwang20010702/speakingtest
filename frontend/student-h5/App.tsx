@@ -18,15 +18,15 @@ const TestContainer: React.FC = () => {
   const part1PromiseRef = React.useRef<Promise<void> | null>(null);
 
   // Part 1 完成后立即调用（静默后台评分）
-  const handlePart1Complete = async (audio: Blob) => {
+  const handlePart1Complete = async (audio: Blob, part1Questions: { text: string }[]) => {
     try {
       const testIdStr = localStorage.getItem('testId');
       if (!testIdStr) throw new Error('No test ID found');
       const testId = parseInt(testIdStr);
 
-      const { getQuestions, submitPart1 } = await import('./services/api');
-      const questions = await getQuestions(level, unit);
-      const part1Text = questions.slice(0, 20).map(q => q.text).join(' ');
+      const { submitPart1 } = await import('./services/api');
+      // 直接使用传入的题目列表，避免重复请求
+      const part1Text = part1Questions.map(q => q.text).join(' ');
 
       // 创建 Promise 并存储引用（静默执行，不显示状态）
       part1PromiseRef.current = submitPart1(testId, audio, part1Text)
