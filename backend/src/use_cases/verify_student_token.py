@@ -2,7 +2,7 @@
 Student Entry Token Use Case
 Validates entry token and creates a session for the student.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timezone
 from typing import Optional
 from dataclasses import dataclass
 
@@ -110,7 +110,7 @@ class VerifyStudentEntryTokenUseCase:
         # 5. Mark token as used (track usage, but don't block re-entry)
         if not entry_token.is_used:
             entry_token.is_used = True
-            entry_token.used_at = datetime.utcnow()
+            entry_token.used_at = datetime.now(timezone.utc)
 
         # 6. Create test if not exists (should exist from generation, but safe fallback)
         if not test:

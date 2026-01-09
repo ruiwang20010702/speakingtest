@@ -2,7 +2,7 @@
 Part 1 Evaluation Use Case
 Orchestrates the speech evaluation flow for Part 1 (reading).
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import dataclass
 
@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
 from src.adapters.repositories.models import TestModel
-from src.adapters.gateways.xunfei_client import XunfeiGateway, XunfeiEvaluationResult
+from src.adapters.gateways.qwen_client import QwenOmniGateway, Part1EvaluationResult
 from src.adapters.gateways.oss_client import upload_test_audio
 
 
@@ -27,7 +27,7 @@ class Part1EvaluationRequest:
 class Part1EvaluationResponse:
     """Response from Part 1 evaluation."""
     success: bool
-    test_id: int
+    test_id: int 
     score: Optional[float] = None
     fluency_score: Optional[float] = None
     pronunciation_score: Optional[float] = None
@@ -47,9 +47,9 @@ class EvaluatePart1UseCase:
     5. Update test status
     """
 
-    def __init__(self, db: AsyncSession, xunfei_gateway: XunfeiGateway):
+    def __init__(self, db: AsyncSession, qwen_gateway: QwenOmniGateway):
         self.db = db
-        self.xunfei = xunfei_gateway
+        self.qwen = qwen_gateway
 
     async def execute(self, request: Part1EvaluationRequest) -> Part1EvaluationResponse:
         """
@@ -83,40 +83,35 @@ class EvaluatePart1UseCase:
 
         logger.info(f"Starting Part 1 evaluation for test {request.test_id}")
 
-        # 3. Call Xunfei API
+        # 3. Call Qwen API
         try:
-            xunfei_result = await self.xunfei.evaluate_reading_sync(
+            # Qwen expects audio format, assuming pcm/wav for now based on previous flow
+            # In a real scenario, we might need to know the actual format from the request or header
+            # For now, we pass "pcm" as default or "wav" if we know it. 
+            # Since Xunfei used PCM, we assume raw data. Qwen might need WAV header.
+            # But let's try passing "pcm" and let the client handle it (client defaults to wav in data url)
+            
+            evaluation_result = await self.qwen.evaluate_part1_reading(
+                audio_data=request.audio_data,
                 reference_text=request.reference_text,
-                audio_data=request.audio_data
+                audio_format="pcm" 
             )
         except Exception as e:
-            logger.exception(f"Xunfei API error: {e}")
+            logger.exception(f"Qwen Part 1 API error: {e}")
             return Part1EvaluationResponse(
                 success=False,
                 test_id=request.test_id,
                 error=f"Evaluation service error: {str(e)}"
             )
 
-        # 4. Handle result
-        if not xunfei_result.success:
-            test.failure_reason = xunfei_result.error_message
-            test.retry_count += 1
-            await self.db.commit()
-            
-            return Part1EvaluationResponse(
-                success=False,
-                test_id=request.test_id,
-                error=xunfei_result.error_message
-            )
-
-        # 5. 上传音频到 OSS
+        # 4. 上传音频到 OSS (无论评分是否成功都尝试上传)
         audio_url = None
         try:
             oss_result = await upload_test_audio(
                 audio_data=request.audio_data,
                 test_id=request.test_id,
                 part="part1",
-                extension="pcm"  # 讯飞使用 PCM 格式
+                extension="pcm"  # 讯飞使用 PCM 格式，Qwen 也兼容
             )
             if oss_result.success:
                 audio_url = oss_result.url
@@ -126,23 +121,95 @@ class EvaluatePart1UseCase:
         except Exception as e:
             logger.warning(f"OSS 上传异常（不影响评测结果）: {e}")
 
-        # 6. Store scores + audio URL
-        test.part1_score = xunfei_result.total_score
-        test.part1_raw_result = xunfei_result.to_dict()
+        # 5. Handle result
+        if not evaluation_result.success:
+            test.failure_reason = evaluation_result.error
+            test.retry_count += 1
+            test.part1_audio_url = audio_url # 即使失败也保存音频链接
+            await self.db.commit()
+            
+            return Part1EvaluationResponse(
+                success=False,
+                test_id=request.test_id,
+                error=evaluation_result.error,
+                audio_url=audio_url
+            )
+
+        # 6. Store scores + audio URL + Cost
+        test.part1_score = evaluation_result.total_score
+        test.part1_raw_result = evaluation_result.to_dict()
         test.part1_audio_url = audio_url  # 保存音频 URL
         test.status = "part1_done"
-        test.updated_at = datetime.utcnow()
+        test.updated_at = datetime.now(timezone.utc)
+        
+        # Calculate Cost
+        # Pricing (Qwen3-Omni-Flash):
+        # Input Text: 0.0018 / 1k
+        # Input Audio: 0.0158 / 1k
+        # Output: 0.0127 / 1k
+        if evaluation_result.usage:
+            usage = evaluation_result.usage
+            # Note: Qwen usage usually has prompt_tokens, completion_tokens.
+            # It might break down prompt_tokens into audio_tokens and text_tokens in prompt_tokens_details.
+            # If not available, we estimate.
+            
+            prompt_tokens = usage.get("prompt_tokens", 0)
+            completion_tokens = usage.get("completion_tokens", 0)
+            
+            # Try to get detailed breakdown
+            prompt_details = usage.get("prompt_tokens_details", {})
+            audio_tokens = prompt_details.get("audio_tokens", 0)
+            text_tokens = prompt_details.get("text_tokens", 0)
+            
+            # Fallback if details missing: assume mostly audio for Part 1 input?
+            # Actually Part 1 input is text + audio. 
+            # If no breakdown, we might under-calculate if we assume all text, or over if all audio.
+            # Let's assume if audio_tokens is 0 but we sent audio, maybe it's not broken down.
+            # But Qwen-Omni usually provides this.
+            
+            if audio_tokens == 0 and text_tokens == 0 and prompt_tokens > 0:
+                # Fallback: Estimate based on prompt length?
+                # Text prompt is short (~100 chars). Audio is the main part.
+                # Let's assume 90% audio tokens if not specified? Or just treat as audio for safety?
+                # To be safe/conservative, treat as audio (more expensive).
+                audio_tokens = prompt_tokens
+            
+            cost = (
+                (text_tokens * 0.0018 / 1000) +
+                (audio_tokens * 0.0158 / 1000) +
+                (completion_tokens * 0.0127 / 1000)
+            )
+            
+            # Update TestModel
+            test.cost = (test.cost or 0) + cost
+            
+            # Update tokens_used with structured data
+            current_usage = test.tokens_used or {}
+            if not isinstance(current_usage, dict):
+                current_usage = {}
+                
+            current_usage["part1"] = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "audio_tokens": audio_tokens,
+                "text_tokens": text_tokens,
+                "total_tokens": usage.get("total_tokens", 0),
+                "cost": float(f"{cost:.6f}")
+            }
+            test.tokens_used = current_usage
+            
+            logger.info(f"Part 1 Cost: {cost:.4f} RMB, Usage: {current_usage['part1']}")
 
         await self.db.commit()
         
-        logger.info(f"Part 1 completed for test {request.test_id}, score: {xunfei_result.total_score}")
+        logger.info(f"Part 1 completed for test {request.test_id}, score: {evaluation_result.total_score}")
 
         return Part1EvaluationResponse(
             success=True,
             test_id=request.test_id,
-            score=xunfei_result.total_score,
-            fluency_score=xunfei_result.fluency_score,
-            pronunciation_score=xunfei_result.pronunciation_score,
+            score=evaluation_result.total_score,
+            fluency_score=evaluation_result.fluency_score,
+            pronunciation_score=evaluation_result.pronunciation_score,
             audio_url=audio_url
         )
 

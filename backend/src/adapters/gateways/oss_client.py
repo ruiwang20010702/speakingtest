@@ -5,7 +5,7 @@
 import os
 import uuid
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import dataclass
 
@@ -60,12 +60,12 @@ class OSSClient:
         Returns:
             OSS 对象键 (key)
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         unique_id = str(uuid.uuid4())[:8]
         
         return f"audio/{now.year}/{now.month:02d}/{test_id}_{part}_{unique_id}.{extension}"
     
-    def upload_audio(
+    async def upload_audio(
         self,
         audio_data: bytes,
         test_id: int,
@@ -187,4 +187,4 @@ async def upload_test_audio(
             print(result.url)
     """
     client = get_oss_client()
-    return client.upload_audio(audio_data, test_id, part, extension)
+    return await client.upload_audio(audio_data, test_id, part, extension)

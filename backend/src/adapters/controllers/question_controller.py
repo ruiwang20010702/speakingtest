@@ -4,7 +4,7 @@ Handles question bank CRUD operations for different levels and units.
 """
 from typing import List, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from pydantic import BaseModel
@@ -452,7 +452,7 @@ async def upload_question_image(
     content = await file.read()
     
     # Generate OSS key
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     ext = file.filename.split(".")[-1] if "." in file.filename else "png"
     unique_id = str(uuid.uuid4())[:8]
     oss_key = f"questions/{question.level}/{question_id}_{unique_id}.{ext}"

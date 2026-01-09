@@ -10,7 +10,7 @@ from typing import Optional
 from src.infrastructure.database import get_db
 from src.infrastructure.auth import get_current_user_id
 from src.infrastructure.responses import ErrorResponse
-from src.adapters.gateways.xunfei_client import XunfeiGateway
+from src.adapters.gateways.qwen_client import QwenOmniGateway
 from src.use_cases.evaluate_part1 import (
     EvaluatePart1UseCase,
     Part1EvaluationRequest,
@@ -71,8 +71,9 @@ async def submit_part1(
         )
     
     # Create use case and execute
-    xunfei_gateway = XunfeiGateway()
-    use_case = EvaluatePart1UseCase(db, xunfei_gateway)
+    # Create use case and execute
+    qwen_gateway = QwenOmniGateway()
+    use_case = EvaluatePart1UseCase(db, qwen_gateway)
     
     result = await use_case.execute(
         Part1EvaluationRequest(

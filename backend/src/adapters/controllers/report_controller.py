@@ -3,7 +3,7 @@ Report Controller
 Handles report viewing and sharing for teachers and parents.
 """
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -127,7 +127,7 @@ async def get_student_tests(
     from src.adapters.repositories.models import StudentEntryTokenModel
     token_stmt = select(StudentEntryTokenModel).where(
         StudentEntryTokenModel.student_id == student_id,
-        StudentEntryTokenModel.expires_at > datetime.utcnow()
+        StudentEntryTokenModel.expires_at > datetime.now(timezone.utc)
     ).order_by(StudentEntryTokenModel.created_at.desc())
     
     token_result = await db.execute(token_stmt)
@@ -368,7 +368,7 @@ async def view_report_by_token(
     await db.commit()
     
     # Check expiry (if set)
-    if share.expires_at and share.expires_at < datetime.utcnow():
+    if share.expires_at and share.expires_at < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_410_GONE,
             detail="链接已过期"

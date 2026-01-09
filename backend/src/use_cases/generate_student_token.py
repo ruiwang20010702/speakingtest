@@ -3,7 +3,7 @@ Generate Student Token Use Case
 Generates a unique entry token for a student to access the test.
 """
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,14 +63,14 @@ class GenerateStudentTokenUseCase:
             level=request.level,
             unit=request.unit,
             status="pending",
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         self.db.add(test_record)
         await self.db.flush()  # Get ID
 
         # 3. Generate token
         token = secrets.token_urlsafe(16)
-        expires_at = datetime.utcnow() + timedelta(hours=request.expires_hours)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=request.expires_hours)
         
         # 4. Save to DB
         entry_token = StudentEntryTokenModel(

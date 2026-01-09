@@ -5,7 +5,7 @@ Part 2 评测用例
 import uuid
 import os
 from urllib.parse import urlparse
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import dataclass
 
@@ -95,7 +95,7 @@ class SubmitPart2UseCase:
         
         # 4. 更新状态
         test.status = "processing"
-        test.updated_at = datetime.utcnow()
+        test.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
         
         logger.info(f"Part 2 任务已入队: task_id={task_id}, test_id={request.test_id}")
@@ -216,8 +216,50 @@ class ProcessPart2TaskUseCase:
         test.total_score = (float(test.part1_score or 0) + float(qwen_result.total_score or 0))
         test.star_level = self._calculate_star_level(test.total_score)
         test.status = "completed"
-        test.completed_at = datetime.utcnow()
-        test.updated_at = datetime.utcnow()
+        test.completed_at = datetime.now(timezone.utc)
+        test.updated_at = datetime.now(timezone.utc)
+        
+        # Calculate Cost for Part 2
+        if qwen_result.usage:
+            usage = qwen_result.usage
+            prompt_tokens = usage.get("prompt_tokens", 0)
+            completion_tokens = usage.get("completion_tokens", 0)
+            
+            prompt_details = usage.get("prompt_tokens_details", {})
+            audio_tokens = prompt_details.get("audio_tokens", 0)
+            text_tokens = prompt_details.get("text_tokens", 0)
+            
+            if audio_tokens == 0 and text_tokens == 0 and prompt_tokens > 0:
+                audio_tokens = prompt_tokens # Fallback assumption
+            
+            cost = (
+                (text_tokens * 0.0018 / 1000) +
+                (audio_tokens * 0.0158 / 1000) +
+                (completion_tokens * 0.0127 / 1000)
+            )
+            
+            test.cost = (test.cost or 0) + cost
+            
+            # Update tokens_used with structured data
+            current_usage = test.tokens_used or {}
+            if not isinstance(current_usage, dict):
+                current_usage = {}
+                
+            current_usage["part2"] = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "audio_tokens": audio_tokens,
+                "text_tokens": text_tokens,
+                "total_tokens": usage.get("total_tokens", 0),
+                "cost": float(f"{cost:.6f}")
+            }
+            # Calculate total cost in JSON
+            total_cost = (current_usage.get("part1", {}).get("cost", 0) + cost)
+            current_usage["total_cost"] = float(f"{total_cost:.6f}")
+            
+            test.tokens_used = current_usage
+            
+            logger.info(f"Part 2 Cost: {cost:.4f} RMB, Usage: {current_usage['part2']}")
         
         await self.db.commit()
         

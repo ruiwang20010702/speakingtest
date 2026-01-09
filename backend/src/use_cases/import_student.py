@@ -2,7 +2,7 @@
 Import Student Use Case
 Fetches student data from CRM and saves/updates it in the local database.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import dataclass
 
@@ -68,8 +68,8 @@ class ImportStudentUseCase:
                 id=crm_data.user_id,
                 role="student",
                 status=1,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
             )
             self.db.add(user)
             # Flush to ensure user exists for foreign key constraint if we were to commit partially,
@@ -81,7 +81,7 @@ class ImportStudentUseCase:
         student = result.scalar_one_or_none()
         
         is_new = False
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         if not student:
             is_new = True

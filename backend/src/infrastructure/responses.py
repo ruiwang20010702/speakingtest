@@ -2,7 +2,7 @@
 Standard Response Models
 Based on /api-design-principles workflow.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Generic, List, Optional, TypeVar
 
 from pydantic import BaseModel, Field
@@ -87,7 +87,7 @@ class ErrorResponse(BaseModel):
     error: str = Field(description="Error code (e.g., 'NotFound', 'ValidationError')")
     message: str = Field(description="Human-readable error message")
     details: Optional[List[ErrorDetail]] = Field(default=None, description="Detailed error info")
-    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     path: Optional[str] = None
 
 

@@ -41,7 +41,37 @@ PART2_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
     {"no": 1, "score_0_2": 0, "reason": "评分理由", "evidence": "转写中的证据片段", "suggestion": "改进建议"}
   ],
   "overall_suggestion": ["总体建议1", "总体建议2"]
+  "overall_suggestion": ["总体建议1", "总体建议2"]
 }"""
+
+
+PART1_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的任务是对学生朗读的英文段落进行评测。
+
+## 评分标准 (0-100分)
+- 准确度 (Accuracy): 单词发音是否准确，有无漏读、错读、增读。
+- 流利度 (Fluency): 朗读是否连贯，语速是否适中，有无不自然的停顿。
+- 完整度 (Integrity): 是否读完了所有内容。
+- 标准度 (Pronunciation): 发音是否地道，重音、语调是否正确。
+
+## 输出要求
+1. 严格输出 JSON 格式
+2. 必须包含总分和分项得分
+3. 列出读错的单词（如有）
+
+## JSON 结构
+{
+  "total_score": 85.5,
+  "fluency_score": 80.0,
+  "integrity_score": 90.0,
+  "pronunciation_score": 85.0,
+  "is_rejected": false,
+  "diagnosis": "音量正常",
+  "details": [
+    {"content": "word", "total_score": 0, "dp_message": 0} 
+  ]
+}
+注意：details 中的 dp_message: 0=正常, 16=漏读, 32=增读, 64=回读/替换。total_score 为该词得分。
+"""
 
 
 def build_part2_user_prompt(questions: List[dict]) -> str:
@@ -83,6 +113,7 @@ class Part2EvaluationResult:
     total_score: Optional[int] = None  # 0-24
     error: Optional[str] = None
     raw_response: Optional[str] = None
+    usage: Optional[dict] = None  # Token usage
     
     def to_dict(self) -> dict:
         return {
@@ -91,7 +122,38 @@ class Part2EvaluationResult:
             "items": self.items,
             "overall_suggestion": self.overall_suggestion,
             "total_score": self.total_score,
-            "error": self.error
+            "error": self.error,
+            "usage": self.usage
+        }
+
+
+@dataclass
+class Part1EvaluationResult:
+    """Part 1 评测结果 (兼容 Xunfei 结构)"""
+    success: bool
+    total_score: float = 0.0
+    fluency_score: float = 0.0
+    integrity_score: float = 0.0
+    pronunciation_score: float = 0.0
+    is_rejected: bool = False
+    diagnosis: str = ""
+    details: Optional[List[dict]] = None
+    error: Optional[str] = None
+    raw_response: Optional[str] = None
+    usage: Optional[dict] = None  # Token usage
+
+    def to_dict(self) -> dict:
+        return {
+            "success": self.success,
+            "total_score": self.total_score,
+            "fluency_score": self.fluency_score,
+            "integrity_score": self.integrity_score,
+            "pronunciation_score": self.pronunciation_score,
+            "is_rejected": self.is_rejected,
+            "diagnosis": self.diagnosis,
+            "details": self.details,
+            "error": self.error,
+            "usage": self.usage
         }
 
 
@@ -175,8 +237,9 @@ class QwenOmniGateway:
             logger.info(f"开始 Qwen Part 2 评测，音频大小: {len(audio_data)} bytes")
             
             try:
-                full_response = await self._stream_request(request_body)
+                full_response, usage = await self._stream_request(request_body)
                 result = self._parse_response(full_response)
+                result.usage = usage  # Attach usage info
                 
                 # 限速：每次请求后等待 1 秒（60 RPM）
                 await asyncio.sleep(1.0)
@@ -189,11 +252,120 @@ class QwenOmniGateway:
                     success=False,
                     error=str(e)
                 )
+
+    async def evaluate_part1_reading(
+        self,
+        audio_data: bytes,
+        reference_text: str,
+        audio_format: str = "pcm"
+    ) -> Part1EvaluationResult:
+        """
+        评测 Part 1 朗读 (使用 Qwen 模拟 Xunfei 输出)
+        """
+        # 构建 data URL (Qwen 支持 PCM/WAV/MP3)
+        # 注意：如果是 raw PCM，Qwen 可能需要 wav header 或者明确指定格式。
+        # 为了兼容性，假设传入的是带 header 的 wav 或者 mp3。
+        # 如果是纯 PCM，建议在调用前转为 WAV。这里假设调用方会处理，或者 Qwen 能处理 raw pcm (视 API 而定)。
+        # 稳妥起见，我们这里假设输入是 wav/mp3。如果是 pcm，建议在 UseCase 层转码。
+        
+        audio_base64 = base64.b64encode(audio_data).decode("utf-8")
+        mime_type = "audio/wav" # Default to wav for pcm/wav
+        if audio_format == "mp3":
+            mime_type = "audio/mpeg"
+        elif audio_format == "pcm":
+             mime_type = "audio/pcm" # Qwen might not support this directly via data url without container
+        
+        data_url = f"data:{mime_type};base64,{audio_base64}"
+        
+        user_prompt = f"""请评测这段朗读录音。
+参考文本:
+{reference_text}
+
+请严格按照 JSON 格式输出评分。"""
+
+        request_body = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": PART1_SYSTEM_PROMPT
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "data": data_url,
+                                "format": "wav" if audio_format == "pcm" else audio_format # Qwen usually expects wav for raw audio
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": user_prompt
+                        }
+                    ]
+                }
+            ],
+            "modalities": ["text"],
+            "stream": False # Part 1 不用流式，直接等结果
+        }
+        
+        async with self.semaphore:
+            logger.info(f"开始 Qwen Part 1 评测，音频大小: {len(audio_data)} bytes")
+            try:
+                # 非流式请求
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers={"Authorization": f"Bearer {self.api_key}"},
+                        json=request_body
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    content = data["choices"][0]["message"]["content"]
+                    usage = data.get("usage", {})
+                    
+                    result = self._parse_part1_response(content)
+                    result.usage = usage
+                    return result
+                    
+            except Exception as e:
+                logger.exception(f"Qwen Part 1 API 调用失败: {e}")
+                return Part1EvaluationResult(success=False, error=str(e))
+
+    def _parse_part1_response(self, response_text: str) -> Part1EvaluationResult:
+        """解析 Part 1 JSON 响应"""
+        try:
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', response_text)
+            if json_match:
+                data = json.loads(json_match.group())
+            else:
+                data = json.loads(response_text)
+                
+            return Part1EvaluationResult(
+                success=True,
+                total_score=float(data.get("total_score", 0)),
+                fluency_score=float(data.get("fluency_score", 0)),
+                integrity_score=float(data.get("integrity_score", 0)),
+                pronunciation_score=float(data.get("pronunciation_score", 0)),
+                is_rejected=data.get("is_rejected", False),
+                diagnosis=data.get("diagnosis", ""),
+                details=data.get("details", []),
+                raw_response=response_text
+            )
+        except Exception as e:
+            logger.error(f"解析 Qwen Part 1 响应失败: {e}\nResponse: {response_text}")
+            return Part1EvaluationResult(success=False, error=f"解析失败: {e}", raw_response=response_text)
     
-    async def _stream_request(self, request_body: dict) -> str:
+    async def _stream_request(self, request_body: dict) -> tuple[str, dict]:
         """
         发送流式 HTTP 请求并收集完整响应
         基于 /async-python-patterns Pattern 7: Async Iterators
+        
+        Returns:
+            (full_content, usage_dict)
         """
         url = f"{self.base_url}/chat/completions"
         headers = {
@@ -202,6 +374,7 @@ class QwenOmniGateway:
         }
         
         full_content = ""
+        usage = {}
         
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
@@ -224,11 +397,15 @@ class QwenOmniGateway:
                         chunk = json.loads(data_str)
                         if chunk.get("choices") and chunk["choices"][0].get("delta", {}).get("content"):
                             full_content += chunk["choices"][0]["delta"]["content"]
+                        
+                        # Capture usage from the last chunk (or any chunk that has it)
+                        if chunk.get("usage"):
+                            usage = chunk["usage"]
                     except json.JSONDecodeError:
                         continue
         
         logger.debug(f"Qwen 响应长度: {len(full_content)} 字符")
-        return full_content
+        return full_content, usage
     
     def _parse_response(self, response_text: str) -> Part2EvaluationResult:
         """

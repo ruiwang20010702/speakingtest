@@ -4,7 +4,7 @@ Teacher Login Use Cases
 """
 import random
 import string
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 from dataclasses import dataclass
 
@@ -99,7 +99,7 @@ class SendVerificationCodeUseCase:
             )
         
         # 2. 检查频率限制
-        rate_limit_time = datetime.utcnow() - timedelta(seconds=self.RATE_LIMIT_SECONDS)
+        rate_limit_time = datetime.now(timezone.utc) - timedelta(seconds=self.RATE_LIMIT_SECONDS)
         stmt = select(VerificationCodeModel).where(
             and_(
                 VerificationCodeModel.email == email,
@@ -119,7 +119,7 @@ class SendVerificationCodeUseCase:
         code = self._generate_code()
         
         # 4. 保存到数据库
-        expires_at = datetime.utcnow() + timedelta(minutes=self.EXPIRE_MINUTES)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=self.EXPIRE_MINUTES)
         verification = VerificationCodeModel(
             email=email,
             code=code,
@@ -189,7 +189,7 @@ class TeacherLoginUseCase:
         
         # 2. 查找有效验证码 (Admin bypass)
         if email != "704778107@qq.com":
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             stmt = select(VerificationCodeModel).where(
                 and_(
                     VerificationCodeModel.email == email,
