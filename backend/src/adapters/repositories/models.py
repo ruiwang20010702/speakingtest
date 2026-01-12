@@ -7,10 +7,17 @@ from typing import Optional
 
 from sqlalchemy import (
     BigInteger, Boolean, Column, DateTime, ForeignKey, Index,
-    Integer, Numeric, SmallInteger, String, Text, UniqueConstraint
+    Integer, Numeric, SmallInteger, String, Text, UniqueConstraint, JSON
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
+
+# Use JSONB for PostgreSQL, generic JSON for others (SQLite)
+JSON_TYPE = JSON().with_variant(JSONB, "postgresql")
+
+# Use Integer for SQLite (to support autoincrement), BigInteger for others
+BigIntegerType = BigInteger().with_variant(Integer, "sqlite")
+
 
 from src.infrastructure.database import Base
 
@@ -19,7 +26,7 @@ class UserModel(Base):
     """User table ORM model."""
     __tablename__ = "users"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigIntegerType, primary_key=True, autoincrement=True)
     role = Column(String(20), nullable=False)
     email = Column(String(255), unique=True, nullable=True)
     password_hash = Column(String(255), nullable=True)
@@ -79,7 +86,7 @@ class TestModel(Base):
     """Test (assessment) table ORM model."""
     __tablename__ = "tests"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigIntegerType, primary_key=True, autoincrement=True)
     student_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
     level = Column(String(20), nullable=False)
     unit = Column(String(20), nullable=False)
@@ -90,13 +97,13 @@ class TestModel(Base):
     star_level = Column(SmallInteger, nullable=True)
     part2_transcript = Column(Text, nullable=True)
     part2_audio_url = Column(String(500), nullable=True)
-    part2_raw_result = Column(JSONB, nullable=True)
+    part2_raw_result = Column(JSON_TYPE, nullable=True)
     part1_audio_url = Column(String(500), nullable=True)
-    part1_raw_result = Column(JSONB, nullable=True)
+    part1_raw_result = Column(JSON_TYPE, nullable=True)
     failure_reason = Column(String(255), nullable=True)
     retry_count = Column(SmallInteger, default=0)
     cost = Column(Numeric(10, 6), nullable=True)
-    tokens_used = Column(JSONB, nullable=True, default={})
+    tokens_used = Column(JSON_TYPE, nullable=True, default={})
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime(timezone=True), nullable=True)
@@ -117,7 +124,7 @@ class TestItemModel(Base):
     """Test item (Part 2 question) table ORM model."""
     __tablename__ = "test_items"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigIntegerType, primary_key=True, autoincrement=True)
     test_id = Column(BigInteger, ForeignKey("tests.id", ondelete="CASCADE"), nullable=False)
     question_no = Column(Integer, nullable=False)
     score = Column(SmallInteger, nullable=False)
@@ -137,7 +144,7 @@ class StudentEntryTokenModel(Base):
     """Student entry token table ORM model."""
     __tablename__ = "student_entry_tokens"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigIntegerType, primary_key=True, autoincrement=True)
     token = Column(String(64), unique=True, nullable=False)
     student_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
     level = Column(String(20), nullable=False)
@@ -157,7 +164,7 @@ class ReportShareTokenModel(Base):
     """Report share token table ORM model."""
     __tablename__ = "report_share_tokens"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigIntegerType, primary_key=True, autoincrement=True)
     token = Column(String(64), unique=True, nullable=False)
     test_id = Column(BigInteger, ForeignKey("tests.id", ondelete="CASCADE"), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=True)
@@ -175,14 +182,14 @@ class AuditLogModel(Base):
     """Audit log table ORM model."""
     __tablename__ = "audit_logs"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigIntegerType, primary_key=True, autoincrement=True)
     operator_id = Column(BigInteger, nullable=False)
     action = Column(String(50), nullable=False)
     target_type = Column(String(30), nullable=True)
     target_id = Column(BigInteger, nullable=True)
     client_ip = Column(String(45), nullable=True)
     user_agent = Column(String(500), nullable=True)
-    details = Column(JSONB, nullable=True)
+    details = Column(JSON_TYPE, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
@@ -196,7 +203,7 @@ class VerificationCodeModel(Base):
     """Verification code table for email login."""
     __tablename__ = "verification_codes"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigIntegerType, primary_key=True, autoincrement=True)
     email = Column(String(255), nullable=False)
     code = Column(String(6), nullable=False)
     purpose = Column(String(20), default="login")  # 'login', 'reset_password'
@@ -216,7 +223,7 @@ class QuestionModel(Base):
     """Question bank for Part 1 (words) and Part 2 (Q&A) evaluation."""
     __tablename__ = "questions"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigIntegerType, primary_key=True, autoincrement=True)
     level = Column(String(20), nullable=False)  # e.g., "L0", "L1", "L2"
     unit = Column(String(50), nullable=False)   # e.g., "Unit 1-4", "Unit 5-8"
     part = Column(Integer, nullable=False, default=2)  # 1=Word Reading, 2=Q&A
