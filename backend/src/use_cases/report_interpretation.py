@@ -21,14 +21,20 @@ class ReportInterpretation:
     parent_script: str          # 家长沟通话术 (完整)
 
 
+
+from src.adapters.gateways.qwen_client import QwenOmniGateway
+
 class ReportInterpretationService:
     """
     Generates interpretation for teacher-to-parent communication.
     
-    Uses rules-based generation for MVP, can be upgraded to LLM later.
+    Uses LLM (Qwen) for generation, with rule-based fallback (optional).
     """
     
-    def generate(
+    def __init__(self, qwen_gateway: QwenOmniGateway):
+        self.qwen = qwen_gateway
+    
+    async def generate(
         self,
         student_name: str,
         level: str,
@@ -40,18 +46,47 @@ class ReportInterpretationService:
         part2_items: Optional[list] = None
     ) -> ReportInterpretation:
         """
-        Generate interpretation based on test results.
-        
-        Args:
-            student_name: Student's name
-            level: Test level (e.g., L1)
-            total_score: Total score (0-44)
-            part1_score: Part 1 score (0-20)
-            part2_score: Part 2 score (0-24)
-            star_level: Star rating (1-5)
-            part1_details: Raw Part 1 result with word-level scores
-            part2_items: Part 2 question items with scores
+        Generate interpretation based on test results using LLM.
         """
+        # Call LLM
+        result = await self.qwen.generate_report_interpretation(
+            student_name=student_name,
+            level=level,
+            total_score=total_score,
+            part1_score=part1_score,
+            part2_score=part2_score,
+            star_level=star_level,
+            part1_details=part1_details,
+            part2_items=part2_items
+        )
+        
+        if result.success:
+            return ReportInterpretation(
+                highlights=result.highlights,
+                weaknesses=result.weaknesses,
+                evidence=result.evidence,
+                suggestions=result.suggestions,
+                parent_script=result.parent_script
+            )
+        else:
+            logger.error(f"LLM interpretation failed: {result.error}. Falling back to rules.")
+            return self._generate_rule_based(
+                student_name, level, total_score, part1_score, 
+                part2_score, star_level, part1_details, part2_items
+            )
+
+    def _generate_rule_based(
+        self,
+        student_name: str,
+        level: str,
+        total_score: float,
+        part1_score: float,
+        part2_score: Optional[float],
+        star_level: int,
+        part1_details: Optional[dict] = None,
+        part2_items: Optional[list] = None
+    ) -> ReportInterpretation:
+        """Fallback: Rule-based generation (Original logic)."""
         highlights = []
         weaknesses = []
         evidence = []
@@ -59,7 +94,6 @@ class ReportInterpretationService:
         
         # Analyze Part 1 (Vocabulary)
         if part1_score is not None:
-            # Part 1 score 已经是 0-100 分制，无需转换
             p1_pct = part1_score
             if p1_pct >= 85:
                 highlights.append(f"词汇发音准确率高达 {p1_pct:.0f}%，基础扎实")
@@ -68,7 +102,6 @@ class ReportInterpretationService:
             else:
                 weaknesses.append(f"词汇发音正确率 {p1_pct:.0f}%，需加强基础练习")
             
-            # Extract weak words from part1_details
             if part1_details and "words" in part1_details:
                 weak_words = [
                     w["word"] for w in part1_details["words"]
@@ -79,7 +112,6 @@ class ReportInterpretationService:
         
         # Analyze Part 2 (Expression)
         if part2_score is not None and part2_items:
-            p2_pct = part2_score / 24 * 100
             perfect_count = sum(1 for item in part2_items if item.get("score") == 2)
             zero_count = sum(1 for item in part2_items if item.get("score") == 0)
             
@@ -91,40 +123,23 @@ class ReportInterpretationService:
             if zero_count >= 4:
                 weaknesses.append(f"有 {zero_count} 题未能正确回答，需加强句型练习")
             
-            # Add evidence from items
             for item in part2_items[:2]:
                 if item.get("evidence"):
                     evidence.append(f"Q{item['question_no']}: {item['evidence'][:50]}...")
         
-        # Generate suggestions based on star level
+        # Generate suggestions
         if star_level >= 4:
-            suggestions = [
-                "继续保持每日10分钟朗读练习",
-                "可尝试更高难度Level的学习"
-            ]
+            suggestions = ["继续保持每日10分钟朗读练习", "可尝试更高难度Level的学习"]
         elif star_level >= 3:
-            suggestions = [
-                "每天跟读10个核心词汇，注意发音",
-                "每周完成3次问答练习"
-            ]
+            suggestions = ["每天跟读10个核心词汇，注意发音", "每周完成3次问答练习"]
         else:
-            suggestions = [
-                "每天回听录音，对照标准发音纠正",
-                "先从基础词汇发音开始，每天5个词",
-                "每周与老师进行一次口语互动"
-            ]
+            suggestions = ["每天回听录音，对照标准发音纠正", "先从基础词汇发音开始"]
         
-        # Generate parent script
+        # Generate script
         star_emoji = "⭐" * star_level
         parent_script = self._generate_parent_script(
-            student_name=student_name,
-            level=level,
-            total_score=total_score,
-            star_level=star_level,
-            star_emoji=star_emoji,
-            highlights=highlights,
-            weaknesses=weaknesses,
-            suggestions=suggestions
+            student_name, level, total_score, star_level, star_emoji,
+            highlights, weaknesses, suggestions
         )
         
         return ReportInterpretation(
@@ -147,8 +162,6 @@ class ReportInterpretationService:
         suggestions: List[str]
     ) -> str:
         """Generate the full parent communication script."""
-        
-        # Opening
         script = f"""【{student_name}同学 {level} 口语测评报告】
 
 您好！{student_name}同学本次口语测评已完成，以下是详细解读：
@@ -156,26 +169,21 @@ class ReportInterpretationService:
 📊 **综合评分**：{total_score:.1f}/44 分 ({star_emoji})
 
 """
-        
-        # Highlights
         if highlights:
             script += "✅ **亮点**：\n"
             for h in highlights:
                 script += f"• {h}\n"
             script += "\n"
         
-        # Weaknesses
         if weaknesses:
             script += "📌 **需改进**：\n"
             for w in weaknesses:
                 script += f"• {w}\n"
             script += "\n"
         
-        # Suggestions
         script += "💡 **本周建议**：\n"
         for i, s in enumerate(suggestions, 1):
             script += f"{i}. {s}\n"
         
         script += "\n如有任何问题，欢迎随时联系我！"
-        
         return script

@@ -120,3 +120,48 @@ class TestParentView:
         
         # Should fail - token is revoked
         assert response.status_code in [403, 404]
+
+
+class TestInterpretation:
+    """Tests for report interpretation endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_get_interpretation(self, client, test_db, teacher_user, student_profile, auth_teacher):
+        """Test getting report interpretation."""
+        from unittest.mock import patch, AsyncMock
+        from src.adapters.gateways.qwen_client import ReportInterpretationResult
+
+        # Create test
+        test = TestModel(
+            student_id=student_profile.user_id,
+            level="L1",
+            unit="Unit 1",
+            status="completed",
+            total_score=40.0,
+            star_level=4
+        )
+        test_db.add(test)
+        await test_db.commit()
+        await test_db.refresh(test)
+        
+        # Mock Qwen response
+        mock_result = ReportInterpretationResult(
+            success=True,
+            highlights=["Highlight 1"],
+            weaknesses=["Weakness 1"],
+            evidence=["Evidence 1"],
+            suggestions=["Suggestion 1"],
+            parent_script="Parent Script"
+        )
+        
+        # Patch the method on the class that is instantiated in the controller
+        with patch("src.adapters.gateways.qwen_client.QwenOmniGateway.generate_report_interpretation", new_callable=AsyncMock) as mock_generate:
+            mock_generate.return_value = mock_result
+            
+            response = await client.get(f"/api/v1/tests/{test.id}/interpretation")
+            
+            assert response.status_code == 200
+            data = response.json()
+            assert data["highlights"] == ["Highlight 1"]
+            assert data["parent_script"] == "Parent Script"
+

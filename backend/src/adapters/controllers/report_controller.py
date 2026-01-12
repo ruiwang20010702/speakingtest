@@ -583,8 +583,11 @@ async def get_test_interpretation(
     student_name = student_profile.student_name if student_profile else "学生"
     
     # Generate interpretation
-    service = ReportInterpretationService()
-    interpretation = service.generate(
+    from src.adapters.gateways.qwen_client import QwenOmniGateway
+    qwen_gateway = QwenOmniGateway()
+    service = ReportInterpretationService(qwen_gateway)
+    
+    interpretation = await service.generate(
         student_name=student_name,
         level=test.level,
         total_score=float(test.total_score) if test.total_score else 0,
