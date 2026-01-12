@@ -59,7 +59,8 @@ class ReportInterpretationService:
         
         # Analyze Part 1 (Vocabulary)
         if part1_score is not None:
-            p1_pct = part1_score / 20 * 100
+            # Part 1 score 已经是 0-100 分制，无需转换
+            p1_pct = part1_score
             if p1_pct >= 85:
                 highlights.append(f"词汇发音准确率高达 {p1_pct:.0f}%，基础扎实")
             elif p1_pct >= 70:

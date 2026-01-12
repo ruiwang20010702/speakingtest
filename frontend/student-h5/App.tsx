@@ -5,7 +5,6 @@ import HomePage from './pages/HomePage';
 import TestPage from './pages/TestPage';
 import ResultPage from './pages/ResultPage';
 import { Level, TestResult } from './types';
-import { evaluateTest } from './services/api';
 
 // Wrapper for TestPage to handle props from localStorage/API
 const TestContainer: React.FC = () => {

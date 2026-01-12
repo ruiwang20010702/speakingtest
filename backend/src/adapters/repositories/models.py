@@ -221,7 +221,7 @@ class QuestionModel(Base):
     unit = Column(String(50), nullable=False)   # e.g., "Unit 1-4", "Unit 5-8"
     part = Column(Integer, nullable=False, default=2)  # 1=Word Reading, 2=Q&A
     type = Column(String(20), nullable=False, default="question_answer")  # word_reading, question_answer
-    question_no = Column(Integer, nullable=False)  # 1-20 for Part1, 1-12 for Part2
+    question_no = Column(Integer, nullable=False)  # 题目序号，从 1 开始
     question = Column(Text, nullable=False)  # The word/question text
     translation = Column(String(100), nullable=True)  # Chinese translation (for Part 1 words)
     image_url = Column(String(500), nullable=True)  # Image URL (OSS or CDN)
