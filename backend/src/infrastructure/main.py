@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from src.infrastructure.config import get_settings
 from src.infrastructure.database import engine, Base
 from src.infrastructure.logging import setup_logging, RequestLoggingMiddleware
+from src.infrastructure.rate_limit import RateLimitMiddleware
 
 settings = get_settings()
 
@@ -43,8 +44,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Middleware
+# Middleware (order matters: first added = last executed)
 app.add_middleware(RequestLoggingMiddleware)  # Request logging with correlation ID
+app.add_middleware(RateLimitMiddleware, requests_per_minute=120)  # Rate limiting
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Restrict in production

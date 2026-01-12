@@ -330,8 +330,96 @@ async def generate_share_link(
 
 
 # ============================================
+# Share Link Revocation
+# ============================================
+
+class RevokeShareResponse(BaseModel):
+    """Share link revocation response."""
+    success: bool
+    revoked_count: int
+    message: str
+
+
+@router.post(
+    "/tests/{test_id}/revoke-share",
+    response_model=RevokeShareResponse,
+    summary="撤回家长分享链接",
+    description="撤回指定测评的所有分享链接，使家长无法查看报告。"
+)
+async def revoke_share_link(
+    test_id: int,
+    http_request: Request,
+    user_id: int = Depends(get_current_user_id),
+    role: str = Depends(get_current_user_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Revoke all share links for a test.
+    
+    - Requires teacher login or admin role
+    - Sets is_revoked=True for all share tokens
+    """
+    # Get test
+    stmt = select(TestModel).where(TestModel.id == test_id)
+    result = await db.execute(stmt)
+    test = result.scalar_one_or_none()
+    
+    if not test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test not found"
+        )
+    
+    # RBAC check
+    if role != "admin":
+        stmt = select(StudentProfileModel).where(
+            StudentProfileModel.user_id == test.student_id,
+            StudentProfileModel.teacher_id == user_id
+        )
+        result = await db.execute(stmt)
+        if not result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized"
+            )
+    
+    # Revoke all share tokens for this test
+    from sqlalchemy import update
+    stmt = (
+        update(ReportShareTokenModel)
+        .where(
+            ReportShareTokenModel.test_id == test_id,
+            ReportShareTokenModel.is_revoked == False
+        )
+        .values(is_revoked=True)
+    )
+    result = await db.execute(stmt)
+    await db.commit()
+    
+    revoked_count = result.rowcount
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=user_id,
+        action="REVOKE_SHARE",
+        target_type="test",
+        target_id=test_id,
+        details={"revoked_count": revoked_count},
+        request=http_request
+    )
+    
+    return RevokeShareResponse(
+        success=True,
+        revoked_count=revoked_count,
+        message=f"Revoked {revoked_count} share link(s)"
+    )
+
+
+# ============================================
 # Parent View (No Auth Required)
 # ============================================
+
 
 @router.get(
     "/reports/{token}",

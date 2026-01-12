@@ -348,3 +348,303 @@ async def generate_student_token(
         entry_url=result.entry_url,
         message=result.message
     )
+
+
+# ============================================
+# Batch Token Generation
+# ============================================
+
+class BatchTokenRequest(BaseModel):
+    """Batch token generation request."""
+    student_ids: List[int]
+    level: str = "L1"
+    unit: str = "Unit 1"
+
+
+class BatchTokenItem(BaseModel):
+    """Single token in batch response."""
+    student_id: int
+    student_name: Optional[str] = None
+    success: bool
+    token: Optional[str] = None
+    expires_at: Optional[datetime] = None
+    entry_url: Optional[str] = None
+    message: str
+
+
+class BatchTokenResponse(BaseModel):
+    """Batch token generation response."""
+    total: int
+    success_count: int
+    failed_count: int
+    items: List[BatchTokenItem]
+
+
+@router.post(
+    "/batch-tokens",
+    response_model=BatchTokenResponse,
+    summary="批量生成学生测评 Token",
+    description="为多个学生批量生成一次性测评入口链接。"
+)
+async def batch_generate_tokens(
+    request: BatchTokenRequest,
+    http_request: Request,
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Batch generate entry tokens for multiple students.
+    
+    - Requires teacher login
+    - Only generates tokens for students belonging to the teacher
+    """
+    items = []
+    success_count = 0
+    use_case = GenerateStudentTokenUseCase(db)
+    
+    for student_id in request.student_ids:
+        # Validate ownership
+        stmt = select(StudentProfileModel).where(
+            StudentProfileModel.user_id == student_id,
+            StudentProfileModel.teacher_id == user_id
+        )
+        result = await db.execute(stmt)
+        student = result.scalar_one_or_none()
+        
+        if not student:
+            items.append(BatchTokenItem(
+                student_id=student_id,
+                success=False,
+                message="Student not found or not authorized"
+            ))
+            continue
+        
+        try:
+            token_result = await use_case.execute(
+                GenerateTokenRequest(
+                    student_id=student_id,
+                    teacher_id=user_id,
+                    level=request.level,
+                    unit=request.unit
+                )
+            )
+            
+            if token_result.success:
+                items.append(BatchTokenItem(
+                    student_id=student_id,
+                    student_name=student.student_name,
+                    success=True,
+                    token=token_result.token,
+                    expires_at=token_result.expires_at,
+                    entry_url=token_result.entry_url,
+                    message="Token generated"
+                ))
+                success_count += 1
+            else:
+                items.append(BatchTokenItem(
+                    student_id=student_id,
+                    student_name=student.student_name,
+                    success=False,
+                    message=token_result.message
+                ))
+        except Exception as e:
+            items.append(BatchTokenItem(
+                student_id=student_id,
+                student_name=student.student_name if student else None,
+                success=False,
+                message=str(e)
+            ))
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=user_id,
+        action="BATCH_GENERATE_TOKEN",
+        target_type="students",
+        target_id=None,
+        details={
+            "student_ids": request.student_ids,
+            "level": request.level,
+            "unit": request.unit,
+            "success_count": success_count
+        },
+        request=http_request
+    )
+    
+    return BatchTokenResponse(
+        total=len(request.student_ids),
+        success_count=success_count,
+        failed_count=len(request.student_ids) - success_count,
+        items=items
+    )
+
+
+# ============================================
+# Token Revocation
+# ============================================
+
+from src.adapters.repositories.models import StudentEntryTokenModel
+
+
+class RevokeTokenResponse(BaseModel):
+    """Token revocation response."""
+    success: bool
+    revoked_count: int
+    message: str
+
+
+@router.post(
+    "/{student_id}/revoke-token",
+    response_model=RevokeTokenResponse,
+    summary="撤回学生入口 Token",
+    description="撤回指定学生的所有未使用入口 Token，使其无法进入测评。"
+)
+async def revoke_student_token(
+    student_id: int,
+    http_request: Request,
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Revoke all unused entry tokens for a student.
+    
+    - Requires teacher login
+    - Only affects tokens created by this teacher
+    """
+    # Validate ownership
+    stmt = select(StudentProfileModel).where(
+        StudentProfileModel.user_id == student_id,
+        StudentProfileModel.teacher_id == user_id
+    )
+    result = await db.execute(stmt)
+    student = result.scalar_one_or_none()
+    
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found or not authorized"
+        )
+    
+    # Find and revoke all unused tokens
+    from sqlalchemy import update
+    stmt = (
+        update(StudentEntryTokenModel)
+        .where(
+            StudentEntryTokenModel.student_id == student_id,
+            StudentEntryTokenModel.is_used == False,
+            StudentEntryTokenModel.created_by == user_id
+        )
+        .values(is_used=True, used_at=datetime.utcnow())
+    )
+    result = await db.execute(stmt)
+    await db.commit()
+    
+    revoked_count = result.rowcount
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=user_id,
+        action="REVOKE_TOKEN",
+        target_type="student",
+        target_id=student_id,
+        details={"revoked_count": revoked_count},
+        request=http_request
+    )
+    
+    return RevokeTokenResponse(
+        success=True,
+        revoked_count=revoked_count,
+        message=f"Revoked {revoked_count} token(s)"
+    )
+
+
+# ============================================
+# CSV Import
+# ============================================
+
+from fastapi import UploadFile, File
+from src.use_cases.csv_import import CSVImportUseCase, CSVImportResult
+from src.adapters.repositories.models import UserModel
+
+
+class CSVImportResponse(BaseModel):
+    """CSV import response."""
+    success: bool
+    total_rows: int
+    imported_count: int
+    updated_count: int
+    failed_count: int
+    errors: List[str]
+
+
+@router.post(
+    "/import-csv",
+    response_model=CSVImportResponse,
+    summary="CSV 批量导入学生",
+    description="通过 CSV 文件批量导入学生。CSV 必须包含 student_id 和 student_name 列。"
+)
+async def import_students_csv(
+    http_request: Request,
+    file: UploadFile = File(..., description="CSV 文件"),
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Import students from CSV file.
+    
+    Required columns: student_id, student_name
+    Optional columns: cur_age, cur_grade, cur_level_desc
+    """
+    # Get teacher email
+    stmt = select(UserModel).where(UserModel.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    
+    if not user or not user.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Teacher email not found"
+        )
+    
+    # Read CSV content
+    try:
+        content = await file.read()
+        csv_content = content.decode('utf-8')
+    except UnicodeDecodeError:
+        # Try GBK encoding for Chinese files
+        csv_content = content.decode('gbk')
+    
+    use_case = CSVImportUseCase(db)
+    result = await use_case.execute(
+        csv_content=csv_content,
+        teacher_id=user_id,
+        teacher_email=user.email
+    )
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=user_id,
+        action="CSV_IMPORT",
+        target_type="students",
+        target_id=None,
+        details={
+            "total_rows": result.total_rows,
+            "imported_count": result.imported_count,
+            "updated_count": result.updated_count,
+            "failed_count": result.failed_count
+        },
+        request=http_request
+    )
+    
+    return CSVImportResponse(
+        success=result.success,
+        total_rows=result.total_rows,
+        imported_count=result.imported_count,
+        updated_count=result.updated_count,
+        failed_count=result.failed_count,
+        errors=result.errors
+    )
+
+
