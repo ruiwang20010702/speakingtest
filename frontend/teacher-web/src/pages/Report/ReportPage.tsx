@@ -281,6 +281,8 @@ export const ReportPage: React.FC = () => {
                 isOpen={isShareModalOpen}
                 onClose={() => setIsShareModalOpen(false)}
                 link={shareLink}
+                title="报告链接已生成"
+                subtitle="请分享给家长"
             />
         </DashboardLayout>
     );

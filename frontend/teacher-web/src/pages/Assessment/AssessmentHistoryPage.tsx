@@ -21,6 +21,7 @@ export const AssessmentHistoryPage: React.FC = () => {
     const [isNewModalOpen, setIsNewModalOpen] = useState(false);
     const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
     const [generatedLink, setGeneratedLink] = useState('');
+    const [modalConfig, setModalConfig] = useState({ title: '测评链接已生成', subtitle: '请分享给学生' });
     const [isCreating, setIsCreating] = useState(false);
     const [isGeneratingShareLink, setIsGeneratingShareLink] = useState(false);
     const [generatingInterpretation, setGeneratingInterpretation] = useState<string | null>(null);
@@ -90,7 +91,8 @@ export const AssessmentHistoryPage: React.FC = () => {
             const baseUrl = import.meta.env.VITE_STUDENT_APP_URL || window.location.origin.replace('teacher', 'student');
             const link = `${baseUrl}/?token=${token}`;
             
-        setGeneratedLink(link);
+            setGeneratedLink(link);
+            setModalConfig({ title: '测评链接已生成', subtitle: '请分享给学生' });
             setIsNewModalOpen(false);
             setIsLinkModalOpen(true);
             
@@ -146,6 +148,7 @@ export const AssessmentHistoryPage: React.FC = () => {
                 setIsGeneratingShareLink(true);
                 const res = await testsApi.generateShareLink(Number(assessment.id));
                 linkToShow = res.data.share_url;
+                setModalConfig({ title: '报告链接已生成', subtitle: '请分享给家长' });
             } catch (error) {
                 console.error('Failed to generate share link:', error);
                 alert('生成分享链接失败，请重试');
@@ -160,6 +163,7 @@ export const AssessmentHistoryPage: React.FC = () => {
                 alert('该测评尚未生成链接');
                 return;
             }
+            setModalConfig({ title: '测评链接已生成', subtitle: '请分享给学生' });
         }
 
         setGeneratedLink(linkToShow);
@@ -331,6 +335,8 @@ export const AssessmentHistoryPage: React.FC = () => {
                 isOpen={isLinkModalOpen}
                 onClose={() => setIsLinkModalOpen(false)}
                 link={generatedLink}
+                title={modalConfig.title}
+                subtitle={modalConfig.subtitle}
             />
         </DashboardLayout>
     );

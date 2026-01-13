@@ -6,9 +6,17 @@ interface LinkGeneratedModalProps {
     isOpen: boolean;
     onClose: () => void;
     link: string;
+    title?: string;
+    subtitle?: string;
 }
 
-export const LinkGeneratedModal: React.FC<LinkGeneratedModalProps> = ({ isOpen, onClose, link }) => {
+export const LinkGeneratedModal: React.FC<LinkGeneratedModalProps> = ({ 
+    isOpen, 
+    onClose, 
+    link,
+    title = "测评链接已生成",
+    subtitle = "请分享给学生"
+}) => {
     if (!isOpen) return null;
 
     return (
@@ -22,8 +30,8 @@ export const LinkGeneratedModal: React.FC<LinkGeneratedModalProps> = ({ isOpen, 
                     <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4 shadow-sm animate-in zoom-in duration-300">
                         <CheckCircle size={32} strokeWidth={3} />
                     </div>
-                    <h3 className="font-bold text-xl text-text-main">测评链接已生成</h3>
-                    <p className="text-sm text-text-sub mt-1">请分享给学生</p>
+                    <h3 className="font-bold text-xl text-text-main">{title}</h3>
+                    <p className="text-sm text-text-sub mt-1">{subtitle}</p>
                 </div>
 
                 {/* QR Code Area */}
