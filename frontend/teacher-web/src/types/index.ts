@@ -22,6 +22,7 @@ export interface Assessment {
     createdAt: string;   // ISO string
     completedAt?: string; // ISO string
     reportUrl?: string;
+    entryUrl?: string;   // For in-progress assessments
 }
 
 export interface StatsOverview {

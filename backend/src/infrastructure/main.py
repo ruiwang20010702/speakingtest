@@ -80,3 +80,6 @@ app.include_router(question_router, prefix="/api/v1/questions", tags=["Questions
 
 from src.adapters.controllers.admin_controller import router as admin_router
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["Admin"])
+
+from src.adapters.controllers.system_controller import router as system_router
+app.include_router(system_router, prefix="/api/v1/system", tags=["System"])

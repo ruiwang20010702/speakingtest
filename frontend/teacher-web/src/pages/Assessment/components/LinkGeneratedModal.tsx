@@ -28,7 +28,6 @@ export const LinkGeneratedModal: React.FC<LinkGeneratedModalProps> = ({ isOpen, 
 
                 {/* QR Code Area */}
                 <div className="mx-8 my-2 p-6 bg-white border border-border rounded-xl shadow-inner flex flex-col items-center gap-4">
-                    {/* Mock QR Code */}
                     <div className="w-40 h-40 bg-white p-2 border border-slate-100 flex items-center justify-center">
                         <QRCodeSVG value={link} size={140} />
                     </div>

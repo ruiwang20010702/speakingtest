@@ -8,7 +8,7 @@ from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database import get_db
-from src.infrastructure.auth import require_admin
+from src.infrastructure.auth import require_admin, require_teacher, decode_token, oauth2_scheme
 from src.adapters.repositories.models import (
     StudentProfileModel, TestModel, ReportShareTokenModel, StudentEntryTokenModel
 )
@@ -20,6 +20,7 @@ class OverviewStats(BaseModel):
     total_tests: int
     total_shares: int
     total_opens: int
+    pending_followups: int
 
 class FunnelStats(BaseModel):
     scanned: int
@@ -35,33 +36,100 @@ class CostStats(BaseModel):
     "/stats/overview",
     response_model=OverviewStats,
     summary="获取概览数据",
-    description="获取系统总览数据：学生总数、测评总数、分享次数、打开次数。"
+    description="获取系统总览数据：学生总数、测评总数、分享次数、打开次数。教师只能看到自己学生的数据。"
 )
 async def get_overview_stats(
     db: AsyncSession = Depends(get_db),
-    _ = Depends(require_admin)
+    token: str = Depends(oauth2_scheme)
 ):
-    # Total Students
-    stmt_students = select(func.count(StudentProfileModel.user_id))
-    total_students = (await db.execute(stmt_students)).scalar() or 0
+    # Decode token to get user info
+    token_data = decode_token(token)
+    if token_data is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
     
-    # Total Tests
-    stmt_tests = select(func.count(TestModel.id))
-    total_tests = (await db.execute(stmt_tests)).scalar() or 0
+    user_id = token_data.user_id
+    role = token_data.role
     
-    # Total Shares
-    stmt_shares = select(func.count(ReportShareTokenModel.id))
-    total_shares = (await db.execute(stmt_shares)).scalar() or 0
+    # Check role - allow admin and teacher
+    if role not in ("admin", "teacher"):
+        raise HTTPException(status_code=403, detail="Access denied")
     
-    # Total Opens (Sum of view_count)
-    stmt_opens = select(func.sum(ReportShareTokenModel.view_count))
-    total_opens = (await db.execute(stmt_opens)).scalar() or 0
+    # For teachers, filter by their students only
+    if role == "teacher":
+        # Get student IDs for this teacher
+        stmt_student_ids = select(StudentProfileModel.user_id).where(
+            StudentProfileModel.teacher_id == user_id
+        )
+        student_ids_result = await db.execute(stmt_student_ids)
+        student_ids = [row[0] for row in student_ids_result.fetchall()]
+        
+        # Total Students (this teacher's students)
+        total_students = len(student_ids)
+        
+        if student_ids:
+            # Total Tests (only for this teacher's students)
+            stmt_tests = select(func.count(TestModel.id)).where(
+                TestModel.student_id.in_(student_ids)
+            )
+            total_tests = (await db.execute(stmt_tests)).scalar() or 0
+            
+            # Total Shares (only for this teacher's students' tests)
+            stmt_shares = select(func.count(ReportShareTokenModel.id)).where(
+                ReportShareTokenModel.test_id.in_(
+                    select(TestModel.id).where(TestModel.student_id.in_(student_ids))
+                )
+            )
+            total_shares = (await db.execute(stmt_shares)).scalar() or 0
+            
+            # Total Opens
+            stmt_opens = select(func.sum(ReportShareTokenModel.view_count)).where(
+                ReportShareTokenModel.test_id.in_(
+                    select(TestModel.id).where(TestModel.student_id.in_(student_ids))
+                )
+            )
+            total_opens = (await db.execute(stmt_opens)).scalar() or 0
+            
+            # Pending Follow-ups
+            stmt_pending = select(func.count(TestModel.id)).where(
+                TestModel.student_id.in_(student_ids),
+                TestModel.status.in_(['pending', 'part1_done', 'processing', 'failed'])
+            )
+            pending_followups = (await db.execute(stmt_pending)).scalar() or 0
+        else:
+            total_tests = 0
+            total_shares = 0
+            total_opens = 0
+            pending_followups = 0
+    else:
+        # Admin: show all data
+        # Total Students
+        stmt_students = select(func.count(StudentProfileModel.user_id))
+        total_students = (await db.execute(stmt_students)).scalar() or 0
+        
+        # Total Tests
+        stmt_tests = select(func.count(TestModel.id))
+        total_tests = (await db.execute(stmt_tests)).scalar() or 0
+        
+        # Total Shares
+        stmt_shares = select(func.count(ReportShareTokenModel.id))
+        total_shares = (await db.execute(stmt_shares)).scalar() or 0
+        
+        # Total Opens (Sum of view_count)
+        stmt_opens = select(func.sum(ReportShareTokenModel.view_count))
+        total_opens = (await db.execute(stmt_opens)).scalar() or 0
+        
+        # Pending Follow-ups (tests not completed)
+        stmt_pending = select(func.count(TestModel.id)).where(
+            TestModel.status.in_(['pending', 'part1_done', 'processing', 'failed'])
+        )
+        pending_followups = (await db.execute(stmt_pending)).scalar() or 0
     
     return OverviewStats(
         total_students=total_students,
         total_tests=total_tests,
         total_shares=total_shares,
-        total_opens=total_opens
+        total_opens=total_opens,
+        pending_followups=pending_followups
     )
 
 @router.get(

@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { LoginPage } from './pages/Login/LoginPage';
 import { StudentListPage } from './pages/StudentList/StudentListPage';
 import { AssessmentHistoryPage } from './pages/Assessment/AssessmentHistoryPage';
+import { ReportPage } from './pages/Report/ReportPage';
 import { useAuthStore } from './stores/authStore';
 
 // Protected Route Component
@@ -33,6 +34,14 @@ function App() {
           element={
             <ProtectedRoute>
               <AssessmentHistoryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/report/:id"
+          element={
+            <ProtectedRoute>
+              <ReportPage />
             </ProtectedRoute>
           }
         />

@@ -10,7 +10,8 @@ export const StudentListPage: React.FC = () => {
     const [students, setStudents] = useState<Student[]>([]);
     const [stats, setStats] = useState({
         totalStudents: 0,
-        totalTests: 0
+        totalTests: 0,
+        pendingFollowups: 0
     });
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoading, setIsLoading] = useState(true);
@@ -36,7 +37,8 @@ export const StudentListPage: React.FC = () => {
                 setStudents(mappedStudents);
                 setStats({
                     totalStudents: statsRes.data.total_students,
-                    totalTests: statsRes.data.total_tests
+                    totalTests: statsRes.data.total_tests,
+                    pendingFollowups: statsRes.data.pending_followups
                 });
             } catch (error) {
                 console.error('Failed to load dashboard data:', error);
@@ -84,8 +86,8 @@ export const StudentListPage: React.FC = () => {
                 />
                 <StatCard
                     title="待跟进"
-                    value="0"
-                    subtext="暂无事项"
+                    value={stats.pendingFollowups}
+                    subtext="未完成测评"
                     icon="alert"
                 />
             </div>

@@ -57,13 +57,13 @@ export const studentsApi = {
 // Tests API
 export const testsApi = {
   getReport: (testId: number) =>
-    api.get(`/tests/${testId}/report`),
+    api.get<TestReport>(`/tests/${testId}`),
 
   getInterpretation: (testId: number) =>
-    api.get(`/tests/${testId}/interpretation`),
+    api.get<Interpretation>(`/tests/${testId}/interpretation`),
 
   generateShareLink: (testId: number) =>
-    api.post(`/tests/${testId}/share`),
+    api.post<{ token: string; share_url: string; message: string }>(`/tests/${testId}/share`),
 };
 
 // Admin API
@@ -73,12 +73,24 @@ export const adminApi = {
   getCost: () => api.get<CostStats>('/admin/stats/cost'),
 };
 
+// System API
+export interface AIStatusResponse {
+  status: 'online' | 'offline' | 'checking';
+  model: string;
+  message: string;
+}
+
+export const systemApi = {
+  getAiStatus: () => api.get<AIStatusResponse>('/system/ai-status'),
+};
+
 // Types
 export interface OverviewStats {
   total_students: number;
   total_tests: number;
   total_shares: number;
   total_opens: number;
+  pending_followups: number;
 }
 
 export interface FunnelStats {

@@ -5,7 +5,7 @@ import { DashboardLayout } from '../../components/Layout/DashboardLayout';
 import { StatusBadge } from '../../components/UI/StatusBadge';
 import { NewAssessmentModal } from './components/NewAssessmentModal';
 import { LinkGeneratedModal } from './components/LinkGeneratedModal';
-import { studentsApi } from '../../api';
+import { studentsApi, testsApi } from '../../api';
 import type { Student, Assessment } from '../../types';
 
 export const AssessmentHistoryPage: React.FC = () => {
@@ -22,6 +22,7 @@ export const AssessmentHistoryPage: React.FC = () => {
     const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
     const [generatedLink, setGeneratedLink] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+    const [isGeneratingShareLink, setIsGeneratingShareLink] = useState(false);
 
     const loadData = async () => {
         if (!id) return;
@@ -44,7 +45,8 @@ export const AssessmentHistoryPage: React.FC = () => {
                 score: t.total_score,
                 stars: t.star_level,
                 createdAt: t.created_at,
-                completedAt: t.completed_at
+                completedAt: t.completed_at,
+                entryUrl: t.entry_url
             }));
             setAssessments(mappedAssessments);
 
@@ -96,6 +98,69 @@ export const AssessmentHistoryPage: React.FC = () => {
         } finally {
             setIsCreating(false);
         }
+    };
+
+    const handleCopyLink = async (assessment: Assessment) => {
+        let linkToCopy = '';
+        
+        if (assessment.status === 'completed') {
+            // For completed assessments, generate share link
+            try {
+                setIsGeneratingShareLink(true);
+                const res = await testsApi.generateShareLink(Number(assessment.id));
+                linkToCopy = res.data.share_url;
+            } catch (error) {
+                console.error('Failed to generate share link:', error);
+                alert('生成分享链接失败，请重试');
+                return;
+            } finally {
+                setIsGeneratingShareLink(false);
+            }
+        } else {
+            // For in-progress assessments, use entry_url
+            linkToCopy = (assessment as any).entryUrl || '';
+            if (!linkToCopy) {
+                alert('该测评尚未生成链接');
+                return;
+            }
+        }
+
+        try {
+            await navigator.clipboard.writeText(linkToCopy);
+            alert('链接已复制到剪贴板');
+        } catch (error) {
+            console.error('Failed to copy link:', error);
+            alert('复制失败，请手动复制');
+        }
+    };
+
+    const handleShowQRCode = async (assessment: Assessment) => {
+        let linkToShow = '';
+        
+        if (assessment.status === 'completed') {
+            // For completed assessments, generate share link
+            try {
+                setIsGeneratingShareLink(true);
+                const res = await testsApi.generateShareLink(Number(assessment.id));
+                linkToShow = res.data.share_url;
+            } catch (error) {
+                console.error('Failed to generate share link:', error);
+                alert('生成分享链接失败，请重试');
+                return;
+            } finally {
+                setIsGeneratingShareLink(false);
+            }
+        } else {
+            // For in-progress assessments, use entry_url
+            linkToShow = (assessment as any).entryUrl || '';
+            if (!linkToShow) {
+                alert('该测评尚未生成链接');
+                return;
+            }
+        }
+
+        setGeneratedLink(linkToShow);
+        setIsLinkModalOpen(true);
     };
 
     if (isLoading && !student) {
@@ -170,15 +235,26 @@ export const AssessmentHistoryPage: React.FC = () => {
                             {/* Right: Actions */}
                             <div className="flex items-center gap-3">
                                 {assessment.status === 'completed' ? (
-                                    <button className="px-4 py-2 bg-blue-50 text-primary rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-blue-100 transition-colors">
+                                    <button 
+                                        onClick={() => navigate(`/report/${assessment.id}`)}
+                                        className="px-4 py-2 bg-blue-50 text-primary rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-blue-100 transition-colors"
+                                    >
                                         <FileText size={16} /> 查看报告
                                     </button>
                                 ) : (
                                     <>
-                                        <button className="px-4 py-2 border border-border bg-white text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors">
+                                        <button 
+                                            onClick={() => handleCopyLink(assessment)}
+                                            disabled={isGeneratingShareLink}
+                                            className="px-4 py-2 border border-border bg-white text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                                        >
                                             <Copy size={16} /> 复制链接
                                         </button>
-                                        <button className="px-4 py-2 border border-border bg-white text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors">
+                                        <button 
+                                            onClick={() => handleShowQRCode(assessment)}
+                                            disabled={isGeneratingShareLink}
+                                            className="px-4 py-2 border border-border bg-white text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                                        >
                                             <QrCode size={16} /> 二维码
                                         </button>
                                     </>
