@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Loader2, Users, FileText, Share2, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, Users, FileText, Share2, CheckCircle, Building2, UserCircle, UsersRound } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
 import { adminApi, type TeacherDetail } from '../../api';
@@ -77,14 +77,60 @@ export const TeacherDetailPage: React.FC = () => {
                 <div className="flex items-center gap-4">
                     <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
                         <span className="text-primary text-2xl font-bold">
-                            {teacher.email.charAt(0).toUpperCase()}
+                            {(teacher.ss_crm_name || teacher.email).charAt(0).toUpperCase()}
                         </span>
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-text-main">{teacher.email}</h1>
-                        <p className="text-text-sub">用户 ID: {teacher.user_id}</p>
+                    <div className="flex-1">
+                        <h1 className="text-2xl font-bold text-text-main">
+                            {teacher.ss_crm_name || teacher.email}
+                        </h1>
+                        <p className="text-text-sub">{teacher.email}</p>
                     </div>
                 </div>
+                
+                {/* CRM Info Cards */}
+                {(teacher.ss_name || teacher.ss_sm_name || teacher.ss_dept4_name || teacher.ss_group) && (
+                    <div className="mt-6 pt-6 border-t border-gray-100">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {teacher.ss_name && (
+                                <div className="flex items-center gap-2">
+                                    <UserCircle size={16} className="text-text-sub" />
+                                    <div>
+                                        <p className="text-xs text-text-sub">姓名</p>
+                                        <p className="text-sm font-medium text-text-main">{teacher.ss_name}</p>
+                                    </div>
+                                </div>
+                            )}
+                            {teacher.ss_sm_name && (
+                                <div className="flex items-center gap-2">
+                                    <UsersRound size={16} className="text-text-sub" />
+                                    <div>
+                                        <p className="text-xs text-text-sub">SM</p>
+                                        <p className="text-sm font-medium text-text-main">{teacher.ss_sm_name}</p>
+                                    </div>
+                                </div>
+                            )}
+                            {teacher.ss_dept4_name && (
+                                <div className="flex items-center gap-2">
+                                    <Building2 size={16} className="text-text-sub" />
+                                    <div>
+                                        <p className="text-xs text-text-sub">部门</p>
+                                        <p className="text-sm font-medium text-text-main">{teacher.ss_dept4_name}</p>
+                                    </div>
+                                </div>
+                            )}
+                            {teacher.ss_group && (
+                                <div className="flex items-center gap-2">
+                                    <Users size={16} className="text-text-sub" />
+                                    <div>
+                                        <p className="text-xs text-text-sub">组别</p>
+                                        <p className="text-sm font-medium text-text-main">{teacher.ss_group}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Stats Grid */}

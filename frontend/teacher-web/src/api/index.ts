@@ -128,6 +128,8 @@ export interface CostStats {
 export interface TeacherSummary {
   user_id: number;
   email: string;
+  ss_crm_name?: string;
+  ss_dept4_name?: string;
   student_count: number;
   test_count: number;
   share_count: number;
@@ -136,6 +138,11 @@ export interface TeacherSummary {
 export interface TeacherDetail {
   user_id: number;
   email: string;
+  ss_crm_name?: string;
+  ss_name?: string;
+  ss_sm_name?: string;
+  ss_dept4_name?: string;
+  ss_group?: string;
   student_count: number;
   test_count: number;
   completed_tests: number;

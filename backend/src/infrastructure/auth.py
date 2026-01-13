@@ -2,7 +2,7 @@
 Authentication Module (JWT + RBAC)
 Based on /fastapi-auth-patterns workflow.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -12,6 +12,7 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 
 from src.infrastructure.config import get_settings
+from src.infrastructure.timezone import now as china_now, CHINA_TZ
 
 settings = get_settings()
 
@@ -68,7 +69,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         Encoded JWT string
     """
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
+    expire = china_now() + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire})

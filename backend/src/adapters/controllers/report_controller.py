@@ -4,7 +4,7 @@ Handles report viewing and sharing for teachers and parents.
 """
 import json
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from src.infrastructure.database import get_db
 from src.infrastructure.auth import get_current_user_id, get_current_user_role
+from src.infrastructure.timezone import now as china_now
 from src.adapters.repositories.models import (
     TestModel, TestItemModel, StudentProfileModel, ReportShareTokenModel
 )
@@ -129,7 +130,7 @@ async def get_student_tests(
     from src.adapters.repositories.models import StudentEntryTokenModel
     token_stmt = select(StudentEntryTokenModel).where(
         StudentEntryTokenModel.student_id == student_id,
-        StudentEntryTokenModel.expires_at > datetime.now(timezone.utc)
+        StudentEntryTokenModel.expires_at > china_now()
     ).order_by(StudentEntryTokenModel.created_at.desc())
     
     token_result = await db.execute(token_stmt)
@@ -459,7 +460,7 @@ async def view_report_by_token(
     await db.commit()
     
     # Check expiry (if set)
-    if share.expires_at and share.expires_at < datetime.now(timezone.utc):
+    if share.expires_at and share.expires_at < china_now():
         raise HTTPException(
             status_code=status.HTTP_410_GONE,
             detail="链接已过期"
@@ -651,7 +652,7 @@ async def generate_test_interpretation(
             evidence=json.loads(test.interpretation_evidence) if test.interpretation_evidence else [],
             suggestions=json.loads(test.interpretation_suggestions) if test.interpretation_suggestions else [],
             parent_script=test.interpretation_parent_script or ""
-        )
+            )
     
     # Get student name
     stmt = select(StudentProfileModel).where(StudentProfileModel.user_id == test.student_id)
@@ -684,7 +685,7 @@ async def generate_test_interpretation(
     test.interpretation_evidence = json.dumps(interpretation.evidence, ensure_ascii=False)
     test.interpretation_suggestions = json.dumps(interpretation.suggestions, ensure_ascii=False)
     test.interpretation_parent_script = interpretation.parent_script
-    test.interpretation_generated_at = datetime.now(timezone.utc)
+    test.interpretation_generated_at = china_now()
     
     await db.commit()
     

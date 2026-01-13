@@ -2,7 +2,7 @@
 Import Student Use Case
 Fetches student data from CRM and saves/updates it in the local database.
 """
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 from dataclasses import dataclass
 
@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
+from src.infrastructure.timezone import now as china_now
 from src.adapters.repositories.models import StudentProfileModel, UserModel
 from src.adapters.gateways.crm_client import CRMGateway, CRMStudentData
 
@@ -68,8 +69,8 @@ class ImportStudentUseCase:
                 id=crm_data.user_id,
                 role="student",
                 status=1,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc)
+                created_at=china_now(),
+                updated_at=china_now()
             )
             self.db.add(user)
             # Flush to ensure user exists for foreign key constraint if we were to commit partially,
@@ -81,7 +82,7 @@ class ImportStudentUseCase:
         student = result.scalar_one_or_none()
         
         is_new = False
-        now = datetime.now(timezone.utc)
+        now = china_now()
         
         if not student:
             is_new = True

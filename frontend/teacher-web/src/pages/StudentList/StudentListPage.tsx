@@ -113,17 +113,17 @@ export const StudentListPage: React.FC = () => {
                     <Loader2 className="animate-spin text-primary" size={40} />
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-                    {filteredStudents.length > 0 ? (
-                        filteredStudents.map(student => (
-                            <StudentCard key={student.id} student={student} />
-                        ))
-                    ) : (
-                        <div className="col-span-full text-center py-20 text-text-sub">
-                            <p>未找到匹配 "{searchQuery}" 的学生</p>
-                        </div>
-                    )}
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+                {filteredStudents.length > 0 ? (
+                    filteredStudents.map(student => (
+                        <StudentCard key={student.id} student={student} />
+                    ))
+                ) : (
+                    <div className="col-span-full text-center py-20 text-text-sub">
+                        <p>未找到匹配 "{searchQuery}" 的学生</p>
+                    </div>
+                )}
+            </div>
             )}
         </DashboardLayout>
     );

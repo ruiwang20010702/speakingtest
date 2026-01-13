@@ -219,6 +219,8 @@ class TeacherSummary(BaseModel):
     """Teacher summary for list view."""
     user_id: int
     email: str
+    ss_crm_name: Optional[str] = None
+    ss_dept4_name: Optional[str] = None
     student_count: int
     test_count: int
     share_count: int
@@ -228,6 +230,11 @@ class TeacherDetail(BaseModel):
     """Teacher detail with student distribution."""
     user_id: int
     email: str
+    ss_crm_name: Optional[str] = None
+    ss_name: Optional[str] = None
+    ss_sm_name: Optional[str] = None
+    ss_dept4_name: Optional[str] = None
+    ss_group: Optional[str] = None
     student_count: int
     test_count: int
     completed_tests: int
@@ -281,6 +288,8 @@ async def list_teachers(
         summaries.append(TeacherSummary(
             user_id=teacher.id,
             email=teacher.email or "",
+            ss_crm_name=teacher.ss_crm_name,
+            ss_dept4_name=teacher.ss_dept4_name,
             student_count=student_count,
             test_count=test_count,
             share_count=share_count
@@ -350,6 +359,11 @@ async def get_teacher_detail(
     return TeacherDetail(
         user_id=teacher.id,
         email=teacher.email or "",
+        ss_crm_name=teacher.ss_crm_name,
+        ss_name=teacher.ss_name,
+        ss_sm_name=teacher.ss_sm_name,
+        ss_dept4_name=teacher.ss_dept4_name,
+        ss_group=teacher.ss_group,
         student_count=student_count,
         test_count=test_count,
         completed_tests=completed_tests,

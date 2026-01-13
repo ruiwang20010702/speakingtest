@@ -5,13 +5,15 @@ Part 2 评测用例
 import uuid
 import os
 from urllib.parse import urlparse
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
+
+from src.infrastructure.timezone import now as china_now
 
 from src.adapters.repositories.models import TestModel, TestItemModel
 from src.adapters.gateways.qwen_client import QwenOmniGateway, Part2EvaluationResult
@@ -95,7 +97,7 @@ class SubmitPart2UseCase:
         
         # 4. 更新状态
         test.status = "processing"
-        test.updated_at = datetime.now(timezone.utc)
+        test.updated_at = china_now()
         await self.db.commit()
         
         logger.info(f"Part 2 任务已入队: task_id={task_id}, test_id={request.test_id}")
@@ -209,8 +211,8 @@ class ProcessPart2TaskUseCase:
             
             test.star_level = self._calculate_star_level(test.total_score)
             test.status = "completed"
-            test.completed_at = datetime.now(timezone.utc)
-            test.updated_at = datetime.now(timezone.utc)
+            test.completed_at = china_now()
+            test.updated_at = china_now()
             
             # Calculate Cost for Part 2
             if qwen_result.usage:

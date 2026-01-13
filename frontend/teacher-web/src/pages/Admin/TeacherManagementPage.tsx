@@ -30,7 +30,9 @@ export const TeacherManagementPage: React.FC = () => {
     };
 
     const filteredTeachers = teachers.filter(t =>
-        t.email.toLowerCase().includes(searchQuery.toLowerCase())
+        t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (t.ss_crm_name && t.ss_crm_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (t.ss_dept4_name && t.ss_dept4_name.toLowerCase().includes(searchQuery.toLowerCase()))
     );
 
     // Calculate totals
@@ -102,7 +104,7 @@ export const TeacherManagementPage: React.FC = () => {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-sub/50" size={18} />
                     <input
                         type="text"
-                        placeholder="搜索老师邮箱..."
+                        placeholder="搜索老师姓名、邮箱或部门..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="input-field pl-10"
@@ -127,7 +129,8 @@ export const TeacherManagementPage: React.FC = () => {
                     <table className="w-full">
                         <thead className="bg-gray-50 border-b border-gray-100">
                             <tr>
-                                <th className="text-left px-6 py-4 text-sm font-semibold text-text-sub">老师邮箱</th>
+                                <th className="text-left px-6 py-4 text-sm font-semibold text-text-sub">老师</th>
+                                <th className="text-left px-6 py-4 text-sm font-semibold text-text-sub">部门</th>
                                 <th className="text-center px-6 py-4 text-sm font-semibold text-text-sub">学生数</th>
                                 <th className="text-center px-6 py-4 text-sm font-semibold text-text-sub">测评数</th>
                                 <th className="text-center px-6 py-4 text-sm font-semibold text-text-sub">分享数</th>
@@ -146,11 +149,23 @@ export const TeacherManagementPage: React.FC = () => {
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                                                     <span className="text-primary font-semibold">
-                                                        {teacher.email.charAt(0).toUpperCase()}
+                                                        {(teacher.ss_crm_name || teacher.email).charAt(0).toUpperCase()}
                                                     </span>
                                                 </div>
-                                                <span className="font-medium text-text-main">{teacher.email}</span>
+                                                <div>
+                                                    <p className="font-medium text-text-main">
+                                                        {teacher.ss_crm_name || teacher.email}
+                                                    </p>
+                                                    {teacher.ss_crm_name && (
+                                                        <p className="text-xs text-text-sub">{teacher.email}</p>
+                                                    )}
+                                                </div>
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-left">
+                                            <span className="text-sm text-text-sub">
+                                                {teacher.ss_dept4_name || '-'}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
@@ -176,7 +191,7 @@ export const TeacherManagementPage: React.FC = () => {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-20 text-center text-text-sub">
+                                    <td colSpan={6} className="px-6 py-20 text-center text-text-sub">
                                         {searchQuery ? `未找到匹配 "${searchQuery}" 的老师` : '暂无老师数据'}
                                     </td>
                                 </tr>

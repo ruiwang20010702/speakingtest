@@ -3,9 +3,11 @@ Domain Entities - Core Business Objects
 Pure Python objects with no external dependencies.
 """
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, List
 from enum import Enum
+
+from src.infrastructure.timezone import now as china_now
 
 
 class UserRole(str, Enum):
@@ -31,7 +33,7 @@ class User:
     role: UserRole
     email: Optional[str] = None
     status: int = 1
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: china_now())
 
     def is_active(self) -> bool:
         """Check if user is active."""
@@ -66,7 +68,7 @@ class Test:
     part2_score: Optional[float] = None
     star_level: Optional[int] = None
     part2_transcript: Optional[str] = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: china_now())
     completed_at: Optional[datetime] = None
 
     def is_completed(self) -> bool:

@@ -2,8 +2,10 @@
 SQLAlchemy ORM Models
 Maps domain entities to database tables.
 """
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
+
+from src.infrastructure.timezone import now as china_now, CHINA_TZ
 
 from sqlalchemy import (
     BigInteger, Boolean, Column, DateTime, ForeignKey, Index,
@@ -31,9 +33,17 @@ class UserModel(Base):
     email = Column(String(255), unique=True, nullable=True)
     password_hash = Column(String(255), nullable=True)
     status = Column(SmallInteger, default=1)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: china_now())
+    updated_at = Column(DateTime(timezone=True), default=lambda: china_now(), onupdate=lambda: china_now())
     is_deleted = Column(Boolean, default=False)
+    
+    # CRM 相关字段
+    ss_crm_name = Column(String(100), nullable=True)     # CRM 显示名
+    ss_name = Column(String(100), nullable=True)         # 员工姓名
+    ss_sm_name = Column(String(100), nullable=True)      # SM 姓名
+    ss_dept4_name = Column(String(100), nullable=True)   # 部门名称
+    ss_group = Column(String(100), nullable=True)        # 组别
+    crm_synced_at = Column(DateTime(timezone=True), nullable=True)  # CRM 信息最后同步时间
 
     # Relationships
     student_profile = relationship(
@@ -70,8 +80,8 @@ class StudentProfileModel(Base):
     main_last_buy_unit_name = Column(String(100), nullable=True)
     is_upgrade = Column(Integer, default=0)           # New
     last_synced_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: china_now())
+    updated_at = Column(DateTime(timezone=True), default=lambda: china_now(), onupdate=lambda: china_now())
 
     # Relationships
     user = relationship("UserModel", back_populates="student_profile", foreign_keys=[user_id])
@@ -112,8 +122,8 @@ class TestModel(Base):
     interpretation_parent_script = Column(Text, nullable=True)
     interpretation_generated_at = Column(DateTime(timezone=True), nullable=True)
     # Timestamps
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: china_now())
+    updated_at = Column(DateTime(timezone=True), default=lambda: china_now(), onupdate=lambda: china_now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
@@ -138,7 +148,7 @@ class TestItemModel(Base):
     score = Column(SmallInteger, nullable=False)
     feedback = Column(Text, nullable=True)
     evidence = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: china_now())
 
     # Relationships
     test = relationship("TestModel", back_populates="items")
@@ -161,7 +171,7 @@ class StudentEntryTokenModel(Base):
     is_used = Column(Boolean, default=False)
     used_at = Column(DateTime(timezone=True), nullable=True)
     created_by = Column(BigInteger, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: china_now())
 
     __table_args__ = (
         Index("idx_student_entry_tokens_student_id", "student_id"),
@@ -179,7 +189,7 @@ class ReportShareTokenModel(Base):
     is_revoked = Column(Boolean, default=False)
     created_by = Column(BigInteger, ForeignKey("users.id"), nullable=False)
     view_count = Column(Integer, default=0)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: china_now())
 
     __table_args__ = (
         Index("idx_report_share_tokens_test_id", "test_id"),
@@ -198,7 +208,7 @@ class AuditLogModel(Base):
     client_ip = Column(String(45), nullable=True)
     user_agent = Column(String(500), nullable=True)
     details = Column(JSON_TYPE, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: china_now())
 
     __table_args__ = (
         Index("idx_audit_logs_operator_id", "operator_id"),
@@ -219,7 +229,7 @@ class VerificationCodeModel(Base):
     is_used = Column(Boolean, default=False)
     used_at = Column(DateTime(timezone=True), nullable=True)
     ip_address = Column(String(45), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: china_now())
 
     __table_args__ = (
         Index("idx_verification_codes_email", "email"),
@@ -242,8 +252,8 @@ class QuestionModel(Base):
     image_url = Column(String(500), nullable=True)  # Image URL (OSS or CDN)
     reference_answer = Column(Text, nullable=True)  # Expected answer pattern (for Part 2)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: china_now())
+    updated_at = Column(DateTime(timezone=True), default=lambda: china_now(), onupdate=lambda: china_now())
 
     __table_args__ = (
         UniqueConstraint("level", "unit", "part", "question_no", name="uk_level_unit_part_question"),

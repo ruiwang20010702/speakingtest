@@ -2,7 +2,7 @@
 Part 1 Evaluation Use Case
 Orchestrates the speech evaluation flow for Part 1 (reading).
 """
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 from dataclasses import dataclass
 
@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
+from src.infrastructure.timezone import now as china_now
 from src.adapters.repositories.models import TestModel
 from src.adapters.gateways.qwen_client import QwenOmniGateway, Part1EvaluationResult
 from src.adapters.gateways.oss_client import upload_test_audio
@@ -144,7 +145,7 @@ class EvaluatePart1UseCase:
         test.part1_raw_result = evaluation_result.to_dict()
         test.part1_audio_url = audio_url  # 保存音频 URL
         test.status = "part1_done"
-        test.updated_at = datetime.now(timezone.utc)
+        test.updated_at = china_now()
         
         # Calculate Cost
         # Pricing (Qwen3-Omni-Flash):
@@ -290,7 +291,7 @@ class SubmitPart1UseCase:
         # 4. 更新状态
         test.status = "part1_processing"
         test.part1_audio_url = request.audio_url  # 保存音频 URL
-        test.updated_at = datetime.now(timezone.utc)
+        test.updated_at = china_now()
         await self.db.commit()
         
         logger.info(f"Part 1 任务已入队: task_id={task_id}, test_id={request.test_id}")
@@ -363,7 +364,7 @@ class ProcessPart1TaskUseCase:
         test.part1_score = evaluation_result.total_score
         test.part1_raw_result = evaluation_result.to_dict()
         test.status = "part1_done"
-        test.updated_at = datetime.now(timezone.utc)
+        test.updated_at = china_now()
         
         # 6. 计算成本
         if evaluation_result.usage:

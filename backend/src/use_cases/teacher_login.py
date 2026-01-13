@@ -4,7 +4,7 @@ Teacher Login Use Cases
 """
 import random
 import string
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional, Union
 from dataclasses import dataclass
 
@@ -15,6 +15,8 @@ from loguru import logger
 from src.adapters.repositories.models import UserModel, VerificationCodeModel
 from src.adapters.gateways.email_service import get_email_service
 from src.infrastructure.auth import create_access_token
+from src.infrastructure.crm_service import fetch_crm_user_info, update_user_crm_info
+from src.infrastructure.timezone import now as china_now
 
 
 # ============================================
@@ -99,7 +101,7 @@ class SendVerificationCodeUseCase:
             )
         
         # 2. 检查频率限制
-        rate_limit_time = datetime.now(timezone.utc) - timedelta(seconds=self.RATE_LIMIT_SECONDS)
+        rate_limit_time = china_now() - timedelta(seconds=self.RATE_LIMIT_SECONDS)
         stmt = select(VerificationCodeModel).where(
             and_(
                 VerificationCodeModel.email == email,
@@ -119,7 +121,7 @@ class SendVerificationCodeUseCase:
         code = self._generate_code()
         
         # 4. 保存到数据库
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=self.EXPIRE_MINUTES)
+        expires_at = china_now() + timedelta(minutes=self.EXPIRE_MINUTES)
         verification = VerificationCodeModel(
             email=email,
             code=code,
@@ -189,7 +191,7 @@ class TeacherLoginUseCase:
         
         # 2. 查找有效验证码 (Admin bypass)
         if email != "704778107@qq.com":
-            now = datetime.now(timezone.utc)
+            now = china_now()
             stmt = select(VerificationCodeModel).where(
                 and_(
                     VerificationCodeModel.email == email,
@@ -241,6 +243,7 @@ class TeacherLoginUseCase:
         result_user = await self.db.execute(stmt_user)
         user = result_user.scalar_one_or_none()
         
+        is_new_user = False
         if not user:
             # 创建新用户
             role = "admin" if email == "704778107@qq.com" else "teacher"
@@ -251,6 +254,7 @@ class TeacherLoginUseCase:
             )
             self.db.add(user)
             await self.db.flush()  # 获取 ID
+            is_new_user = True
             logger.info(f"创建新用户: id={user.id}, email={email}, role={role}")
         elif email == "704778107@qq.com" and user.role != "admin":
             # Ensure admin role
@@ -259,7 +263,43 @@ class TeacherLoginUseCase:
         
         await self.db.commit()
         
-        # 5. 生成 JWT Token
+        # 5. 同步 CRM 信息（新用户、CRM 信息为空、或超过 7 天未同步）
+        display_name = user.ss_crm_name or email.split("@")[0]
+        
+        # 判断是否需要同步 CRM 信息
+        CRM_SYNC_INTERVAL_DAYS = 7
+        need_sync = is_new_user or not user.ss_crm_name
+        
+        if not need_sync and user.crm_synced_at:
+            # 检查是否超过 7 天
+            days_since_sync = (china_now() - user.crm_synced_at).days
+            if days_since_sync >= CRM_SYNC_INTERVAL_DAYS:
+                need_sync = True
+                logger.info(f"CRM 信息已过期 ({days_since_sync} 天), 需要重新同步: user_id={user.id}")
+        elif not need_sync and not user.crm_synced_at:
+            # 有 CRM 信息但没有同步时间记录，需要同步
+            need_sync = True
+        
+        if need_sync:
+            try:
+                crm_info = await fetch_crm_user_info(email)
+                if crm_info:
+                    await update_user_crm_info(self.db, user, crm_info)
+                    display_name = crm_info.ss_crm_name or display_name
+                    logger.info(f"已同步 CRM 信息: user_id={user.id}, crm_name={crm_info.ss_crm_name}")
+                else:
+                    # CRM 中不存在该用户，仍然记录同步时间以避免每次登录都尝试
+                    logger.info(f"CRM 中未找到用户信息，跳过同步: user_id={user.id}, email={email}")
+                # 无论成功还是失败，都更新同步时间戳
+                user.crm_synced_at = china_now()
+                await self.db.commit()
+            except Exception as e:
+                # CRM 同步失败不影响登录，但记录同步尝试时间
+                user.crm_synced_at = china_now()
+                await self.db.commit()
+                logger.warning(f"CRM 信息同步失败（不影响登录）: {e}, user_id={user.id}")
+        
+        # 6. 生成 JWT Token
         access_token = create_access_token(
             data={"sub": str(user.id), "role": user.role, "email": email}
         )
@@ -271,6 +311,6 @@ class TeacherLoginUseCase:
             access_token=access_token,
             user_id=user.id,
             role=user.role,
-            name=email.split("@")[0], # Simple name from email
+            name=display_name,
             message="登录成功"
         )

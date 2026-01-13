@@ -17,7 +17,7 @@ export const LoginPage: React.FC = () => {
 
     const handleSendCode = async () => {
         if (!email || isSendingCode || countdown > 0) return;
-        
+
         setError(null);
         setIsSendingCode(true);
         try {

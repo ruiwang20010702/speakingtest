@@ -5,7 +5,7 @@ Handles question bank CRUD operations for different levels and units.
 from typing import List, Optional
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from pydantic import BaseModel
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database import get_db
 from src.infrastructure.auth import get_current_user_id, get_current_user_role
+from src.infrastructure.timezone import now as china_now
 from src.adapters.repositories.models import QuestionModel
 from src.adapters.gateways.oss_client import get_oss_client
 from src.infrastructure.audit import log_audit
@@ -453,7 +454,7 @@ async def upload_question_image(
     content = await file.read()
     
     # Generate OSS key
-    now = datetime.now(timezone.utc)
+    now = china_now()
     ext = file.filename.split(".")[-1] if "." in file.filename else "png"
     unique_id = str(uuid.uuid4())[:8]
     oss_key = f"questions/{question.level}/{question_id}_{unique_id}.{ext}"

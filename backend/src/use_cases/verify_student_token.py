@@ -2,13 +2,14 @@
 Student Entry Token Use Case
 Validates entry token and creates a session for the student.
 """
-from datetime import datetime, timezone, timezone
+from datetime import datetime
 from typing import Optional
 from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.timezone import now as china_now
 from src.adapters.repositories.models import StudentEntryTokenModel, UserModel, StudentProfileModel, TestModel
 from src.infrastructure.auth import create_access_token
 
@@ -69,7 +70,7 @@ class VerifyStudentEntryTokenUseCase:
 
         # 2. Check if expired
         # Ensure current time is timezone-aware (UTC) to match database
-        now = datetime.now(timezone.utc)
+        now = china_now()
         
         if entry_token.expires_at < now:
             return TokenVerificationError(
@@ -110,7 +111,7 @@ class VerifyStudentEntryTokenUseCase:
         # 5. Mark token as used (track usage, but don't block re-entry)
         if not entry_token.is_used:
             entry_token.is_used = True
-            entry_token.used_at = datetime.now(timezone.utc)
+            entry_token.used_at = china_now()
 
         # 6. Create test if not exists (should exist from generation, but safe fallback)
         if not test:
