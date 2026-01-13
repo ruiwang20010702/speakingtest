@@ -28,7 +28,7 @@ export const Sidebar: React.FC = () => {
         { icon: Home, label: '工作台', path: '/dashboard' }
     ];
 
-    // Fetch AI status on mount and periodically
+    // Fetch AI status only once on mount (no polling to reduce API calls)
     useEffect(() => {
         const checkAiStatus = async () => {
             try {
@@ -44,10 +44,6 @@ export const Sidebar: React.FC = () => {
         };
 
         checkAiStatus();
-        
-        // Check every 30 seconds
-        const interval = setInterval(checkAiStatus, 30000);
-        return () => clearInterval(interval);
     }, []);
 
     // Close dropdown when clicking outside
