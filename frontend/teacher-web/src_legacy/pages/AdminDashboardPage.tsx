@@ -32,7 +32,7 @@ export default function AdminDashboardPage() {
     };
 
     if (loading) {
-        return (
+    return (
             <Layout title="运营看板" showBack>
                 <div className="flex flex-col items-center justify-center py-20">
                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mb-4"></div>
@@ -111,15 +111,15 @@ export default function AdminDashboardPage() {
                                                     </span>
                                                 )}
                                                 <span className="text-gray-900 font-bold">{step.value}</span>
-                                            </div>
-                                        </div>
+                            </div>
+                        </div>
                                         <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
                                             <div 
                                                 className={`h-full rounded-full ${step.color} transition-all duration-1000 ease-out`}
                                                 style={{ width: `${width}%` }}
                                             ></div>
                                         </div>
-                                    </div>
+                            </div>
                                 );
                             })}
                         </div>
@@ -137,13 +137,13 @@ export default function AdminDashboardPage() {
                                 <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
                                     <span className="text-gray-600">总测评次数</span>
                                     <span className="font-mono font-bold text-xl">{cost?.total_tests || 0}</span>
-                                </div>
+                            </div>
                                 <div className="flex justify-between items-center">
                                     <span className="text-gray-900 font-bold">预估 API 成本</span>
                                     <span className="font-mono font-bold text-2xl text-red-600">
                                         ¥ {(cost?.estimated_cost_cny || 0).toFixed(2)}
-                                    </span>
-                                </div>
+                            </span>
+                        </div>
                             </div>
                             
                             <p className="text-xs text-gray-400 leading-relaxed bg-blue-50/50 p-4 rounded-lg">
@@ -151,10 +151,10 @@ export default function AdminDashboardPage() {
                                 <br/>
                                 * 实际账单请以云厂商控制台为准。
                             </p>
-                        </div>
-                    </section>
-                </div>
+                    </div>
+                </section>
             </div>
+        </div>
         </Layout>
     );
 }

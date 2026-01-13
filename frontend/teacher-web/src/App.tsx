@@ -1,65 +1,44 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { LoginPage } from './pages/Login/LoginPage';
+import { StudentListPage } from './pages/StudentList/StudentListPage';
+import { AssessmentHistoryPage } from './pages/Assessment/AssessmentHistoryPage';
 import { useAuthStore } from './stores/authStore';
-import LoginPage from './pages/LoginPage';
-import StudentsPage from './pages/StudentsPage';
-import StudentDetailPage from './pages/StudentDetailPage';
-import ReportPage from './pages/ReportPage';
-import AdminDashboardPage from './pages/AdminDashboardPage';
-import QuestionsPage from './pages/QuestionsPage';
 
-function PrivateRoute({ children }: { children: React.ReactNode }) {
+// Protected Route Component
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  return isAuthenticated ? children : <Navigate to="/login" />;
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
 }
 
 function App() {
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route
-          path="/"
+          path="/dashboard"
           element={
-            <PrivateRoute>
-              <StudentsPage />
-            </PrivateRoute>
+            <ProtectedRoute>
+              <StudentListPage />
+            </ProtectedRoute>
           }
         />
         <Route
-          path="/students/:id"
+          path="/student/:id"
           element={
-            <PrivateRoute>
-              <StudentDetailPage />
-            </PrivateRoute>
+            <ProtectedRoute>
+              <AssessmentHistoryPage />
+            </ProtectedRoute>
           }
         />
-        <Route
-          path="/report/:id"
-          element={
-            <PrivateRoute>
-              <ReportPage />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/admin/dashboard"
-          element={
-            <PrivateRoute>
-              <AdminDashboardPage />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/admin/questions"
-          element={
-            <PrivateRoute>
-              <QuestionsPage />
-            </PrivateRoute>
-          }
-        />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-    </BrowserRouter>
+    </Router>
   );
 }
 

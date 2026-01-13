@@ -101,14 +101,14 @@ export default function ReportPage() {
                                 <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20 text-sm backdrop-blur-sm">
                                     {report.level} - {report.unit}
                                 </span>
-                            </div>
+                        </div>
                             <div className="flex text-yellow-400 text-2xl mb-6">
                                 {'⭐'.repeat(report.star_level || 0)}
                                 <span className="text-white/20">
                                     {'⭐'.repeat(5 - (report.star_level || 0))}
                                 </span>
-                            </div>
-                            
+                    </div>
+
                             <div className="flex gap-8">
                                 <div>
                                     <span className="block text-white/60 text-xs uppercase tracking-wider mb-1">Part 1 朗读</span>
@@ -119,7 +119,7 @@ export default function ReportPage() {
                                     <span className="block text-white/60 text-xs uppercase tracking-wider mb-1">Part 2 问答</span>
                                     <span className="text-2xl font-bold font-mono">{report.part2_score?.toFixed(1)}</span>
                                 </div>
-                            </div>
+                    </div>
                         </div>
 
                         <div className="text-right">
@@ -185,7 +185,7 @@ export default function ReportPage() {
                                 {interpretation.suggestions.map((item, i) => (
                                     <div key={i} className="bg-blue-50/50 rounded-lg p-4 text-blue-900/80 text-sm leading-relaxed">
                                         {item}
-                                    </div>
+                        </div>
                                 ))}
                             </div>
                         </div>
@@ -196,15 +196,15 @@ export default function ReportPage() {
                                 <h4 className="text-lg font-bold text-amber-800 flex items-center gap-2">
                                     💬 家长沟通话术
                                 </h4>
-                                <button
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(interpretation.parent_script);
-                                        alert('已复制到剪贴板');
-                                    }}
+                            <button
+                                onClick={() => {
+                                    navigator.clipboard.writeText(interpretation.parent_script);
+                                    alert('已复制到剪贴板');
+                                }}
                                     className="text-xs font-medium text-amber-700 bg-amber-100 px-3 py-1.5 rounded-lg hover:bg-amber-200 transition-colors"
-                                >
-                                    复制话术
-                                </button>
+                            >
+                                复制话术
+                            </button>
                             </div>
                             <div className="bg-white/60 rounded-lg p-4 text-amber-900/80 text-sm leading-relaxed whitespace-pre-wrap font-mono">
                                 {interpretation.parent_script}
@@ -271,8 +271,8 @@ export default function ReportPage() {
                                 />
                                 <button 
                                     onClick={() => {
-                                        navigator.clipboard.writeText(shareLink);
-                                        alert('已复制');
+                                navigator.clipboard.writeText(shareLink);
+                                alert('已复制');
                                         setShareLink('');
                                     }}
                                     className="px-6 bg-primary text-white font-bold rounded-xl hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all"

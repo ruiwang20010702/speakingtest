@@ -1,36 +1,40 @@
-@import "tailwindcss";
-
-@theme {
-  --color-primary: #002FA7; /* Klein Blue */
-  --color-primary-hover: #00227a;
-  --color-secondary: #FFD700; /* Professional Yellow */
-  --color-secondary-hover: #e6c200;
-  
-  --color-background: #F8FAFC; /* Slate-50 */
-  --color-surface: #FFFFFF;
-  
-  --color-text-main: #0F172A; /* Slate-900 */
-  --color-text-sub: #475569; /* Slate-600 */
-  --color-border: #E2E8F0; /* Slate-200 */
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  --color-primary: #002FA7;
+  --color-primary-hover: #00227a;
+  --color-secondary: #FFD700;
+  --color-secondary-hover: #e6c200;
+  --color-background: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-text-main: #0F172A;
+  --color-text-sub: #475569;
+  --color-border: #E2E8F0;
+}
 
-  color-scheme: light;
-  color: var(--color-text-main);
+body {
   background-color: var(--color-background);
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  color: var(--color-text-main);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-white font-medium py-3 px-6 rounded-lg transition-all duration-300 shadow-md hover:bg-primary-hover hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none disabled:hover:shadow-md;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary text-text-main font-medium py-3 px-6 rounded-lg transition-all duration-300 shadow-md hover:bg-secondary-hover hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 bg-surface border border-border rounded-lg text-text-main placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200;
+  }
+
+  .card-surface {
+    @apply bg-surface rounded-2xl shadow-xl border border-white/50 backdrop-blur-sm;
+  }
 }

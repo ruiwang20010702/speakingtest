@@ -121,15 +121,15 @@ export default function StudentDetailPage() {
     };
 
     const pageActions = (
-        <button 
+                    <button 
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg font-bold hover:bg-primary-hover shadow-sm transition-all shadow-primary/20"
-            onClick={() => setShowNewTest(true)}
-        >
+                        onClick={() => setShowNewTest(true)}
+                    >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            发起新测评
-        </button>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        发起新测评
+                    </button>
     );
 
     return (
@@ -271,19 +271,19 @@ export default function StudentDetailPage() {
                             <div className="space-y-1.5">
                                 <label className="text-sm font-medium text-gray-700">选择级别</label>
                                 <div className="relative">
-                                    <select 
+                                <select 
                                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-gray-900 appearance-none font-medium"
-                                        value={level} 
-                                        onChange={(e) => setLevel(e.target.value)}
-                                    >
-                                        <option value="L0">L0 (启蒙级)</option>
-                                        <option value="L1">L1</option>
-                                        <option value="L2">L2</option>
-                                        <option value="L3">L3</option>
-                                        <option value="L4">L4</option>
-                                        <option value="L5">L5</option>
-                                        <option value="L6">L6</option>
-                                    </select>
+                                    value={level} 
+                                    onChange={(e) => setLevel(e.target.value)}
+                                >
+                                    <option value="L0">L0 (启蒙级)</option>
+                                    <option value="L1">L1</option>
+                                    <option value="L2">L2</option>
+                                    <option value="L3">L3</option>
+                                    <option value="L4">L4</option>
+                                    <option value="L5">L5</option>
+                                    <option value="L6">L6</option>
+                                </select>
                                     <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500">
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -295,15 +295,15 @@ export default function StudentDetailPage() {
                             <div className="space-y-1.5">
                                 <label className="text-sm font-medium text-gray-700">选择单元</label>
                                 <div className="relative">
-                                    <select 
+                                <select 
                                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-gray-900 appearance-none font-medium"
-                                        value={unit} 
-                                        onChange={(e) => setUnit(e.target.value)}
-                                    >
-                                        <option value="All">全部单元</option>
-                                        <option value="Unit 1-4">Unit 1-4</option>
-                                        <option value="Unit 5-8">Unit 5-8</option>
-                                    </select>
+                                    value={unit} 
+                                    onChange={(e) => setUnit(e.target.value)}
+                                >
+                                    <option value="All">全部单元</option>
+                                    <option value="Unit 1-4">Unit 1-4</option>
+                                    <option value="Unit 5-8">Unit 5-8</option>
+                                </select>
                                     <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500">
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
