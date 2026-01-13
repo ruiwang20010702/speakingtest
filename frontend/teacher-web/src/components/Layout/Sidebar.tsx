@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Home, Zap, UserCircle, LogOut, ChevronUp } from 'lucide-react';
+import { Home, Zap, UserCircle, LogOut, ChevronUp, Users, BookOpen, FileText, AlertTriangle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -7,6 +7,13 @@ import { useAuthStore } from '../../stores/authStore';
 import { systemApi } from '../../api';
 
 type AIStatus = 'online' | 'offline' | 'checking';
+
+interface MenuItem {
+    icon: React.ElementType;
+    label: string;
+    path: string;
+    adminOnly?: boolean;
+}
 
 export const Sidebar: React.FC = () => {
     const navigate = useNavigate();
@@ -24,9 +31,21 @@ export const Sidebar: React.FC = () => {
     const [aiMessage, setAiMessage] = useState('检查中...');
     const [aiModel, setAiModel] = useState('');
 
-    const menuItems = [
-        { icon: Home, label: '工作台', path: '/dashboard' }
+    const isAdmin = role === 'admin';
+
+    // Dashboard path depends on role
+    const dashboardPath = isAdmin ? '/admin/dashboard' : '/dashboard';
+
+    const menuItems: MenuItem[] = [
+        { icon: Home, label: '工作台', path: dashboardPath },
+        { icon: Users, label: '老师管理', path: '/admin/teachers', adminOnly: true },
+        { icon: BookOpen, label: '题库管理', path: '/admin/questions', adminOnly: true },
+        { icon: FileText, label: '系统日志', path: '/admin/audit-logs', adminOnly: true },
+        { icon: AlertTriangle, label: '失败任务', path: '/admin/failed-tasks', adminOnly: true },
     ];
+
+    // Filter menu items based on role
+    const visibleMenuItems = menuItems.filter(item => !item.adminOnly || isAdmin);
 
     // Fetch AI status only once on mount (no polling to reduce API calls)
     useEffect(() => {
@@ -86,8 +105,10 @@ export const Sidebar: React.FC = () => {
 
             {/* Navigation */}
             <nav className="flex-1 px-4 space-y-2">
-                {menuItems.map((item) => {
-                    const isActive = location.pathname.startsWith(item.path);
+                {visibleMenuItems.map((item) => {
+                    const isActive = item.path === dashboardPath 
+                        ? location.pathname === '/dashboard' || location.pathname === '/admin/dashboard' || location.pathname.startsWith('/student')
+                        : location.pathname.startsWith(item.path);
                     return (
                         <button
                             key={item.path}

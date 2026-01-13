@@ -227,7 +227,7 @@ graph TD
 
 ## 4. 产品范围（本期）
 
-### 3.1 测试结构（动态配置）
+### 4.1 测试结构（动态配置）
 
 | Part | 名称 | 分值 | 说明 |
 |------|------|------|------|
@@ -238,7 +238,7 @@ graph TD
 - **评分引擎**：Part1=Qwen-Omni，Part2=Qwen-Omni（本期不接入 Gemini/其他模型）
 - **题目数量**：支持后台动态配置每个 Level/Unit 的 Part 1 和 Part 2 题目数量
 
-### 3.2 评分引擎（更新）
+### 4.2 评分引擎（更新）
 
 | 引擎 | 用途 | 状态 |
 |------|------|------|
@@ -247,7 +247,7 @@ graph TD
 
 > **技术方案更新**：经实测验证，阿里云 Qwen-Omni 模型能够直接理解音频内容并给出评测反馈，适合用于 Part2 的语义评测场景。
 
-### 3.3 输出物
+### 4.3 输出物
 
 #### 学生端（即时简要结果）
 
@@ -265,9 +265,8 @@ graph TD
 
 #### 老师端（解读版）
 
-- **生成方式**：模型生成，允许引用学生转写作为证据点
+- **生成方式**：**Qwen-Omni 模型动态生成**（原计划 MVP 规则生成，现已升级为 AI 生成），引用学生转写作为证据点
 - **家长沟通话术**：亮点、短板、证据点（引用报告片段/示例/转写摘录）、行动建议（1 周练习计划）
-- **实现方式**：MVP 阶段采用**基于规则的逻辑生成**，后续可升级为 LLM 动态生成。
 - **风险提示**：如录音环境差导致的置信度下降说明（若可判断）
 
 #### 家长端（专属链接）
@@ -278,9 +277,9 @@ graph TD
 
 ---
 
-## 4. 核心流程
+## 5. 核心流程
 
-### 4.1 学生端流程
+### 5.1 学生端流程
 
 ```
 扫码进入（学生专属二维码/链接）→ 进入本次测试（Level/Unit）→ 录音(Part1+Part2) → 提交 → 等待评分 → 查看简要结果
@@ -299,7 +298,7 @@ graph TD
    - 显示 Part1 得分（如 18/20）
    - 提示联系老师获取完整报告
 
-### 4.2 老师端流程
+### 5.2 老师端流程
 
 ```
 邮箱验证码登录 → 学生列表 → 查看报告+解读版 → 复制家长链接 → 跟进备注(可选)
@@ -311,7 +310,7 @@ graph TD
 4. 获取家长专属链接：复制/生成二维码（可选）
 5. 跟进备注（可选）：记录与家长沟通结论
 
-### 4.3 家长端流程（H5）
+### 5.3 家长端流程（H5）
 
 ```
 打开专属链接 → 查看报告 → 回放录音 → 分享(可选)
@@ -322,9 +321,9 @@ graph TD
 3. 下载/分享「报告图片/PDF」为可选项
 4. 无有效期限制
 
-### 4.4 核心业务时序图
+### 5.4 核心业务时序图
 
-#### 4.4.1 学生测评流
+#### 5.4.1 学生测评流
 
 ```mermaid
 sequenceDiagram
@@ -352,7 +351,7 @@ sequenceDiagram
     B-->>S: 7. 返回 Part1 分数 + 找老师引导
 ```
 
-#### 4.4.2 老师分享与家长查看流
+#### 5.4.2 老师分享与家长查看流
 
 ```mermaid
 sequenceDiagram
@@ -374,11 +373,11 @@ sequenceDiagram
 
 ---
 
-## 5. 讯飞语音评测（流式版）接口
+## 6. 讯飞语音评测（流式版）接口
 
 > 参考文档：[语音评测（流式版）API 文档](http://xfyun.cn/doc/Ise/IseAPI.html)
 
-### 5.1 接口概述
+### 6.1 接口概述
 
 | 项目 | 说明 |
 |------|------|
@@ -394,7 +393,7 @@ sequenceDiagram
 
 > 说明：控制台里的「语音评测（流式版）」就是通过 **WebSocket 流式**调用的语音评测能力；PRD 统一按该命名。
 
-### 5.1.1 实现必须确认的关键参数（避免对接返工）
+### 6.1.1 实现必须确认的关键参数（避免对接返工）
 
 讯飞语音评测（流式版）除鉴权与音频外，还需要明确业务参数口径（以官方文档为准）：
 
@@ -403,7 +402,7 @@ sequenceDiagram
 - **音频参数**：如 `aue`（编码类型，mp3 常用 `lame`）与 `auf`（采样率/位宽/声道）等
 - **逐词输出能力**：是否支持“一次评测输出逐词/音素分”（用于 Part1 词汇清单）；若不支持，需要调整为逐词评测或分段评测
 
-### 5.2 评测能力
+### 6.2 评测能力
 
 语音评测（流式版）基于深度神经网络，提供：
 - 发音水平分析
@@ -411,7 +410,7 @@ sequenceDiagram
 - 缺陷定位与问题分析
 - 全面分析发音、语调、语速等要素
 
-### 5.3 预期返回字段（待实际对接确认）
+### 6.3 预期返回字段（待实际对接确认）
 
 | 字段 | 说明 | 用途 |
 |------|------|------|
@@ -424,7 +423,7 @@ sequenceDiagram
 | 逐词/音素得分 | 词级别错误标注 | Part1 词汇正确/错误清单 |
 | `duration` | 音频时长 | 统计 |
 
-### 5.4 Part2 评分策略
+### 6.4 Part2 评分策略
 
 #### 方案 A：讯飞语音评测（流式版） + rubric（备选，不作为 MVP 默认）
 
@@ -456,18 +455,18 @@ Qwen-Omni 可以直接理解音频内容并进行语义评测：
 - 输入：学生录音 + 测试题目 + 参考答案
 - 输出：转写文本、多维度评分（发音/语法/流利度/内容）、问题分析、改进建议
 
-### 5.5 官方 Demo
+### 6.5 官方 Demo
 
 - [Java Demo](https://xfyun-doc.xfyun.cn/lcdp-doc/1739518045259325440) 
 - [Python Demo](https://xfyun-doc.xfyun.cn/lcdp-doc/1739518106697568256)
 
 ---
 
-## 6. 阿里云 Qwen-Omni 评测方案（Part2）
+## 7. 阿里云 Qwen-Omni 评测方案（Part2）
 
 > **验证状态**：✅ 已通过实测验证，可正常识别音频并生成评测报告
 
-### 6.1 接口概述
+### 7.1 接口概述
 
 | 项目 | 说明 |
 |------|------|
@@ -481,7 +480,7 @@ Qwen-Omni 可以直接理解音频内容并进行语义评测：
 | **调用方式** | 必须使用流式调用（`stream=True`） |
 | **限流 (Rate Limit)** | **60 RPM** (每分钟 60 次请求) |
 
-### 6.2 核心能力
+### 7.2 核心能力
 
 Qwen-Omni 是端到端的多模态大模型，具备：
 
@@ -491,7 +490,7 @@ Qwen-Omni 是端到端的多模态大模型，具备：
 - ✅ **语法纠错**：检测语法错误并给出正确表达
 - ✅ **个性化反馈**：根据学生表现生成针对性建议
 
-### 6.3 调用示例
+### 7.3 调用示例
 
 ```python
 from openai import OpenAI
@@ -543,7 +542,7 @@ for chunk in completion:
         print(chunk.choices[0].delta.content, end="")
 ```
 
-### 6.4 Part2 评测 Prompt 模板（整段音频一次评测，输出逐题 0/1/2）
+### 7.4 Part2 评测 Prompt 模板（整段音频一次评测，输出逐题 0/1/2）
 
 ```
 你是一位专业的英语口语评测老师。现在给你一段学生完成 Part2（12 题连续作答）的整段录音。
@@ -579,7 +578,7 @@ for chunk in completion:
 - evidence 尽量引用 transcript_full 中对应的原句片段（用于报告证据点）
 ```
 
-### 6.5 成本估算 (Cost Estimation)
+### 7.5 成本估算 (Cost Estimation)
 
 > **计费标准** (单位：元/百万 Tokens)
 > - **输入 (音频)**: ¥15.8
@@ -598,7 +597,7 @@ for chunk in completion:
 **月度成本估算**（1000 学生 × 4 次/月）：
 - 4000 次评测 × ¥0.01 = **¥40/月**
 
-### 6.6 费用统计 (Cost Tracking) - 新增
+### 7.6 费用统计 (Cost Tracking) - 新增
 
 > **计费标准** (Qwen3-Omni-Flash):
 > - **输入 (音频)**: ¥15.8 / 百万 Tokens
@@ -623,7 +622,7 @@ for chunk in completion:
   }
   ```
 
-### 6.7 引擎分工更新
+### 7.7 引擎分工更新
 
 | 场景 | 推荐引擎 | 原因 |
 |------|----------|------|
@@ -634,9 +633,9 @@ for chunk in completion:
 
 ---
 
-## 7. 评分与展示规则
+## 8. 评分与展示规则
 
-### 7.1 分数来源
+### 8.1 分数来源
 
 | Part | 分数来源 | 说明 |
 |------|----------|------|
@@ -645,7 +644,7 @@ for chunk in completion:
 
 > **题目数量**：不再固定，支持后台动态配置每个 Level/Unit 的题目数量。
 
-### 7.2 星级规则
+### 8.2 星级规则
 
 按总分（0-100）映射：
 
@@ -661,16 +660,16 @@ for chunk in completion:
 
 ---
 
-## 8. 功能需求（按端拆分）
+## 9. 功能需求（按端拆分）
 
-### 8.1 学生端（Must）
+### 9.1 学生端（Must）
 
 - [ ] 学生入口：**1 人 1 码**（扫码/打开链接进入；token 过期/已使用/作废提示）
 - [ ] 测试页：题目展示、录音、提交
 - [ ] 结果页（简要）：**仅展示 Part1 得分**；**引导找老师看完整报告**（不展示总分/星级）
 - [ ] 历史记录（可选）：本人最近 N 次
 
-### 8.2 老师端（Must）
+### 9.2 老师端（Must）
 
 - [ ] `@51talk.com` 邮箱验证码登录
 - [ ] 学生列表对接（MVP，默认方案）：对接现有「国内 SS 学生列表」接口，按老师邮箱拉取名下学生（支持分页/搜索）
@@ -684,14 +683,7 @@ for chunk in completion:
 - [ ] 生成家长专属链接（永久有效）
 - [ ] 复制链接/二维码（二维码可选）
 
-### 8.4 管理员端 (Admin)
-
-- [ ] **全量看板**：查看全校/全系统的测评完成率、平均分、异常任务统计。
-- [ ] **题库管理**：支持按 Level/Unit 动态配置 Part 1 和 Part 2 的任意数量题目及参考答案。
-- [ ] **老师管理**：查看老师名下的学生分布及跟进情况。
-- [ ] **系统日志**：查看关键操作审计日志。
-
-### 8.3 家长端（Must）
+### 9.3 家长端（Must）
 
 - [ ] **无需登录**：通过老师分享的加密链接 (`/p/{token}`) 直接访问。
 - [ ] **状态兼容**：
@@ -701,11 +693,18 @@ for chunk in completion:
   - 听录音（Part 1 & Part 2）
   - 看五维图、评语、建议
 
+### 9.4 管理员端 (Admin)
+
+- [ ] **全量看板**：查看全校/全系统的测评完成率、平均分、异常任务统计。
+- [ ] **题库管理**：支持按 Level/Unit 动态配置 Part 1 和 Part 2 的任意数量题目及参考答案。
+- [ ] **老师管理**：查看老师名下的学生分布及跟进情况。
+- [ ] **系统日志**：查看关键操作审计日志。
+
 ---
 
-## 9. 数据模型 (Production Schema)
+## 10. 数据模型 (Production Schema)
 
-### 9.1 数据实体关系图 (ERD)
+### 10.1 数据实体关系图 (ERD)
 
 ```mermaid
 erDiagram
@@ -719,7 +718,7 @@ erDiagram
     Test ||--o| ReportShare : "generates"
 ```
 
-### 9.2 核心表结构定义
+### 10.2 核心表结构定义
 
 > **规范**：所有表必须包含 `created_at`, `updated_at`；逻辑删除字段 `is_deleted` (可选)；主键推荐使用 `BigInt` 自增或 `Snowflake ID`。
 > **时间标准**：所有时间字段（TIMESTAMP）均存储为 **UTC 时间**。前端展示时需根据用户时区（如东八区）进行转换。
@@ -791,6 +790,13 @@ CREATE TABLE tests (
     retry_count SMALLINT DEFAULT 0, -- 重试次数 (New)
     cost DECIMAL(10, 6), -- 费用 (New)
     tokens_used JSONB DEFAULT '{}', -- Token 用量 (New)
+    -- Interpretation (报告解读，存储后避免重复生成)
+    interpretation_highlights TEXT, -- 亮点 (JSON)
+    interpretation_weaknesses TEXT, -- 短板 (JSON)
+    interpretation_evidence TEXT, -- 证据 (JSON)
+    interpretation_suggestions TEXT, -- 建议 (JSON)
+    interpretation_parent_script TEXT, -- 家长话术
+    interpretation_generated_at TIMESTAMP, -- 生成时间
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP, -- 完成时间 (New)
     INDEX idx_student_id (student_id),
@@ -866,7 +872,7 @@ CREATE TABLE audit_logs (
 
 ---
 
-## 10. OSS 方案
+## 11. OSS 方案
 
 ### 存储内容
 
@@ -917,9 +923,9 @@ speakingtest/
 
 ---
 
-## 11. 接口清单 (V1.0 Production)
+## 12. 接口清单 (V1.0 Production)
 
-### 11.1 接口规范 (Standard)
+### 12.1 接口规范 (Standard)
 
 - **Rate Limiting**: 所有接口响应头包含 `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
 - **Error Codes**:
@@ -930,7 +936,7 @@ speakingtest/
   - `429 Too Many Requests`: 触发限流
   - `503 Service Unavailable`: 服务降级/维护中
 
-### 11.2 Auth
+### 12.2 Auth
 
 | Method | Path | 说明 |
 |--------|------|------|
@@ -991,7 +997,8 @@ POST /tests/{id}/submit-part2
 | POST | `/api/v1/students/{id}/tests` | 获取该学生测评历史 |
 | POST | `/api/v1/students/{id}/entry-token` | 生成/重置该学生入口 token（返回链接 + 二维码内容） |
 | GET | `/api/v1/tests/{id}` | 完整报告 |
-| GET | `/api/v1/tests/{id}/interpretation` | 解读版 |
+| POST | `/api/v1/tests/{id}/interpretation` | **生成**解读版（触发 AI 生成并存储） |
+| GET | `/api/v1/tests/{id}/interpretation` | **获取**解读版（需先生成） |
 | POST | `/api/v1/tests/{id}/share` | 生成家长分享链接 |
 
 ### Parent
@@ -1029,7 +1036,7 @@ POST /tests/{id}/submit-part2
 
 ---
 
-## 12. 风险与约束
+## 13. 风险与约束
 
 ### 家长链接安全
 
@@ -1038,7 +1045,7 @@ POST /tests/{id}/submit-part2
   - 报告接口限流、记录访问日志
   - 音频必须走签名 URL，避免永久公开
 
-### 12.3 外部依赖风险 (External Dependencies)
+### 13.3 外部依赖风险 (External Dependencies)
 
 - **API 并发瓶颈**：讯飞语音评测默认仅支持 50 路并发。
   - **影响**：若 1000 人同时考试，最后一名学生可能需等待 20 分钟。
@@ -1109,7 +1116,7 @@ POST /tests/{id}/submit-part2
 
 ---
 
-## 13. 里程碑
+## 14. 里程碑
 
 | 阶段 | 周期 | 内容 |
 |------|------|------|
@@ -1120,9 +1127,9 @@ POST /tests/{id}/submit-part2
 
 ---
 
-## 13. 生产级高可用方案 (High Availability)
+## 15. 生产级高可用方案 (High Availability)
 
-### 13.1 降级策略 (Fallback Strategy)
+### 15.1 降级策略 (Fallback Strategy)
 
 | 场景 | 触发条件 | 降级动作 | 恢复策略 |
 |------|----------|----------|----------|
@@ -1130,7 +1137,7 @@ POST /tests/{id}/submit-part2
 | **Qwen 服务不可用** | API 5xx 错误 或 超时 > 30s | **Part 2 转异步**；前端提示“AI 正在深度思考，请稍后查看报告”；后端放入死信队列 (DLQ) | 指数退避重试 (Exponential Backoff)；若持续失败 > 24h，报警人工介入 |
 | **CRM 接口异常** | 接口超时/5xx | **使用本地缓存**；若无缓存，允许老师手动输入学生姓名（标记为 `unverified`） | 接口恢复后自动同步清洗数据 |
 
-### 13.2 并发控制 (Concurrency Control)
+### 15.2 并发控制 (Concurrency Control)
 
 - **Part 2 异步削峰**：
   - 学生提交后，音频上传 OSS，任务写入 `test_queue` (RabbitMQ/Kafka)。
@@ -1142,7 +1149,7 @@ POST /tests/{id}/submit-part2
   - 读写分离：老师端报表查询走 Read Replica。
   - 慢查询熔断：超过 3s 的统计查询自动熔断，返回缓存旧值。
 
-### 13.3 Part 1 并发控制 (Waiting Room)
+### 15.3 Part 1 并发控制 (Waiting Room)
 
 > **约束**：Qwen-Omni API 限流 **60 RPM**。为防止超限导致服务不可用，必须实施严格的排队机制。
 
@@ -1159,7 +1166,7 @@ POST /tests/{id}/submit-part2
 
 ---
 
-## 14. 待确认事项
+## 16. 待确认事项
 
 > 以下信息不影响先推进重写，但会影响「可实现的报告细节」
 
@@ -1239,4 +1246,5 @@ POST /tests/{id}/submit-part2
 | v1.1 | 2026-01-07 | **代码对齐更新**：同步 Python(FastAPI) + React 技术栈；更新星级评分阈值（40/32/24/16）；明确 Part 1 评分映射逻辑；新增管理员端与题库管理功能描述；同步数据库字段（ss_crm_name 等）。 |
 | v1.2 | 2026-01-09 | **全链路 Qwen-Omni 升级**：Part 1/2 统一使用 Qwen-Omni；新增费用统计 (Cost Tracking) 与 Token 用量明细；数据库结构同步 (CRM 字段、URL、Raw Result)；统一 UTC 时间标准；更新 OSS 上传策略。 |
 | v1.3 | 2026-01-12 | **动态题目数量支持**：Part 1/2 题目数量不再固定，支持后台动态配置；评分改为 0-100 分制（Part 1 + Part 2 平均分）；星级规则同步更新为基于 0-100 总分。 |
+| v1.4 | 2026-01-13 | **报告解读功能落地**：实现基于 Qwen-Omni 的 AI 报告解读生成（亮点/短板/证据/建议/话术）；数据库 tests 表新增 interpretation 相关字段；新增生成解读 API。 |
 

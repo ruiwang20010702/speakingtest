@@ -71,9 +71,24 @@ export const testsApi = {
 
 // Admin API
 export const adminApi = {
+  // Stats
   getOverview: () => api.get<OverviewStats>('/admin/stats/overview'),
   getFunnel: () => api.get<FunnelStats>('/admin/stats/funnel'),
   getCost: () => api.get<CostStats>('/admin/stats/cost'),
+
+  // Teacher Management
+  getTeachers: () => api.get<TeacherSummary[]>('/admin/teachers'),
+  getTeacherDetail: (teacherId: number) => api.get<TeacherDetail>(`/admin/teachers/${teacherId}`),
+
+  // Audit Logs
+  getAuditLogs: (params?: { action?: string; operator_id?: number; page?: number; limit?: number }) =>
+    api.get<AuditLogResponse>('/admin/audit-logs', { params }),
+
+  // Failed Tasks
+  getFailedTasks: (maxRetry?: number) =>
+    api.get<FailedTasksResponse>('/admin/failed-tasks', { params: maxRetry !== undefined ? { max_retry: maxRetry } : {} }),
+  retryTask: (testId: number) =>
+    api.post<RetryTaskResponse>(`/admin/failed-tasks/${testId}/retry`),
 };
 
 // System API
@@ -94,6 +109,7 @@ export interface OverviewStats {
   total_shares: number;
   total_opens: number;
   pending_followups: number;
+  failed_tasks: number;
 }
 
 export interface FunnelStats {
@@ -106,6 +122,74 @@ export interface FunnelStats {
 export interface CostStats {
   total_tests: number;
   estimated_cost_cny: number;
+}
+
+// Teacher Management Types
+export interface TeacherSummary {
+  user_id: number;
+  email: string;
+  student_count: number;
+  test_count: number;
+  share_count: number;
+}
+
+export interface TeacherDetail {
+  user_id: number;
+  email: string;
+  student_count: number;
+  test_count: number;
+  completed_tests: number;
+  share_count: number;
+  students: Array<{
+    user_id: number;
+    student_name: string;
+    test_count: number;
+  }>;
+}
+
+// Audit Log Types
+export interface AuditLogItem {
+  id: number;
+  operator_id: number;
+  operator_email?: string;
+  action: string;
+  target_type?: string;
+  target_id?: number;
+  details?: Record<string, unknown>;
+  client_ip?: string;
+  created_at: string;
+}
+
+export interface AuditLogResponse {
+  total: number;
+  page: number;
+  limit: number;
+  items: AuditLogItem[];
+}
+
+// Failed Tasks Types
+export interface FailedTaskItem {
+  test_id: number;
+  student_name?: string;
+  student_id: number;
+  level: string;
+  unit: string;
+  status: string;
+  failure_reason?: string;
+  retry_count: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface FailedTasksResponse {
+  total: number;
+  items: FailedTaskItem[];
+}
+
+export interface RetryTaskResponse {
+  success: boolean;
+  message: string;
+  test_id: number;
 }
 
 export interface StudentListItem {

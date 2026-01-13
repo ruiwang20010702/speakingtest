@@ -21,6 +21,7 @@ class OverviewStats(BaseModel):
     total_shares: int
     total_opens: int
     pending_followups: int
+    failed_tasks: int
 
 class FunnelStats(BaseModel):
     scanned: int
@@ -95,11 +96,19 @@ async def get_overview_stats(
                 TestModel.status.in_(['pending', 'part1_done', 'processing', 'failed'])
             )
             pending_followups = (await db.execute(stmt_pending)).scalar() or 0
+            
+            # Failed Tasks
+            stmt_failed = select(func.count(TestModel.id)).where(
+                TestModel.student_id.in_(student_ids),
+                TestModel.status == 'failed'
+            )
+            failed_tasks = (await db.execute(stmt_failed)).scalar() or 0
         else:
             total_tests = 0
             total_shares = 0
             total_opens = 0
             pending_followups = 0
+            failed_tasks = 0
     else:
         # Admin: show all data
         # Total Students
@@ -123,13 +132,20 @@ async def get_overview_stats(
             TestModel.status.in_(['pending', 'part1_done', 'processing', 'failed'])
         )
         pending_followups = (await db.execute(stmt_pending)).scalar() or 0
+        
+        # Failed Tasks count
+        stmt_failed = select(func.count(TestModel.id)).where(
+            TestModel.status == 'failed'
+        )
+        failed_tasks = (await db.execute(stmt_failed)).scalar() or 0
     
     return OverviewStats(
         total_students=total_students,
         total_tests=total_tests,
         total_shares=total_shares,
         total_opens=total_opens,
-        pending_followups=pending_followups
+        pending_followups=pending_followups,
+        failed_tasks=failed_tasks
     )
 
 @router.get(
