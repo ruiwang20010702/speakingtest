@@ -216,7 +216,17 @@ export const AssessmentHistoryPage: React.FC = () => {
                                 </div>
                                 <div className="flex items-center gap-4 text-sm text-text-sub">
                                     <span>{new Date(assessment.createdAt).toLocaleDateString()}</span>
-                                    {assessment.completedAt && <span>完成时间: {new Date(assessment.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                                    {assessment.completedAt && (
+                                        <span>
+                                            完成时间: {new Date(assessment.completedAt).toLocaleString([], { 
+                                                year: 'numeric',
+                                                month: '2-digit',
+                                                day: '2-digit',
+                                                hour: '2-digit', 
+                                                minute: '2-digit' 
+                                            })}
+                                        </span>
+                                    )}
                                 </div>
                                 {/* Score Display */}
                                 {assessment.status === 'completed' && assessment.score !== undefined && (
