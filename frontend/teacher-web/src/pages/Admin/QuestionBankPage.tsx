@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Loader2, Plus, Edit2, Trash2, Save, X, Upload, BookOpen } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Loader2, Plus, Edit2, Trash2, Save, X, Upload, BookOpen, ChevronDown, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
 import { questionsApi, type Question, type QuestionCreate, type QuestionUpdate } from '../../api';
 
@@ -25,6 +26,26 @@ export const QuestionBankPage: React.FC = () => {
     
     // Upload state
     const [uploadingId, setUploadingId] = useState<number | null>(null);
+    
+    // Dropdown state
+    const [isLevelDropdownOpen, setIsLevelDropdownOpen] = useState(false);
+    const [isUnitDropdownOpen, setIsUnitDropdownOpen] = useState(false);
+    const levelDropdownRef = useRef<HTMLDivElement>(null);
+    const unitDropdownRef = useRef<HTMLDivElement>(null);
+    
+    // Close dropdowns when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (levelDropdownRef.current && !levelDropdownRef.current.contains(event.target as Node)) {
+                setIsLevelDropdownOpen(false);
+            }
+            if (unitDropdownRef.current && !unitDropdownRef.current.contains(event.target as Node)) {
+                setIsUnitDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     useEffect(() => {
         loadQuestions();
@@ -139,29 +160,94 @@ export const QuestionBankPage: React.FC = () => {
 
             {/* Filters */}
             <div className="flex gap-4 mb-8">
-                <div className="flex-1">
+                {/* Level Dropdown */}
+                <div className="flex-1 max-w-xs" ref={levelDropdownRef}>
                     <label className="block text-sm font-medium text-text-sub mb-2">Level</label>
-                    <select
-                        value={selectedLevel}
-                        onChange={(e) => setSelectedLevel(e.target.value)}
-                        className="input-field"
-                    >
-                        {LEVELS.map(level => (
-                            <option key={level} value={level}>{level}</option>
-                        ))}
-                    </select>
+                    <div className="relative">
+                        <button
+                            type="button"
+                            onClick={() => { setIsLevelDropdownOpen(!isLevelDropdownOpen); setIsUnitDropdownOpen(false); }}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-surface border border-gray-200 rounded-xl text-left hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                        >
+                            <span className="text-text-main font-medium">{selectedLevel}</span>
+                            <ChevronDown 
+                                size={18} 
+                                className={`text-text-sub transition-transform duration-200 ${isLevelDropdownOpen ? 'rotate-180' : ''}`} 
+                            />
+                        </button>
+                        
+                        <AnimatePresence>
+                            {isLevelDropdownOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute z-50 w-full mt-2 bg-surface border border-gray-200 rounded-xl shadow-xl overflow-hidden"
+                                >
+                                    <div className="max-h-64 overflow-y-auto py-2">
+                                        {LEVELS.map(level => (
+                                            <button
+                                                key={level}
+                                                onClick={() => { setSelectedLevel(level); setIsLevelDropdownOpen(false); }}
+                                                className={`w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50 transition-colors ${
+                                                    selectedLevel === level ? 'bg-primary/5 text-primary font-medium' : 'text-text-main'
+                                                }`}
+                                            >
+                                                <span>{level}</span>
+                                                {selectedLevel === level && <Check size={16} className="text-primary" />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
                 </div>
-                <div className="flex-1">
+                
+                {/* Unit Dropdown */}
+                <div className="flex-1 max-w-xs" ref={unitDropdownRef}>
                     <label className="block text-sm font-medium text-text-sub mb-2">Unit</label>
-                    <select
-                        value={selectedUnit}
-                        onChange={(e) => setSelectedUnit(e.target.value)}
-                        className="input-field"
-                    >
-                        {UNITS.map(unit => (
-                            <option key={unit} value={unit}>{unit}</option>
-                        ))}
-                    </select>
+                    <div className="relative">
+                        <button
+                            type="button"
+                            onClick={() => { setIsUnitDropdownOpen(!isUnitDropdownOpen); setIsLevelDropdownOpen(false); }}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-surface border border-gray-200 rounded-xl text-left hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                        >
+                            <span className="text-text-main font-medium">{selectedUnit}</span>
+                            <ChevronDown 
+                                size={18} 
+                                className={`text-text-sub transition-transform duration-200 ${isUnitDropdownOpen ? 'rotate-180' : ''}`} 
+                            />
+                        </button>
+                        
+                        <AnimatePresence>
+                            {isUnitDropdownOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute z-50 w-full mt-2 bg-surface border border-gray-200 rounded-xl shadow-xl overflow-hidden"
+                                >
+                                    <div className="max-h-64 overflow-y-auto py-2">
+                                        {UNITS.map(unit => (
+                                            <button
+                                                key={unit}
+                                                onClick={() => { setSelectedUnit(unit); setIsUnitDropdownOpen(false); }}
+                                                className={`w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50 transition-colors ${
+                                                    selectedUnit === unit ? 'bg-primary/5 text-primary font-medium' : 'text-text-main'
+                                                }`}
+                                            >
+                                                <span>{unit}</span>
+                                                {selectedUnit === unit && <Check size={16} className="text-primary" />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
                 </div>
             </div>
 

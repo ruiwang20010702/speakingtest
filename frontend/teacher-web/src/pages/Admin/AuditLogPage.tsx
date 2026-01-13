@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Loader2, ChevronLeft, ChevronRight, User, Clock, MapPin } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Loader2, ChevronLeft, ChevronRight, User, Clock, MapPin, ChevronDown, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
 import { adminApi, type AuditLogItem } from '../../api';
 
@@ -37,6 +38,21 @@ export const AuditLogPage: React.FC = () => {
     const [actionFilter, setActionFilter] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
+    
+    // Custom dropdown state
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     useEffect(() => {
         loadLogs();
@@ -93,18 +109,63 @@ export const AuditLogPage: React.FC = () => {
 
             {/* Filters */}
             <div className="flex gap-4 mb-6">
-                <div className="flex-1 max-w-xs">
+                <div className="flex-1 max-w-xs" ref={dropdownRef}>
                     <label className="block text-sm font-medium text-text-sub mb-2">操作类型</label>
-                    <select
-                        value={actionFilter}
-                        onChange={(e) => { setActionFilter(e.target.value); setPage(1); }}
-                        className="input-field"
-                    >
-                        <option value="">全部操作</option>
-                        {uniqueActions.map(action => (
-                            <option key={action} value={action}>{ACTION_LABELS[action]}</option>
-                        ))}
-                    </select>
+                    <div className="relative">
+                        <button
+                            type="button"
+                            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-surface border border-gray-200 rounded-xl text-left hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                        >
+                            <span className={actionFilter ? 'text-text-main' : 'text-text-sub'}>
+                                {actionFilter ? ACTION_LABELS[actionFilter] : '全部操作'}
+                            </span>
+                            <ChevronDown 
+                                size={18} 
+                                className={`text-text-sub transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} 
+                            />
+                        </button>
+                        
+                        <AnimatePresence>
+                            {isDropdownOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute z-50 w-full mt-2 bg-surface border border-gray-200 rounded-xl shadow-xl overflow-hidden"
+                                >
+                                    <div className="max-h-80 overflow-y-auto py-2">
+                                        <button
+                                            onClick={() => { setActionFilter(''); setPage(1); setIsDropdownOpen(false); }}
+                                            className={`w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50 transition-colors ${
+                                                !actionFilter ? 'bg-primary/5 text-primary font-medium' : 'text-text-main'
+                                            }`}
+                                        >
+                                            <span>全部操作</span>
+                                            {!actionFilter && <Check size={16} className="text-primary" />}
+                                        </button>
+                                        <div className="h-px bg-gray-100 my-1" />
+                                        {uniqueActions.map(action => (
+                                            <button
+                                                key={action}
+                                                onClick={() => { setActionFilter(action); setPage(1); setIsDropdownOpen(false); }}
+                                                className={`w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50 transition-colors ${
+                                                    actionFilter === action ? 'bg-primary/5 text-primary font-medium' : 'text-text-main'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <span className={`inline-flex w-2 h-2 rounded-full ${ACTION_COLORS[action]?.split(' ')[0] || 'bg-gray-200'}`} />
+                                                    <span>{ACTION_LABELS[action]}</span>
+                                                </div>
+                                                {actionFilter === action && <Check size={16} className="text-primary" />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
                 </div>
             </div>
 
