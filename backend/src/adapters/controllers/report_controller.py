@@ -2,6 +2,7 @@
 Report Controller
 Handles report viewing and sharing for teachers and parents.
 """
+import json
 import secrets
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -40,6 +41,7 @@ class TestSummary(BaseModel):
     created_at: datetime
     completed_at: Optional[datetime] = None
     entry_url: Optional[str] = None
+    is_interpreted: bool = False  # 是否已生成报告解读
 
 
 class TestItemDetail(BaseModel):
@@ -155,7 +157,8 @@ async def get_student_tests(
             star_level=t.star_level,
             created_at=t.created_at,
             completed_at=t.completed_at,
-            entry_url=f"{BASE_URL}/{token_map.get((t.level, t.unit))}" if t.status != 'completed' and (t.level, t.unit) in token_map else None
+            entry_url=f"{BASE_URL}/{token_map.get((t.level, t.unit))}" if t.status != 'completed' and (t.level, t.unit) in token_map else None,
+            is_interpreted=t.interpretation_generated_at is not None
         )
         for t in tests
     ]
@@ -530,8 +533,8 @@ class InterpretationResponse(BaseModel):
 @router.get(
     "/tests/{test_id}/interpretation",
     response_model=InterpretationResponse,
-    summary="获取报告解读版",
-    description="获取 AI 生成的报告解读，包含亮点、短板、证据和家长沟通话术。"
+    summary="获取报告解读",
+    description="获取已生成的报告解读。如果尚未生成，返回 404。"
 )
 async def get_test_interpretation(
     test_id: int,
@@ -540,7 +543,64 @@ async def get_test_interpretation(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get AI-generated interpretation for a test.
+    Get stored interpretation for a test.
+    Returns 404 if not yet generated.
+    """
+    # Get test
+    stmt = select(TestModel).where(TestModel.id == test_id)
+    result = await db.execute(stmt)
+    test = result.scalar_one_or_none()
+    
+    if not test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test not found"
+        )
+    
+    # RBAC check
+    if role != "admin":
+        stmt = select(StudentProfileModel).where(
+            StudentProfileModel.user_id == test.student_id,
+            StudentProfileModel.teacher_id == user_id
+        )
+        result = await db.execute(stmt)
+        if not result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized"
+            )
+    
+    # Check if interpretation exists
+    if not test.interpretation_generated_at:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="解读尚未生成，请先调用 POST 接口生成解读"
+        )
+    
+    # Return stored interpretation
+    return InterpretationResponse(
+        highlights=json.loads(test.interpretation_highlights) if test.interpretation_highlights else [],
+        weaknesses=json.loads(test.interpretation_weaknesses) if test.interpretation_weaknesses else [],
+        evidence=json.loads(test.interpretation_evidence) if test.interpretation_evidence else [],
+        suggestions=json.loads(test.interpretation_suggestions) if test.interpretation_suggestions else [],
+        parent_script=test.interpretation_parent_script or ""
+    )
+
+
+@router.post(
+    "/tests/{test_id}/interpretation",
+    response_model=InterpretationResponse,
+    summary="生成报告解读",
+    description="生成 AI 报告解读并存储到数据库，包含亮点、短板、证据和家长沟通话术。"
+)
+async def generate_test_interpretation(
+    test_id: int,
+    user_id: int = Depends(get_current_user_id),
+    role: str = Depends(get_current_user_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate and store AI interpretation for a test.
     
     Generates:
     - Highlights (亮点)
@@ -576,6 +636,23 @@ async def get_test_interpretation(
                 detail="Not authorized"
             )
     
+    # Check test status
+    if test.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="只有已完成的测评才能生成解读"
+        )
+    
+    # Check if already generated (return existing)
+    if test.interpretation_generated_at:
+        return InterpretationResponse(
+            highlights=json.loads(test.interpretation_highlights) if test.interpretation_highlights else [],
+            weaknesses=json.loads(test.interpretation_weaknesses) if test.interpretation_weaknesses else [],
+            evidence=json.loads(test.interpretation_evidence) if test.interpretation_evidence else [],
+            suggestions=json.loads(test.interpretation_suggestions) if test.interpretation_suggestions else [],
+            parent_script=test.interpretation_parent_script or ""
+        )
+    
     # Get student name
     stmt = select(StudentProfileModel).where(StudentProfileModel.user_id == test.student_id)
     result = await db.execute(stmt)
@@ -600,6 +677,16 @@ async def get_test_interpretation(
             for item in test.items
         ] if test.items else None
     )
+    
+    # Store interpretation to database
+    test.interpretation_highlights = json.dumps(interpretation.highlights, ensure_ascii=False)
+    test.interpretation_weaknesses = json.dumps(interpretation.weaknesses, ensure_ascii=False)
+    test.interpretation_evidence = json.dumps(interpretation.evidence, ensure_ascii=False)
+    test.interpretation_suggestions = json.dumps(interpretation.suggestions, ensure_ascii=False)
+    test.interpretation_parent_script = interpretation.parent_script
+    test.interpretation_generated_at = datetime.now(timezone.utc)
+    
+    await db.commit()
     
     return InterpretationResponse(
         highlights=interpretation.highlights,

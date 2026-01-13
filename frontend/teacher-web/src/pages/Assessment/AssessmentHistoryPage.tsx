@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Plus, Copy, QrCode, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Copy, QrCode, FileText, Loader2, Sparkles, BookOpen } from 'lucide-react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
 import { StatusBadge } from '../../components/UI/StatusBadge';
@@ -23,6 +23,7 @@ export const AssessmentHistoryPage: React.FC = () => {
     const [generatedLink, setGeneratedLink] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [isGeneratingShareLink, setIsGeneratingShareLink] = useState(false);
+    const [generatingInterpretation, setGeneratingInterpretation] = useState<string | null>(null);
 
     const loadData = async () => {
         if (!id) return;
@@ -46,7 +47,8 @@ export const AssessmentHistoryPage: React.FC = () => {
                 stars: t.star_level,
                 createdAt: t.created_at,
                 completedAt: t.completed_at,
-                entryUrl: t.entry_url
+                entryUrl: t.entry_url,
+                isInterpreted: t.is_interpreted ?? false
             }));
             setAssessments(mappedAssessments);
 
@@ -164,6 +166,20 @@ export const AssessmentHistoryPage: React.FC = () => {
         setIsLinkModalOpen(true);
     };
 
+    const handleGenerateInterpretation = async (testId: string) => {
+        setGeneratingInterpretation(testId);
+        try {
+            await testsApi.generateInterpretation(Number(testId));
+            // Refresh list to update button state
+            loadData();
+        } catch (error) {
+            console.error('Failed to generate interpretation:', error);
+            alert('生成报告解读失败，请重试');
+        } finally {
+            setGeneratingInterpretation(null);
+        }
+    };
+
     if (isLoading && !student) {
         return (
             <DashboardLayout>
@@ -246,12 +262,35 @@ export const AssessmentHistoryPage: React.FC = () => {
                             {/* Right: Actions */}
                             <div className="flex items-center gap-3">
                                 {assessment.status === 'completed' ? (
-                                    <button 
-                                        onClick={() => navigate(`/report/${assessment.id}`)}
-                                        className="px-4 py-2 bg-blue-50 text-primary rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-blue-100 transition-colors"
-                                    >
-                                        <FileText size={16} /> 查看报告
-                                    </button>
+                                    <>
+                                        <button 
+                                            onClick={() => navigate(`/report/${assessment.id}`)}
+                                            className="px-4 py-2 bg-blue-50 text-primary rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-blue-100 transition-colors"
+                                        >
+                                            <FileText size={16} /> 查看报告
+                                        </button>
+                                        {assessment.isInterpreted ? (
+                                            <button 
+                                                onClick={() => navigate(`/interpretation/${assessment.id}`)}
+                                                className="px-4 py-2 border border-primary/30 bg-primary/5 text-primary rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-primary/10 transition-colors"
+                                            >
+                                                <BookOpen size={16} /> 查看解读报告
+                                            </button>
+                                        ) : (
+                                            <button 
+                                                onClick={() => handleGenerateInterpretation(assessment.id)}
+                                                disabled={generatingInterpretation === assessment.id}
+                                                className="px-4 py-2 border border-border bg-white text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                                            >
+                                                {generatingInterpretation === assessment.id ? (
+                                                    <Loader2 className="animate-spin" size={16} />
+                                                ) : (
+                                                    <Sparkles size={16} />
+                                                )}
+                                                生成报告解读
+                                            </button>
+                                        )}
+                                    </>
                                 ) : (
                                     <>
                                         <button 

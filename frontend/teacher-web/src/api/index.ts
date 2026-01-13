@@ -62,6 +62,9 @@ export const testsApi = {
   getInterpretation: (testId: number) =>
     api.get<Interpretation>(`/tests/${testId}/interpretation`),
 
+  generateInterpretation: (testId: number) =>
+    api.post<Interpretation>(`/tests/${testId}/interpretation`),
+
   generateShareLink: (testId: number) =>
     api.post<{ token: string; share_url: string; message: string }>(`/tests/${testId}/share`),
 };
@@ -139,6 +142,7 @@ export interface TestSummary {
   created_at: string;
   completed_at?: string;
   entry_url?: string;
+  is_interpreted: boolean;  // 是否已生成报告解读
 }
 
 export interface TestReport {

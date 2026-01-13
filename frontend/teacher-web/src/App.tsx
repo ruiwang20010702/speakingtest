@@ -3,6 +3,7 @@ import { LoginPage } from './pages/Login/LoginPage';
 import { StudentListPage } from './pages/StudentList/StudentListPage';
 import { AssessmentHistoryPage } from './pages/Assessment/AssessmentHistoryPage';
 import { ReportPage } from './pages/Report/ReportPage';
+import { InterpretationPage } from './pages/Interpretation/InterpretationPage';
 import { useAuthStore } from './stores/authStore';
 
 // Protected Route Component
@@ -42,6 +43,14 @@ function App() {
           element={
             <ProtectedRoute>
               <ReportPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/interpretation/:id"
+          element={
+            <ProtectedRoute>
+              <InterpretationPage />
             </ProtectedRoute>
           }
         />

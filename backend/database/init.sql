@@ -106,6 +106,13 @@ CREATE TABLE tests (
     -- Failure Info
     failure_reason      VARCHAR(255),
     retry_count         SMALLINT DEFAULT 0,
+    -- Interpretation (报告解读，存储后避免重复生成)
+    interpretation_highlights       TEXT,  -- JSON array of highlights
+    interpretation_weaknesses       TEXT,  -- JSON array of weaknesses
+    interpretation_evidence         TEXT,  -- JSON array of evidence points
+    interpretation_suggestions      TEXT,  -- JSON array of suggestions
+    interpretation_parent_script    TEXT,  -- Parent communication script
+    interpretation_generated_at     TIMESTAMPTZ,  -- NULL = not generated yet
     -- Timestamps
     created_at          TIMESTAMPTZ DEFAULT NOW(),
     updated_at          TIMESTAMPTZ DEFAULT NOW(),

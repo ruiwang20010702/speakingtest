@@ -19,11 +19,12 @@ export interface Assessment {
     unit: string;
     status: AssessmentStatus;
     score?: number;      // 0-100
-    stars?: number;      // 0-3
+    stars?: number;      // 0-5
     createdAt: string;   // ISO string
     completedAt?: string; // ISO string
     reportUrl?: string;
     entryUrl?: string;   // For in-progress assessments
+    isInterpreted?: boolean;  // 是否已生成报告解读
 }
 
 export interface StatsOverview {
