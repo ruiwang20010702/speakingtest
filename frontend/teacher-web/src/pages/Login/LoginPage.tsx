@@ -34,7 +34,21 @@ export const LoginPage: React.FC = () => {
             }, 1000);
         } catch (err: any) {
             console.error('Failed to send code:', err);
-            setError(err.response?.data?.detail || '发送验证码失败，请重试');
+            // Handle different error formats (Pydantic validation vs custom errors)
+            const detail = err.response?.data?.detail;
+            if (Array.isArray(detail)) {
+                // Pydantic validation error format: [{loc: [...], msg: "...", type: "..."}]
+                // Remove "Value error, " prefix if present
+                const msg = detail[0]?.msg?.replace(/^Value error, /i, '') || '发送验证码失败，请重试';
+                setError(msg);
+            } else if (typeof detail === 'object' && detail?.message) {
+                // Custom error format: {error: "...", message: "..."}
+                setError(detail.message);
+            } else if (typeof detail === 'string') {
+                setError(detail);
+            } else {
+                setError('发送验证码失败，请重试');
+            }
         } finally {
             setIsSendingCode(false);
         }
@@ -53,7 +67,18 @@ export const LoginPage: React.FC = () => {
             navigate('/dashboard');
         } catch (err: any) {
             console.error('Login failed:', err);
-            setError(err.response?.data?.detail || '登录失败，请检查验证码');
+            // Handle different error formats
+            const detail = err.response?.data?.detail;
+            if (Array.isArray(detail)) {
+                const msg = detail[0]?.msg?.replace(/^Value error, /i, '') || '登录失败，请检查验证码';
+                setError(msg);
+            } else if (typeof detail === 'object' && detail?.message) {
+                setError(detail.message);
+            } else if (typeof detail === 'string') {
+                setError(detail);
+            } else {
+                setError('登录失败，请检查验证码');
+            }
         } finally {
             setIsLoading(false);
         }
