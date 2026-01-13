@@ -24,6 +24,11 @@ stream_result.json
 stream_result_raw.xml
 backend/tests/test_results/
 
+# Database files (SQLite)
+*.db
+*.sqlite
+*.sqlite3
+
 # Legacy/Old
 server/
 client/

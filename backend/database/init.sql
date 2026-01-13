@@ -28,6 +28,14 @@ CREATE TABLE users (
     email           VARCHAR(255) UNIQUE,  -- 仅老师/管理员有
     password_hash   VARCHAR(255),         -- 仅老师/管理员有
     status          SMALLINT DEFAULT 1,   -- 1:active, 0:disabled
+    -- CRM 相关字段 (2026-01-13 新增)
+    ss_crm_name     VARCHAR(100),         -- CRM 显示名
+    ss_name         VARCHAR(100),         -- 员工姓名
+    ss_sm_name      VARCHAR(100),        -- SM 姓名
+    ss_dept4_name   VARCHAR(100),        -- 部门名称
+    ss_group        VARCHAR(100),         -- 组别
+    crm_synced_at   TIMESTAMPTZ,         -- CRM 信息最后同步时间
+    -- Timestamps
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     updated_at      TIMESTAMPTZ DEFAULT NOW(),
     is_deleted      BOOLEAN DEFAULT FALSE
