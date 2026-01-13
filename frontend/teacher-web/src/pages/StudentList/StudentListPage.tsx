@@ -26,7 +26,8 @@ export const StudentListPage: React.FC = () => {
 
                 // Map API data to UI types
                 const mappedStudents: Student[] = studentsRes.data.map(s => ({
-                    id: String(s.user_id),
+                    id: s.external_user_id || String(s.user_id),  // Display external ID, fallback to internal
+                    internalId: String(s.user_id),                 // Internal ID for API calls
                     name: s.student_name,
                     grade: s.cur_grade || '未设置',
                     level: s.cur_level_desc || 'N/A',

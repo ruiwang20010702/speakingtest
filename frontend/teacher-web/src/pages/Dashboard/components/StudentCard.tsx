@@ -11,7 +11,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({ student }) => {
 
     return (
         <div
-            onClick={() => navigate(`/student/${student.id}`, { state: { student } })}
+            onClick={() => navigate(`/student/${student.internalId}`, { state: { student } })}
             className="bg-surface rounded-2xl p-6 shadow-sm hover:shadow-klein border border-transparent hover:border-primary/10 transition-all duration-300 cursor-pointer group"
         >
             <div className="flex items-start gap-4">

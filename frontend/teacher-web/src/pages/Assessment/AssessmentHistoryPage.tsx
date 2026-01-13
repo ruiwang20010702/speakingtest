@@ -55,7 +55,8 @@ export const AssessmentHistoryPage: React.FC = () => {
                 const found = listRes.data.find((s: any) => String(s.user_id) === id);
                 if (found) {
                     setStudent({
-                        id: String(found.user_id),
+                        id: found.external_user_id || String(found.user_id),
+                        internalId: String(found.user_id),
                         name: found.student_name,
                         grade: found.cur_grade || '未设置',
                         level: found.cur_level_desc || 'N/A',

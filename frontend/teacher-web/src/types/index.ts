@@ -1,10 +1,11 @@
 export interface Student {
-    id: string;
+    id: string;           // External ID for display (e.g., "stu1928409")
+    internalId: string;   // Internal user_id for API calls
     name: string;
-    avatarUrl?: string; // Optional user avatar
-    grade: string;      // e.g., "四年级"
-    level: string;      // e.g., "L1"
-    currentUnit: string; // e.g., "Unit 1 Food"
+    avatarUrl?: string;   // Optional user avatar
+    grade: string;        // e.g., "四年级"
+    level: string;        // e.g., "L1"
+    currentUnit: string;  // e.g., "Unit 1 Food"
     status: 'active' | 'inactive';
 }
 
