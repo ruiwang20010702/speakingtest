@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Plus, Copy, QrCode, FileText, Loader2, Sparkles, BookOpen } from 'lucide-react';
+import { ArrowLeft, Plus, QrCode, FileText, Loader2, Sparkles, BookOpen } from 'lucide-react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
 import { StatusBadge } from '../../components/UI/StatusBadge';
@@ -98,40 +98,6 @@ export const AssessmentHistoryPage: React.FC = () => {
             console.error('Failed to create assessment:', error);
         } finally {
         setIsCreating(false);
-        }
-    };
-
-    const handleCopyLink = async (assessment: Assessment) => {
-        let linkToCopy = '';
-        
-        if (assessment.status === 'completed') {
-            // For completed assessments, generate share link
-            try {
-                setIsGeneratingShareLink(true);
-                const res = await testsApi.generateShareLink(Number(assessment.id));
-                linkToCopy = res.data.share_url;
-            } catch (error) {
-                console.error('Failed to generate share link:', error);
-                alert('生成分享链接失败，请重试');
-                return;
-            } finally {
-                setIsGeneratingShareLink(false);
-            }
-        } else {
-            // For in-progress assessments, use entry_url
-            linkToCopy = (assessment as any).entryUrl || '';
-            if (!linkToCopy) {
-                alert('该测评尚未生成链接');
-                return;
-            }
-        }
-
-        try {
-            await navigator.clipboard.writeText(linkToCopy);
-            alert('链接已复制到剪贴板');
-        } catch (error) {
-            console.error('Failed to copy link:', error);
-            alert('复制失败，请手动复制');
         }
     };
 
@@ -292,22 +258,13 @@ export const AssessmentHistoryPage: React.FC = () => {
                                         )}
                                     </>
                             ) : (
-                                <>
-                                        <button 
-                                            onClick={() => handleCopyLink(assessment)}
-                                            disabled={isGeneratingShareLink}
-                                            className="px-4 py-2 border border-border bg-white text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors disabled:opacity-50"
-                                        >
-                                        <Copy size={16} /> 复制链接
-                                    </button>
-                                        <button 
-                                            onClick={() => handleShowQRCode(assessment)}
-                                            disabled={isGeneratingShareLink}
-                                            className="px-4 py-2 border border-border bg-white text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors disabled:opacity-50"
-                                        >
-                                        <QrCode size={16} /> 二维码
-                                    </button>
-                                </>
+                                <button 
+                                    onClick={() => handleShowQRCode(assessment)}
+                                    disabled={isGeneratingShareLink}
+                                    className="px-4 py-2 border border-border bg-white text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                                >
+                                    <QrCode size={16} /> 测试二维码
+                                </button>
                             )}
                         </div>
                     </div>
