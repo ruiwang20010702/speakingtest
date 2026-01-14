@@ -114,7 +114,12 @@ class TestModel(Base):
     retry_count = Column(SmallInteger, default=0)
     cost = Column(Numeric(10, 6), nullable=True)
     tokens_used = Column(JSON_TYPE, nullable=True, default={})
-    # Interpretation (报告解读，存储后避免重复生成)
+    # Summary Analysis (测评汇总分析，给家长端 H5 用，学生完成测试后自动生成)
+    summary_highlights = Column(Text, nullable=True)      # JSON array: 亮点
+    summary_weaknesses = Column(Text, nullable=True)      # JSON array: 短板
+    summary_weekly_plan = Column(Text, nullable=True)     # JSON array: 周计划
+    summary_generated_at = Column(DateTime(timezone=True), nullable=True)
+    # Interpretation (报告解读，给班主任用，手动触发生成)
     interpretation_highlights = Column(Text, nullable=True)
     interpretation_weaknesses = Column(Text, nullable=True)
     interpretation_evidence = Column(Text, nullable=True)

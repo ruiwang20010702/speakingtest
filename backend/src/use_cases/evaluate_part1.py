@@ -125,11 +125,84 @@ class EvaluatePart1UseCase:
         except Exception as e:
             logger.warning(f"OSS 上传异常（不影响评测结果）: {e}")
 
-        # 5. Handle result
+        # 5. 记录 Token 消耗 (无论成功或失败，只要有 usage 就记录)
+        # Pricing (Qwen3-Omni-Flash):
+        # Input Text: 0.0018 / 1k
+        # Input Audio: 0.0158 / 1k
+        # Output: 0.0127 / 1k
+        if evaluation_result.usage:
+            usage = evaluation_result.usage
+            prompt_tokens = usage.get("prompt_tokens", 0)
+            completion_tokens = usage.get("completion_tokens", 0)
+            
+            prompt_details = usage.get("prompt_tokens_details", {})
+            audio_tokens = prompt_details.get("audio_tokens", 0)
+            text_tokens = prompt_details.get("text_tokens", 0)
+            
+            if audio_tokens == 0 and text_tokens == 0 and prompt_tokens > 0:
+                audio_tokens = prompt_tokens  # Fallback assumption
+            
+            cost = (
+                (text_tokens * 0.0018 / 1000) +
+                (audio_tokens * 0.0158 / 1000) +
+                (completion_tokens * 0.0127 / 1000)
+            )
+            
+            # 累加到总 cost
+            test.cost = float(test.cost or 0) + cost
+            
+            # 更新 tokens_used，保留历史记录
+            current_usage = dict(test.tokens_used or {})
+            if not isinstance(current_usage, dict):
+                current_usage = {}
+            
+            # 记录本次调用的详情
+            attempt_record = {
+                "attempt": (test.retry_count or 0) + 1,
+                "success": evaluation_result.success,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "audio_tokens": audio_tokens,
+                "text_tokens": text_tokens,
+                "total_tokens": usage.get("total_tokens", 0),
+                "cost": float(f"{cost:.6f}"),
+                "timestamp": china_now().isoformat()
+            }
+            
+            # 追加到 part1_history 列表
+            if "part1_history" not in current_usage:
+                current_usage["part1_history"] = []
+            current_usage["part1_history"].append(attempt_record)
+            
+            # 保留最新一次的快照 (兼容旧代码)
+            current_usage["part1"] = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "audio_tokens": audio_tokens,
+                "text_tokens": text_tokens,
+                "total_tokens": usage.get("total_tokens", 0),
+                "cost": float(f"{cost:.6f}")
+            }
+            
+            # 计算总 cost (part1 所有尝试 + part2 所有尝试)
+            total_cost = (
+                sum(h.get("cost", 0) for h in current_usage.get("part1_history", [])) +
+                sum(h.get("cost", 0) for h in current_usage.get("part2_history", []))
+            )
+            current_usage["total_cost"] = float(f"{total_cost:.6f}")
+            
+            test.tokens_used = current_usage
+            
+            logger.info(
+                f"Part 1 API 调用: success={evaluation_result.success}, "
+                f"cost={cost:.4f} RMB, attempt={attempt_record['attempt']}"
+            )
+        
+        # 6. Handle failure
         if not evaluation_result.success:
             test.failure_reason = evaluation_result.error
-            test.retry_count += 1
-            test.part1_audio_url = audio_url # 即使失败也保存音频链接
+            test.retry_count = (test.retry_count or 0) + 1
+            test.part1_audio_url = audio_url  # 即使失败也保存音频链接
             await self.db.commit()
             
             return Part1EvaluationResponse(
@@ -139,71 +212,13 @@ class EvaluatePart1UseCase:
                 audio_url=audio_url
             )
 
-        # 6. Store scores + audio URL + Cost
+        # 7. Store scores + audio URL (成功情况)
         # 直接存储 Qwen 返回的百分制分数 (0-100)
         test.part1_score = evaluation_result.total_score
         test.part1_raw_result = evaluation_result.to_dict()
         test.part1_audio_url = audio_url  # 保存音频 URL
         test.status = "part1_done"
         test.updated_at = china_now()
-        
-        # Calculate Cost
-        # Pricing (Qwen3-Omni-Flash):
-        # Input Text: 0.0018 / 1k
-        # Input Audio: 0.0158 / 1k
-        # Output: 0.0127 / 1k
-        if evaluation_result.usage:
-            usage = evaluation_result.usage
-            # Note: Qwen usage usually has prompt_tokens, completion_tokens.
-            # It might break down prompt_tokens into audio_tokens and text_tokens in prompt_tokens_details.
-            # If not available, we estimate.
-            
-            prompt_tokens = usage.get("prompt_tokens", 0)
-            completion_tokens = usage.get("completion_tokens", 0)
-            
-            # Try to get detailed breakdown
-            prompt_details = usage.get("prompt_tokens_details", {})
-            audio_tokens = prompt_details.get("audio_tokens", 0)
-            text_tokens = prompt_details.get("text_tokens", 0)
-            
-            # Fallback if details missing: assume mostly audio for Part 1 input?
-            # Actually Part 1 input is text + audio. 
-            # If no breakdown, we might under-calculate if we assume all text, or over if all audio.
-            # Let's assume if audio_tokens is 0 but we sent audio, maybe it's not broken down.
-            # But Qwen-Omni usually provides this.
-            
-            if audio_tokens == 0 and text_tokens == 0 and prompt_tokens > 0:
-                # Fallback: Estimate based on prompt length?
-                # Text prompt is short (~100 chars). Audio is the main part.
-                # Let's assume 90% audio tokens if not specified? Or just treat as audio for safety?
-                # To be safe/conservative, treat as audio (more expensive).
-                audio_tokens = prompt_tokens
-            
-            cost = (
-                (text_tokens * 0.0018 / 1000) +
-                (audio_tokens * 0.0158 / 1000) +
-                (completion_tokens * 0.0127 / 1000)
-            )
-            
-            # Update TestModel
-            test.cost = float(test.cost or 0) + cost
-            
-            # Update tokens_used with structured data
-            current_usage = dict(test.tokens_used or {})
-            if not isinstance(current_usage, dict):
-                current_usage = {}
-                
-            current_usage["part1"] = {
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "audio_tokens": audio_tokens,
-                "text_tokens": text_tokens,
-                "total_tokens": usage.get("total_tokens", 0),
-                "cost": float(f"{cost:.6f}")
-            }
-            test.tokens_used = current_usage
-            
-            logger.info(f"Part 1 Cost: {cost:.4f} RMB, Usage: {current_usage['part1']}")
 
         await self.db.commit()
         

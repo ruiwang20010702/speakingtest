@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Plus, QrCode, FileText, Loader2, Sparkles, BookOpen } from 'lucide-react';
+import { ArrowLeft, Plus, QrCode, FileText, Loader2, Sparkles, BookOpen, AlertCircle } from 'lucide-react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
 import { StatusBadge } from '../../components/UI/StatusBadge';
@@ -36,20 +36,32 @@ export const AssessmentHistoryPage: React.FC = () => {
             ]);
 
             // Map tests
+            // 后端状态: pending -> part1_processing -> part1_done -> processing -> completed / failed
+            const mapStatus = (backendStatus: string): 'pending' | 'in_progress' | 'completed' | 'failed' => {
+                if (backendStatus === 'completed') return 'completed';
+                if (backendStatus === 'failed') return 'failed';
+                if (['part1_processing', 'part1_done', 'processing', 'in_progress'].includes(backendStatus)) {
+                    return 'in_progress';
+                }
+                // 'pending' 或其他未知状态
+                return 'pending';
+            };
+
             const mappedAssessments: Assessment[] = testsRes.data.map((t: any) => ({
                 id: String(t.id),
                 studentId: id,
                 title: `${t.level} - ${t.unit}`,
                 level: t.level,
                 unit: t.unit,
-                status: t.status === 'completed' ? 'completed' : 
-                       t.status === 'in_progress' ? 'in_progress' : 'pending',
+                status: mapStatus(t.status),
                 score: t.total_score,
                 stars: t.star_level,
                 createdAt: t.created_at,
                 completedAt: t.completed_at,
                 entryUrl: t.entry_url,
-                isInterpreted: t.is_interpreted ?? false
+                isInterpreted: t.is_interpreted ?? false,
+                failureReason: t.failure_reason,
+                retryCount: t.retry_count ?? 0
             }));
             setAssessments(mappedAssessments);
 
@@ -220,6 +232,28 @@ export const AssessmentHistoryPage: React.FC = () => {
                                                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                                             </svg>
                                         ))}
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* Failure Info Display */}
+                            {assessment.status === 'failed' && (
+                                <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg">
+                                    <div className="flex items-start gap-2">
+                                        <AlertCircle size={16} className="text-red-500 mt-0.5 flex-shrink-0" />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-red-700">评测失败</p>
+                                            {assessment.failureReason && (
+                                                <p className="text-xs text-red-600 mt-1 break-all">
+                                                    原因: {assessment.failureReason}
+                                                </p>
+                                            )}
+                                            {(assessment.retryCount ?? 0) > 0 && (
+                                                <p className="text-xs text-red-500 mt-1">
+                                                    已重试 {assessment.retryCount} 次
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             )}

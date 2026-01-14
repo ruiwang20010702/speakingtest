@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from loguru import logger
 
 from src.infrastructure.database import get_db
 from src.infrastructure.auth import get_current_user_id, get_current_user_role
@@ -46,6 +47,8 @@ class TestSummary(BaseModel):
     completed_at: Optional[datetime] = None
     entry_url: Optional[str] = None
     is_interpreted: bool = False  # 是否已生成报告解读
+    failure_reason: Optional[str] = None  # 失败原因（当 status=failed 时）
+    retry_count: int = 0  # 重试次数
 
 
 class TestItemDetail(BaseModel):
@@ -162,7 +165,9 @@ async def get_student_tests(
             created_at=t.created_at,
             completed_at=t.completed_at,
             entry_url=f"{BASE_URL}/{token_map.get((t.level, t.unit))}" if t.status != 'completed' and (t.level, t.unit) in token_map else None,
-            is_interpreted=t.interpretation_generated_at is not None
+            is_interpreted=t.interpretation_generated_at is not None,
+            failure_reason=t.failure_reason if t.status == 'failed' else None,
+            retry_count=t.retry_count or 0
         )
         for t in tests
     ]
@@ -1121,21 +1126,25 @@ async def get_parent_h5_report(
                 "evidence": item.evidence
             })
     
-    # Build interpretation dict (use override suggestion if available)
+    # Build suggestion dict for parent H5 (use override → summary_analysis → fallback)
+    # 优先级: 手动覆盖 > 测评汇总分析 > 默认规则
     override_suggestion = override.get("suggestion")
     if override_suggestion:
+        # 使用手动覆盖的内容
         interpretation = {
             "highlights": override_suggestion.get("highlights", []),
             "weaknesses": override_suggestion.get("weaknesses", []),
             "suggestions": override_suggestion.get("suggestions", [])
         }
-    elif test.interpretation_generated_at:
+    elif test.summary_generated_at:
+        # 使用自动生成的测评汇总分析 (给家长看)
         interpretation = {
-            "highlights": json.loads(test.interpretation_highlights) if test.interpretation_highlights else [],
-            "weaknesses": json.loads(test.interpretation_weaknesses) if test.interpretation_weaknesses else [],
-            "suggestions": json.loads(test.interpretation_suggestions) if test.interpretation_suggestions else []
+            "highlights": json.loads(test.summary_highlights) if test.summary_highlights else [],
+            "weaknesses": json.loads(test.summary_weaknesses) if test.summary_weaknesses else [],
+            "suggestions": json.loads(test.summary_weekly_plan) if test.summary_weekly_plan else []
         }
     else:
+        # 没有生成过，使用 None 让 ParentReportService 生成默认建议
         interpretation = None
     
     # Apply radar override if available
@@ -1397,6 +1406,47 @@ async def generate_test_interpretation(
             for item in test.items
         ] if test.items else None
     )
+    
+    # 记录 qwen-plus 调用费用
+    if interpretation.usage:
+        usage = interpretation.usage
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+        
+        # qwen-plus 定价: 输入 ¥0.0008/千tokens, 输出 ¥0.002/千tokens
+        cost = (
+            (prompt_tokens * 0.0008 / 1000) +
+            (completion_tokens * 0.002 / 1000)
+        )
+        
+        # 累加到总 cost
+        test.cost = float(test.cost or 0) + cost
+        
+        # 更新 tokens_used
+        current_usage = dict(test.tokens_used or {})
+        if not isinstance(current_usage, dict):
+            current_usage = {}
+        
+        # 记录报告解读的 token 使用
+        current_usage["interpretation"] = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": usage.get("total_tokens", 0),
+            "cost": float(f"{cost:.6f}"),
+            "model": "qwen-plus"
+        }
+        
+        # 重新计算总 cost
+        total_cost = (
+            sum(h.get("cost", 0) for h in current_usage.get("part1_history", [])) +
+            sum(h.get("cost", 0) for h in current_usage.get("part2_history", [])) +
+            current_usage.get("interpretation", {}).get("cost", 0)
+        )
+        current_usage["total_cost"] = float(f"{total_cost:.6f}")
+        
+        test.tokens_used = current_usage
+        
+        logger.info(f"报告解读 Cost: {cost:.4f} RMB, tokens: {usage}")
     
     # Store interpretation to database
     test.interpretation_highlights = json.dumps(interpretation.highlights, ensure_ascii=False)

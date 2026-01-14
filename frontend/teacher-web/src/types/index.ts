@@ -25,6 +25,8 @@ export interface Assessment {
     reportUrl?: string;
     entryUrl?: string;   // For in-progress assessments
     isInterpreted?: boolean;  // 是否已生成报告解读
+    failureReason?: string;   // 失败原因（当 status=failed 时）
+    retryCount?: number;      // 重试次数
 }
 
 export interface StatsOverview {

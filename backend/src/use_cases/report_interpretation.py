@@ -19,6 +19,7 @@ class ReportInterpretation:
     evidence: List[str]         # 证据点
     suggestions: List[str]      # 行动建议 (1周练习计划)
     parent_script: str          # 家长沟通话术 (完整)
+    usage: Optional[dict] = None  # API 调用的 token 使用情况
 
 
 
@@ -66,14 +67,19 @@ class ReportInterpretationService:
                 weaknesses=result.weaknesses,
                 evidence=result.evidence,
                 suggestions=result.suggestions,
-                parent_script=result.parent_script
+                parent_script=result.parent_script,
+                usage=result.usage  # 返回 usage 数据用于计费
             )
         else:
             logger.error(f"LLM interpretation failed: {result.error}. Falling back to rules.")
-            return self._generate_rule_based(
+            # 即使失败，也传递 usage 数据 (如果有的话) 用于计费
+            fallback_result = self._generate_rule_based(
                 student_name, level, total_score, part1_score, 
                 part2_score, star_level, part1_details, part2_items
             )
+            # 将失败调用的 usage 附加到结果上
+            fallback_result.usage = result.usage
+            return fallback_result
 
     def _generate_rule_based(
         self,

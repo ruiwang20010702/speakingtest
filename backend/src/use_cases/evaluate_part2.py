@@ -179,15 +179,84 @@ class ProcessPart2TaskUseCase:
                 questions=task.questions
             )
             
-            # 4. 处理结果
+            # 4. 记录 Token 消耗 (无论成功或失败，只要有 usage 就记录)
+            if qwen_result.usage:
+                usage = qwen_result.usage
+                prompt_tokens = usage.get("prompt_tokens", 0)
+                completion_tokens = usage.get("completion_tokens", 0)
+                
+                prompt_details = usage.get("prompt_tokens_details", {})
+                audio_tokens = prompt_details.get("audio_tokens", 0)
+                text_tokens = prompt_details.get("text_tokens", 0)
+                
+                if audio_tokens == 0 and text_tokens == 0 and prompt_tokens > 0:
+                    audio_tokens = prompt_tokens  # Fallback assumption
+                
+                cost = (
+                    (text_tokens * 0.0018 / 1000) +
+                    (audio_tokens * 0.0158 / 1000) +
+                    (completion_tokens * 0.0127 / 1000)
+                )
+                
+                # 累加到总 cost
+                test.cost = float(test.cost or 0) + cost
+                
+                # 更新 tokens_used，保留历史记录
+                current_usage = dict(test.tokens_used or {})
+                if not isinstance(current_usage, dict):
+                    current_usage = {}
+                
+                # 记录本次调用的详情
+                attempt_record = {
+                    "attempt": (test.retry_count or 0) + 1,
+                    "success": qwen_result.success,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "audio_tokens": audio_tokens,
+                    "text_tokens": text_tokens,
+                    "total_tokens": usage.get("total_tokens", 0),
+                    "cost": float(f"{cost:.6f}"),
+                    "timestamp": china_now().isoformat()
+                }
+                
+                # 追加到 part2_history 列表
+                if "part2_history" not in current_usage:
+                    current_usage["part2_history"] = []
+                current_usage["part2_history"].append(attempt_record)
+                
+                # 保留最新一次的快照 (兼容旧代码)
+                current_usage["part2"] = {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "audio_tokens": audio_tokens,
+                    "text_tokens": text_tokens,
+                    "total_tokens": usage.get("total_tokens", 0),
+                    "cost": float(f"{cost:.6f}")
+                }
+                
+                # 计算总 cost
+                total_cost = (
+                    current_usage.get("part1", {}).get("cost", 0) +
+                    sum(h.get("cost", 0) for h in current_usage.get("part2_history", []))
+                )
+                current_usage["total_cost"] = float(f"{total_cost:.6f}")
+                
+                test.tokens_used = current_usage
+                
+                logger.info(
+                    f"Part 2 API 调用: success={qwen_result.success}, "
+                    f"cost={cost:.4f} RMB, attempt={attempt_record['attempt']}"
+                )
+            
+            # 5. 处理失败情况
             if not qwen_result.success:
                 test.status = "failed"
                 test.failure_reason = qwen_result.error
-                test.retry_count += 1
+                test.retry_count = (test.retry_count or 0) + 1
                 await self.db.commit()
                 return False
             
-            # 5. 保存逐题评分
+            # 6. 保存逐题评分
             # 模型返回: {"no": 1, "transcript": "回答文本", "score": "S/A/B", "feedback": "评价"}
             for item_data in qwen_result.items:
                 # 转换 S/A/B 为数值: S=2, A=1, B=0
@@ -204,7 +273,7 @@ class ProcessPart2TaskUseCase:
                 )
                 self.db.add(item)
             
-            # 6. 更新测评记录
+            # 7. 更新测评记录
             test.part2_score = qwen_result.total_score
             test.part2_transcript = qwen_result.transcript
             test.part2_audio_url = task.audio_url  # 保存音频 URL
@@ -220,48 +289,6 @@ class ProcessPart2TaskUseCase:
             test.completed_at = china_now()
             test.updated_at = china_now()
             
-            # Calculate Cost for Part 2
-            if qwen_result.usage:
-                usage = qwen_result.usage
-                prompt_tokens = usage.get("prompt_tokens", 0)
-                completion_tokens = usage.get("completion_tokens", 0)
-                
-                prompt_details = usage.get("prompt_tokens_details", {})
-                audio_tokens = prompt_details.get("audio_tokens", 0)
-                text_tokens = prompt_details.get("text_tokens", 0)
-                
-                if audio_tokens == 0 and text_tokens == 0 and prompt_tokens > 0:
-                    audio_tokens = prompt_tokens # Fallback assumption
-                
-                cost = (
-                    (text_tokens * 0.0018 / 1000) +
-                    (audio_tokens * 0.0158 / 1000) +
-                    (completion_tokens * 0.0127 / 1000)
-                )
-                
-                test.cost = float(test.cost or 0) + cost
-                
-                # Update tokens_used with structured data
-                current_usage = dict(test.tokens_used or {})
-                if not isinstance(current_usage, dict):
-                    current_usage = {}
-                    
-                current_usage["part2"] = {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "audio_tokens": audio_tokens,
-                    "text_tokens": text_tokens,
-                    "total_tokens": usage.get("total_tokens", 0),
-                    "cost": float(f"{cost:.6f}")
-                }
-                # Calculate total cost in JSON
-                total_cost = (current_usage.get("part1", {}).get("cost", 0) + cost)
-                current_usage["total_cost"] = float(f"{total_cost:.6f}")
-                
-                test.tokens_used = current_usage
-                
-                logger.info(f"Part 2 Cost: {cost:.4f} RMB, Usage: {current_usage['part2']}")
-            
             await self.db.commit()
             
             logger.info(
@@ -269,6 +296,9 @@ class ProcessPart2TaskUseCase:
                 f"part2_score={qwen_result.total_score}, "
                 f"total_score={test.total_score}"
             )
+            
+            # 8. 自动生成测评汇总分析 (给家长端 H5 用)
+            await self._generate_summary_analysis(test)
             
             return True
             
@@ -306,3 +336,151 @@ class ProcessPart2TaskUseCase:
             return 2
         else:
             return 1
+    
+    async def _generate_summary_analysis(self, test) -> None:
+        """
+        生成测评汇总分析 (给家长端 H5 用)
+        
+        在 Part 2 评测完成后自动调用，不阻塞主流程
+        """
+        import json
+        from src.adapters.repositories.models import StudentProfileModel
+        from sqlalchemy import select
+        
+        try:
+            # 获取学生名称
+            stmt = select(StudentProfileModel).where(StudentProfileModel.user_id == test.student_id)
+            result = await self.db.execute(stmt)
+            student_profile = result.scalar_one_or_none()
+            student_name = student_profile.student_name if student_profile else "学生"
+            
+            # 构建雷达图分数 (从 Part1 和 Part2 raw result 中提取)
+            part1_raw = test.part1_raw_result or {}
+            part2_raw = test.part2_raw_result or {}
+            
+            radar_scores = {
+                "fluency": (part1_raw.get("fluency_score", 0) * 0.4 + part2_raw.get("fluency_score", 0) * 0.6),
+                "pronunciation": (part1_raw.get("pronunciation_score", 0) * 0.4 + part2_raw.get("pronunciation_score", 0) * 0.6),
+                "confidence": part2_raw.get("confidence_score", 0),
+                "vocabulary": (part1_raw.get("accuracy_score", 0) * 0.3 + part2_raw.get("vocabulary_score", 0) * 0.7),
+                "sentence": (part1_raw.get("integrity_score", 0) * 0.2 + part2_raw.get("sentence_score", 0) * 0.8),
+            }
+            
+            # 提取 Part1 词汇详情 (用于具体举例)
+            # 数据来源: part1_raw["details"] = [{content, score, issue}, ...]
+            part1_words = []
+            if part1_raw.get("details"):
+                for word in part1_raw["details"]:
+                    score = word.get("score", 0)
+                    part1_words.append({
+                        "word": word.get("content", ""),
+                        "score": score,
+                        "status": "perfect" if score >= 80 else ("unclear" if score >= 50 else "failed"),
+                        "issue": word.get("issue")  # 具体问题描述，如 "尾音发音不清"
+                    })
+            
+            # 提取 Part2 问答详情 (用于具体举例)
+            # 数据来源: part2_raw["items"] = [{no, transcript, score, feedback}, ...]
+            part2_items = []
+            if part2_raw.get("items"):
+                for item in part2_raw["items"]:
+                    part2_items.append({
+                        "no": item.get("no"),
+                        "score": item.get("score", "A"),  # S/A/B
+                        "transcript": item.get("transcript", "")[:100],  # 学生实际回答
+                        "feedback": item.get("feedback", "")  # 模型对该题的反馈
+                    })
+            
+            # 调用 qwen-plus 生成汇总分析
+            summary_result = await self.qwen.generate_summary_analysis(
+                student_name=student_name,
+                level=test.level,
+                total_score=float(test.total_score or 0),
+                star_level=test.star_level or 1,
+                radar_scores=radar_scores,
+                part1_score=float(test.part1_score or 0),
+                part2_score=float(test.part2_score or 0),
+                part1_words=part1_words,
+                part2_items=part2_items,
+                part1_suggestion=part1_raw.get("part1_overall_suggestion", []),
+                part2_suggestion=part2_raw.get("part2_overall_suggestion", [])
+            )
+            
+            # 记录 qwen-plus 调用费用 (无论成功或失败)
+            if summary_result.usage:
+                usage = summary_result.usage
+                prompt_tokens = usage.get("prompt_tokens", 0)
+                completion_tokens = usage.get("completion_tokens", 0)
+                
+                # qwen-plus 定价: 输入 ¥0.0008/千tokens, 输出 ¥0.002/千tokens
+                cost = (
+                    (prompt_tokens * 0.0008 / 1000) +
+                    (completion_tokens * 0.002 / 1000)
+                )
+                
+                # 累加到总 cost
+                test.cost = float(test.cost or 0) + cost
+                
+                # 更新 tokens_used
+                current_usage = dict(test.tokens_used or {})
+                if not isinstance(current_usage, dict):
+                    current_usage = {}
+                
+                current_usage["summary_analysis"] = {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": usage.get("total_tokens", 0),
+                    "cost": float(f"{cost:.6f}"),
+                    "model": "qwen-plus",
+                    "success": summary_result.success
+                }
+                
+                # 重新计算总 cost
+                total_cost = (
+                    sum(h.get("cost", 0) for h in current_usage.get("part1_history", [])) +
+                    sum(h.get("cost", 0) for h in current_usage.get("part2_history", [])) +
+                    current_usage.get("summary_analysis", {}).get("cost", 0)
+                )
+                current_usage["total_cost"] = float(f"{total_cost:.6f}")
+                
+                test.tokens_used = current_usage
+                
+                logger.info(f"测评汇总分析 Cost: {cost:.4f} RMB, success={summary_result.success}")
+            
+            # 存储结果
+            if summary_result.success:
+                test.summary_highlights = json.dumps(summary_result.highlights, ensure_ascii=False)
+                test.summary_weaknesses = json.dumps(summary_result.weaknesses, ensure_ascii=False)
+                test.summary_weekly_plan = json.dumps(summary_result.weekly_plan, ensure_ascii=False)
+                test.summary_generated_at = china_now()
+                
+                await self.db.commit()
+                logger.info(f"测评汇总分析生成成功: test_id={test.id}")
+            else:
+                logger.warning(f"测评汇总分析生成失败: {summary_result.error}，将使用规则生成")
+                # 失败时使用规则生成默认建议
+                default_highlights = []
+                default_weaknesses = []
+                
+                for dim_name, score in radar_scores.items():
+                    dim_cn = {"fluency": "流利度", "pronunciation": "发音", "confidence": "自信度", 
+                              "vocabulary": "词汇", "sentence": "整句输出"}.get(dim_name, dim_name)
+                    if score >= 80:
+                        default_highlights.append(f"{dim_cn}表现优秀")
+                    elif score < 60:
+                        default_weaknesses.append(f"{dim_cn}有提升空间")
+                
+                test.summary_highlights = json.dumps(default_highlights or ["本次测评表现稳定"], ensure_ascii=False)
+                test.summary_weaknesses = json.dumps(default_weaknesses or ["暂无明显短板"], ensure_ascii=False)
+                test.summary_weekly_plan = json.dumps([
+                    "每天跟读 10 分钟标准音频",
+                    "多用完整句子回答问题",
+                    "保持自信，大声开口练习"
+                ], ensure_ascii=False)
+                test.summary_generated_at = china_now()
+                
+                await self.db.commit()
+                
+        except Exception as e:
+            logger.exception(f"生成测评汇总分析时出错: {e}")
+            # 不影响主流程，即使失败也不抛出异常

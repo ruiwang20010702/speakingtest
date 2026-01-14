@@ -5,6 +5,7 @@ Qwen-Omni 语音评测网关
 import asyncio
 import base64
 import json
+import re
 from typing import List, Optional, AsyncIterator
 from dataclasses import dataclass
 
@@ -15,6 +16,24 @@ from src.infrastructure.config import get_settings
 from src.infrastructure.rate_limiter import RateLimiter
 
 settings = get_settings()
+
+
+def strip_thinking_tags(text: str) -> str:
+    """
+    移除 Qwen 思考模式返回的 <think>...</think> 标签
+    
+    思考模式开启后，模型会在最终答案前输出思考过程：
+    <think>
+    这里是模型的思考过程...
+    </think>
+    {"actual": "json response"}
+    
+    此函数提取 </think> 后面的实际内容
+    """
+    # 匹配 <think>...</think> 标签（包括换行）
+    pattern = r'<think>[\s\S]*?</think>\s*'
+    cleaned = re.sub(pattern, '', text, flags=re.IGNORECASE)
+    return cleaned.strip()
 
 
 # ============================================
@@ -67,10 +86,34 @@ PART2_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
 - **A (Average)**: 基本正确，能理解意思，但有小问题（如时态错误、单词发音不准、表达不够完整）
 - **B (Below)**: 回答错误、答非所问、未作答、或完全听不懂
 
+## feedback 字段要求 (非常重要)
+每道题的 `feedback` 必须**详细具体**，至少包含以下内容：
+
+### 对于 S 评分的回答：
+- 指出回答的亮点（如用了什么好的句型、词汇、表达方式）
+- 示例：✅ "用完整句子回答，句型 'I like playing...' 使用正确，发音清晰流利"
+
+### 对于 A 评分的回答：
+- 指出做对了什么 + 具体哪里有问题 + 如何改正
+- 示例：✅ "回答内容正确，但时态有误，说成了 'I go' 而不是 'I went'；过去时要用 went"
+- 示例：✅ "能理解问题并作答，但有明显迟疑 'um...'，建议多练习该句型增加熟练度"
+
+### 对于 B 评分的回答：
+- 指出具体问题（未作答/答非所问/听不懂）+ 参考答案提示
+- 示例：✅ "未作答，沉默超过5秒；这道题可以回答 'My favorite color is blue.'"
+- 示例：✅ "答非所问，问的是颜色但回答了食物；应该回答颜色相关内容如 red, blue"
+- 示例：✅ "发音模糊无法辨识，只听到 'I... mmm...'；建议先练习基础词汇发音"
+
+### feedback 示例对比
+- ❌ 不好: "回答正确"、"有迟疑"、"未作答"
+- ✅ 好的: "用 'I like...' 句型完整回答，发音准确，表达自信流利"
+- ✅ 好的: "回答基本正确但不够完整，只说了 'Basketball'，建议用完整句子 'I like basketball'"
+- ✅ 好的: "沉默未作答；可以尝试回答 'It's sunny today' 或 'The weather is nice'"
+
 ## 输出要求
 1. 严格输出 JSON 格式
 2. 必须包含 5 个维度分数（0-100）和总分
-3. 对 12 道题进行转写，给出 S/A/B 评分和简短反馈
+3. 对 12 道题进行转写，给出 S/A/B 评分和**详细具体的反馈**（每条至少15字）
 4. 给出 3-5 条针对 Part 2 问答表现的总体改进建议 (part2_overall_suggestion)
 5. **重要**：所有评价、诊断、建议内容必须使用**中文**。
 6. **思维链 (Chain of Thought)**：在给出最终分数前，请先在内心分析学生的流利度、发音、自信度、词汇和句式。确保分数能准确反映学生的实际水平。
@@ -89,9 +132,9 @@ total_score = (fluency_score + pronunciation_score + confidence_score + vocabula
   "vocabulary_score": 70.0,
   "sentence_score": 80.0,
   "items": [
-    {"no": 1, "transcript": "I like apple.", "score": "S", "feedback": "回答准确流利"},
-    {"no": 2, "transcript": "It is... um... red.", "score": "A", "feedback": "回答正确但有迟疑"},
-    {"no": 3, "transcript": "...", "score": "B", "feedback": "未作答"}
+    {"no": 1, "transcript": "I like playing basketball.", "score": "S", "feedback": "用完整句子回答，'I like playing...' 句型正确，发音清晰，表达自信"},
+    {"no": 2, "transcript": "It is... um... red.", "score": "A", "feedback": "回答内容正确，但有明显迟疑 'um...'，建议多练习颜色词汇增加熟练度"},
+    {"no": 3, "transcript": "...", "score": "B", "feedback": "沉默未作答，超过5秒无回应；可以尝试回答 'My favorite food is pizza'"}
   ],
   "part2_overall_suggestion": ["建议1", "建议2"]
 }"""
@@ -135,6 +178,20 @@ PART1_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
 4. **防御性指令**：如果音频完全无声、全是噪音，请将 `is_rejected` 设为 `true`，`total_score` 设为 0。
 </critical_rules>
 
+## issue 字段要求 (非常重要)
+当单词发音有问题时 (score < 80)，`issue` 字段必须**详细具体**地描述问题，包括：
+1. **具体错误**：学生实际发出的音是什么（用音标或近似汉字描述）
+2. **正确发音**：该单词的正确发音是什么
+3. **改进建议**：如何纠正这个发音问题
+
+### issue 示例
+- ❌ 不好的 issue: "发音不准"、"读错了"
+- ✅ 好的 issue: "th 发成了 /s/，读成了 'sree'；正确发音是 /θriː/，舌尖要轻触上齿"
+- ✅ 好的 issue: "元音 /æ/ 发成了 /e/，听起来像 'epple'；apple 的 a 要张大嘴发"
+- ✅ 好的 issue: "重音位置错误，重读了第二音节；banana 应重读第二音节 ba-NA-na"
+- ✅ 好的 issue: "漏读了尾音 /d/，birthday 的 d 要发出来"
+- ✅ 好的 issue: "误读为 father，应该读 dad /dæd/"
+
 ## 示例 (Few-Shot)
 **输入**:
 参考文本: "This is my dad"
@@ -149,12 +206,12 @@ PART1_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
   "integrity_score": 100.0,
   "is_rejected": false,
   "diagnosis": "学生将 'dad' 误读为 'father'，导致准确度扣分。",
-  "part1_overall_suggestion": ["注意单词的准确发音", "不要随意替换同义词"],
+  "part1_overall_suggestion": ["注意区分 dad 和 father，dad 是非正式称呼", "练习短元音 /æ/ 的发音"],
   "details": [
     {"content": "This", "score": 100, "issue": null},
     {"content": "is", "score": 100, "issue": null},
     {"content": "my", "score": 100, "issue": null},
-    {"content": "dad", "score": 0, "issue": "误读为 father"}
+    {"content": "dad", "score": 0, "issue": "误读为 father；dad /dæd/ 是非正式称呼，需要按原文朗读"}
   ]
 }
 (注意：尽管学生读了 father，但 content 字段依然填 dad，score 扣分，issue 说明情况)
@@ -223,12 +280,13 @@ def build_part2_user_prompt(questions: List[dict]) -> str:
 # 使用 qwen-plus 模型 + 结构化输出
 # ============================================
 
-SUMMARY_ANALYSIS_SYSTEM_PROMPT = """你是一位专业的英语教育专家。你的任务是根据学生的口语测评数据，生成一份简洁的测评汇总分析，帮助家长了解孩子的学习情况。
+SUMMARY_ANALYSIS_SYSTEM_PROMPT = """你是一位专业的英语教育专家。你的任务是根据学生的口语测评数据，生成一份详细的测评汇总分析，帮助家长了解孩子的学习情况。
 
 ## 分析原则
 1. **客观真实**：基于测评数据给出分析，不夸大不贬低
 2. **积极正面**：以鼓励为主，短板表述要委婉
-3. **具体可行**：建议要具体、可操作
+3. **具体举例**：亮点和短板都必须结合具体的词汇或回答举例说明
+4. **建议详细**：每条建议至少20字，要具体可执行
 
 ## 评分参考
 - 80-100 分：杰出
@@ -236,6 +294,16 @@ SUMMARY_ANALYSIS_SYSTEM_PROMPT = """你是一位专业的英语教育专家。�
 - 40-59 分：良好
 - 20-39 分：及格
 - 0-19 分：待提升
+
+## S/A/B 评分含义
+- S (Super): 回答完美
+- A (Average): 回答正确但有小问题
+- B (Below): 回答错误或未作答
+
+## 举例要求
+- 亮点举例：如"词汇发音准确，如 'apple'、'banana' 等单词发音清晰标准"
+- 短板举例：如"部分词汇发音需加强，如 'three' 读成了 'free'"
+- 问答举例：如"能用完整句子回答问题，如Q3回答'I like playing basketball'表达流畅"
 """
 
 # 测评汇总分析的 JSON Schema (结构化输出)
@@ -244,24 +312,24 @@ SUMMARY_ANALYSIS_SCHEMA = {
     "properties": {
         "highlights": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": {"type": "string", "minLength": 15},
             "minItems": 1,
             "maxItems": 2,
-            "description": "1-2个最突出的亮点，如：发音清晰准确"
+            "description": "1-2个最突出的亮点，必须结合具体词汇或回答举例，如：词汇发音准确，'apple'、'banana'等单词发音清晰"
         },
         "weaknesses": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": {"type": "string", "minLength": 15},
             "minItems": 1,
             "maxItems": 2,
-            "description": "1-2个需要提升的方向，表述要委婉"
+            "description": "1-2个需要提升的方向，必须结合具体词汇或回答举例，表述要委婉"
         },
         "weekly_plan": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": {"type": "string", "minLength": 20},
             "minItems": 3,
             "maxItems": 3,
-            "description": "3条具体的本周练习建议"
+            "description": "3条具体的本周练习建议，每条至少20字，要具体可执行"
         }
     },
     "required": ["highlights", "weaknesses", "weekly_plan"],
@@ -473,6 +541,9 @@ class QwenOmniGateway:
         self.model = settings.QWEN_MODEL           # qwen3-omni-flash (音频评测)
         self.plus_model = settings.QWEN_PLUS_MODEL  # qwen-plus (文本分析)
         self.semaphore = RateLimiter.get_qwen_limiter()
+        # 思考模式配置
+        self.enable_thinking = settings.QWEN_ENABLE_THINKING
+        self.thinking_budget = settings.QWEN_THINKING_BUDGET
     
     async def evaluate_part2(
         self,
@@ -531,13 +602,19 @@ class QwenOmniGateway:
             "stream_options": {"include_usage": True}
         }
         
+        # 添加思考模式参数 (提高评测准确性)
+        if self.enable_thinking:
+            request_body["enable_thinking"] = True
+            request_body["thinking_budget"] = self.thinking_budget
+            logger.info(f"Part 2 启用思考模式，thinking_budget={self.thinking_budget}")
+        
         # 使用 Semaphore 限流
         async with self.semaphore:
             logger.info(f"开始 Qwen Part 2 评测，音频大小: {len(audio_data)} bytes")
             
             try:
                 full_response, usage = await self._stream_request(request_body)
-                result = self._parse_response(full_response)
+                result = self._parse_part2_response(full_response)
                 result.usage = usage  # Attach usage info
                 
                 # 限速：每次请求后等待 1 秒（60 RPM）
@@ -610,6 +687,12 @@ class QwenOmniGateway:
             "stream": False # Part 1 不用流式，直接等结果
         }
         
+        # 添加思考模式参数 (提高评测准确性)
+        if self.enable_thinking:
+            request_body["enable_thinking"] = True
+            request_body["thinking_budget"] = self.thinking_budget
+            logger.info(f"Part 1 启用思考模式，thinking_budget={self.thinking_budget}")
+        
         async with self.semaphore:
             logger.info(f"开始 Qwen Part 1 评测，音频大小: {len(audio_data)} bytes")
             try:
@@ -636,12 +719,16 @@ class QwenOmniGateway:
     def _parse_part1_response(self, response_text: str, reference_text: str = "") -> Part1EvaluationResult:
         """解析 Part 1 JSON 响应 (新版 4 维度评分)"""
         try:
-            import re
-            json_match = re.search(r'\{[\s\S]*\}', response_text)
+            # 1. 移除思考模式的 <think> 标签
+            cleaned_text = strip_thinking_tags(response_text)
+            if cleaned_text != response_text:
+                logger.debug(f"Part1: 已移除思考标签，原始长度={len(response_text)}, 清理后={len(cleaned_text)}")
+            
+            json_match = re.search(r'\{[\s\S]*\}', cleaned_text)
             if json_match:
                 data = json.loads(json_match.group())
             else:
-                data = json.loads(response_text)
+                data = json.loads(cleaned_text)
             
             # 提取 4 个维度分数 (直接百分制)
             accuracy = float(data.get("accuracy_score", 0))
@@ -752,7 +839,11 @@ class QwenOmniGateway:
         star_level: int,
         radar_scores: dict,
         part1_score: float,
-        part2_score: Optional[float] = None
+        part2_score: Optional[float] = None,
+        part1_words: Optional[List[dict]] = None,
+        part2_items: Optional[List[dict]] = None,
+        part1_suggestion: Optional[List[str]] = None,
+        part2_suggestion: Optional[List[str]] = None
     ) -> SummaryAnalysisResult:
         """
         生成测评汇总分析 (给家长看的学习建议)
@@ -767,6 +858,10 @@ class QwenOmniGateway:
             radar_scores: 五维雷达图分数 {fluency, pronunciation, confidence, vocabulary, sentence}
             part1_score: Part 1 分数
             part2_score: Part 2 分数
+            part1_words: Part 1 词汇详情列表 [{word, score, status}]
+            part2_items: Part 2 问答详情列表 [{no, score, transcript, feedback}]
+            part1_suggestion: Part 1 的建议
+            part2_suggestion: Part 2 的建议
             
         Returns:
             SummaryAnalysisResult
@@ -779,15 +874,58 @@ class QwenOmniGateway:
                 "star_level": star_level,
                 "part1": part1_score,
                 "part2": part2_score,
-                "radar": radar_scores
+                "radar": {
+                    "fluency": round(radar_scores.get("fluency", 0), 1),
+                    "pronunciation": round(radar_scores.get("pronunciation", 0), 1),
+                    "confidence": round(radar_scores.get("confidence", 0), 1),
+                    "vocabulary": round(radar_scores.get("vocabulary", 0), 1),
+                    "sentence": round(radar_scores.get("sentence", 0), 1)
+                }
             }
         }
+        
+        # 添加 Part1 词汇详情 (用于具体举例)
+        if part1_words:
+            perfect_words = [w["word"] for w in part1_words if w.get("status") == "perfect"][:5]
+            # 获取有问题的词及其具体问题描述
+            weak_words_with_issues = [
+                {"word": w["word"], "issue": w.get("issue") or "发音不清"} 
+                for w in part1_words 
+                if w.get("status") in ("unclear", "failed")
+            ][:5]
+            input_data["part1_details"] = {
+                "good_words": perfect_words,
+                "weak_words": weak_words_with_issues,  # 包含具体问题描述
+                "total_words": len(part1_words),
+                "perfect_count": len([w for w in part1_words if w.get("status") == "perfect"])
+            }
+        
+        # 添加 Part2 问答详情 (用于具体举例)
+        if part2_items:
+            good_answers = [{"no": q["no"], "answer": q.get("transcript", "")[:50]} 
+                          for q in part2_items if q.get("score") in ("S", "A")][:3]
+            weak_answers = [{"no": q["no"], "feedback": q.get("feedback", "")[:50]} 
+                          for q in part2_items if q.get("score") == "B"][:3]
+            input_data["part2_details"] = {
+                "good_answers": good_answers,
+                "weak_answers": weak_answers,
+                "total_questions": len(part2_items)
+            }
+        
+        # 添加原始建议作为参考
+        if part1_suggestion:
+            input_data["part1_model_suggestion"] = part1_suggestion[:2]
+        if part2_suggestion:
+            input_data["part2_model_suggestion"] = part2_suggestion[:2]
         
         user_prompt = f"""请根据以下测评数据生成测评汇总分析：
 
 {json.dumps(input_data, ensure_ascii=False, indent=2)}
 
-请分析学生的亮点、需要提升的方向，并给出本周的练习计划。"""
+## 输出要求
+1. **亮点**：必须结合具体的词汇（如good_words中的单词）或回答（如good_answers）举例说明
+2. **短板**：必须结合具体的词汇（如weak_words）或回答（如weak_answers）举例说明，表述要委婉
+3. **周计划**：每条建议至少20字，要具体说明练习什么、怎么练、练多久"""
 
         request_body = {
             "model": self.plus_model,  # 使用 qwen-plus
@@ -808,6 +946,8 @@ class QwenOmniGateway:
         
         async with self.semaphore:
             logger.info(f"开始生成测评汇总分析 (qwen-plus): {student_name}")
+            usage = {}  # 初始化 usage，确保失败时也能访问
+            content = ""
             try:
                 async with httpx.AsyncClient(timeout=60.0) as client:
                     response = await client.post(
@@ -822,7 +962,9 @@ class QwenOmniGateway:
                     
                     logger.info(f"测评汇总分析完成, tokens: {usage}")
                     
-                    result_data = json.loads(content)
+                    # 移除可能的思考标签
+                    cleaned_content = strip_thinking_tags(content)
+                    result_data = json.loads(cleaned_content)
                     return SummaryAnalysisResult(
                         success=True,
                         highlights=result_data.get("highlights", []),
@@ -832,11 +974,13 @@ class QwenOmniGateway:
                     )
                     
             except json.JSONDecodeError as e:
-                logger.error(f"测评汇总分析 JSON 解析失败: {e}")
-                return SummaryAnalysisResult(success=False, error=f"JSON 解析失败: {e}")
+                logger.error(f"测评汇总分析 JSON 解析失败: {e}, content={content[:200] if content else 'empty'}")
+                # 即使解析失败，也返回 usage 数据用于计费
+                return SummaryAnalysisResult(success=False, error=f"JSON 解析失败: {e}", usage=usage)
             except Exception as e:
                 logger.exception(f"测评汇总分析生成失败: {e}")
-                return SummaryAnalysisResult(success=False, error=str(e))
+                # 网络异常等情况可能没有 usage
+                return SummaryAnalysisResult(success=False, error=str(e), usage=usage if usage else None)
 
     async def generate_report_interpretation(
         self,
@@ -897,6 +1041,8 @@ class QwenOmniGateway:
         
         async with self.semaphore:
             logger.info(f"开始生成报告解读 (qwen-plus): {student_name}")
+            usage = {}  # 初始化 usage，确保失败时也能访问
+            content = ""
             try:
                 async with httpx.AsyncClient(timeout=60.0) as client:
                     response = await client.post(
@@ -911,7 +1057,9 @@ class QwenOmniGateway:
                     
                     logger.info(f"报告解读完成, tokens: {usage}")
                     
-                    result_data = json.loads(content)
+                    # 移除可能的思考标签
+                    cleaned_content = strip_thinking_tags(content)
+                    result_data = json.loads(cleaned_content)
                     return ReportInterpretationResult(
                         success=True,
                         highlights=result_data.get("highlights", []),
@@ -923,23 +1071,30 @@ class QwenOmniGateway:
                     )
                     
             except json.JSONDecodeError as e:
-                logger.error(f"报告解读 JSON 解析失败: {e}")
-                return ReportInterpretationResult(success=False, error=f"JSON 解析失败: {e}")
+                logger.error(f"报告解读 JSON 解析失败: {e}, content={content[:200] if content else 'empty'}")
+                # 即使解析失败，也返回 usage 数据用于计费
+                return ReportInterpretationResult(success=False, error=f"JSON 解析失败: {e}", usage=usage)
             except Exception as e:
                 logger.exception(f"报告解读生成失败: {e}")
-                return ReportInterpretationResult(success=False, error=str(e))
+                # 网络异常等情况可能没有 usage
+                return ReportInterpretationResult(success=False, error=str(e), usage=usage if usage else None)
 
+    def _parse_part2_response(self, response_text: str) -> Part2EvaluationResult:
         """
-        解析 Qwen 返回的 JSON 响应
+        解析 Qwen 返回的 Part 2 JSON 响应
         基于 /prompt-engineering-patterns - Error Recovery
         """
+        # 1. 移除思考模式的 <think> 标签
+        cleaned_text = strip_thinking_tags(response_text)
+        if cleaned_text != response_text:
+            logger.debug(f"已移除思考标签，原始长度={len(response_text)}, 清理后={len(cleaned_text)}")
+        
         try:
             # 尝试直接解析 JSON
-            data = json.loads(response_text)
+            data = json.loads(cleaned_text)
         except json.JSONDecodeError:
             # 尝试提取 JSON 块
-            import re
-            json_match = re.search(r'\{[\s\S]*\}', response_text)
+            json_match = re.search(r'\{[\s\S]*\}', cleaned_text)
             if json_match:
                 try:
                     data = json.loads(json_match.group())

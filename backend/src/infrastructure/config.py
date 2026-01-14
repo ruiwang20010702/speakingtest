@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     QWEN_MODEL: str = "qwen3-omni-flash"  # 用于音频评测 (Part1/Part2)
     QWEN_PLUS_MODEL: str = "qwen-plus"     # 用于文本分析 (测评汇总/报告解读)
     QWEN_RPM_LIMIT: int = 60  # Requests per minute
+    QWEN_ENABLE_THINKING: bool = True      # 开启思考模式 (提高评测准确性)
+    QWEN_THINKING_BUDGET: int = 2048       # 思考 token 上限
 
     # Aliyun OSS
     OSS_ACCESS_KEY_ID: str = ""
