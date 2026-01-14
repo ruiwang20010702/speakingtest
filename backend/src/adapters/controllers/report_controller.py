@@ -516,6 +516,244 @@ async def view_report_by_token(
 
 
 # ============================================
+# Parent H5 Report (Fused Data)
+# ============================================
+
+from src.use_cases.parent_report import ParentReportService, RadarDimension, WordStatus, DialogueSample
+
+
+class RadarDimensionResponse(BaseModel):
+    """Single radar dimension response."""
+    subject: str
+    score: float
+    fullMark: int = 100
+    icon: str
+    comment: str
+    tags: List[str]
+
+
+class WordStatusResponse(BaseModel):
+    """Word status response."""
+    text: str
+    status: str  # 'perfect', 'unclear', 'failed'
+
+
+class DialogueSampleResponse(BaseModel):
+    """Dialogue sample response."""
+    question_no: int
+    question: str
+    answer: str
+    score: str
+    feedback: str
+
+
+class Part1DetailResponse(BaseModel):
+    """Part 1 detail response."""
+    score: float
+    words: List[WordStatusResponse]
+
+
+class Part2DetailResponse(BaseModel):
+    """Part 2 detail response."""
+    score: float
+    best_sample: Optional[DialogueSampleResponse] = None
+    weak_sample: Optional[DialogueSampleResponse] = None
+
+
+class SuggestionResponse(BaseModel):
+    """Suggestion response."""
+    highlights: List[str]
+    weaknesses: List[str]
+    plan: List[str]
+
+
+class StudentInfoResponse(BaseModel):
+    """Student info response."""
+    name: str
+    level: str
+
+
+class OverallScoreResponse(BaseModel):
+    """Overall score response."""
+    total_score: float
+    star_level: int
+
+
+class ParentReportResponse(BaseModel):
+    """Complete parent H5 report response."""
+    student: StudentInfoResponse
+    overall: OverallScoreResponse
+    radar: List[RadarDimensionResponse]
+    part1: Part1DetailResponse
+    part2: Part2DetailResponse
+    suggestion: SuggestionResponse
+
+
+@router.get(
+    "/reports/{token}/h5",
+    response_model=ParentReportResponse,
+    summary="家长端 H5 报告",
+    description="获取家长端 H5 所需的完整报告数据，包含融合后的五维图谱。"
+)
+async def get_parent_h5_report(
+    token: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get complete report data for parent H5.
+    
+    Features:
+    - No authentication required (uses share token)
+    - Fused 5-dimension radar chart (Part 1 + Part 2)
+    - Word-level Part 1 detail
+    - Best/Weak samples for Part 2
+    - Learning suggestions
+    
+    All scores are 0-100 scale.
+    """
+    # Find share token
+    stmt = select(ReportShareTokenModel).where(
+        ReportShareTokenModel.token == token,
+        ReportShareTokenModel.is_revoked == False
+    )
+    result = await db.execute(stmt)
+    share = result.scalar_one_or_none()
+    
+    if not share:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="链接无效或已过期"
+        )
+    
+    # Increment view count
+    share.view_count += 1
+    
+    # Check expiry (if set)
+    if share.expires_at and share.expires_at < china_now():
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="链接已过期"
+        )
+    
+    # Get test with items
+    stmt = select(TestModel).options(
+        selectinload(TestModel.items)
+    ).where(TestModel.id == share.test_id)
+    
+    result = await db.execute(stmt)
+    test = result.scalar_one_or_none()
+    
+    if not test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="报告不存在"
+        )
+    
+    # Get student profile
+    stmt = select(StudentProfileModel).where(StudentProfileModel.user_id == test.student_id)
+    result = await db.execute(stmt)
+    student_profile = result.scalar_one_or_none()
+    student_name = student_profile.student_name if student_profile else "学生"
+    
+    # Get questions for Part 2 items (to fill in question text)
+    from src.adapters.repositories.models import QuestionModel
+    questions_stmt = select(QuestionModel).where(
+        QuestionModel.level == test.level,
+        QuestionModel.unit == test.unit,
+        QuestionModel.part == 2
+    )
+    questions_result = await db.execute(questions_stmt)
+    questions = {q.question_no: q.question for q in questions_result.scalars().all()}
+    
+    # Build test items with question text
+    test_items = []
+    for item in test.items:
+        test_items.append({
+            "question_no": item.question_no,
+            "question": questions.get(item.question_no, f"Question {item.question_no}"),
+            "score": item.score,
+            "feedback": item.feedback,
+            "evidence": item.evidence
+        })
+    
+    # Build interpretation dict if available
+    interpretation = None
+    if test.interpretation_generated_at:
+        interpretation = {
+            "highlights": json.loads(test.interpretation_highlights) if test.interpretation_highlights else [],
+            "weaknesses": json.loads(test.interpretation_weaknesses) if test.interpretation_weaknesses else [],
+            "suggestions": json.loads(test.interpretation_suggestions) if test.interpretation_suggestions else []
+        }
+    
+    # Generate report using service
+    service = ParentReportService()
+    report = service.generate_report(
+        student_name=student_name,
+        level=test.level,
+        total_score=float(test.total_score) if test.total_score else 0,
+        star_level=test.star_level or 1,
+        part1_score=float(test.part1_score) if test.part1_score else 0,
+        part2_score=float(test.part2_score) if test.part2_score else 0,
+        part1_raw=test.part1_raw_result,
+        part2_raw=test.part2_raw_result,
+        part2_transcript=test.part2_transcript or "",
+        test_items=test_items,
+        interpretation=interpretation
+    )
+    
+    await db.commit()
+    
+    # Convert to response
+    return ParentReportResponse(
+        student=StudentInfoResponse(name=report.student.name, level=report.student.level),
+        overall=OverallScoreResponse(
+            total_score=report.overall.total_score,
+            star_level=report.overall.star_level
+        ),
+        radar=[
+            RadarDimensionResponse(
+                subject=dim.subject,
+                score=dim.score,
+                fullMark=dim.fullMark,
+                icon=dim.icon,
+                comment=dim.comment,
+                tags=dim.tags
+            )
+            for dim in report.radar
+        ],
+        part1=Part1DetailResponse(
+            score=report.part1.score,
+            words=[
+                WordStatusResponse(text=w.text, status=w.status)
+                for w in report.part1.words
+            ]
+        ),
+        part2=Part2DetailResponse(
+            score=report.part2.score,
+            best_sample=DialogueSampleResponse(
+                question_no=report.part2.best_sample.question_no,
+                question=report.part2.best_sample.question,
+                answer=report.part2.best_sample.answer,
+                score=report.part2.best_sample.score,
+                feedback=report.part2.best_sample.feedback
+            ) if report.part2.best_sample else None,
+            weak_sample=DialogueSampleResponse(
+                question_no=report.part2.weak_sample.question_no,
+                question=report.part2.weak_sample.question,
+                answer=report.part2.weak_sample.answer,
+                score=report.part2.weak_sample.score,
+                feedback=report.part2.weak_sample.feedback
+            ) if report.part2.weak_sample else None
+        ),
+        suggestion=SuggestionResponse(
+            highlights=report.suggestion.highlights,
+            weaknesses=report.suggestion.weaknesses,
+            plan=report.suggestion.plan
+        )
+    )
+
+
+# ============================================
 # Report Interpretation (AI解读版)
 # ============================================
 
