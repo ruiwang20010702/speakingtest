@@ -188,13 +188,19 @@ class ProcessPart2TaskUseCase:
                 return False
             
             # 5. 保存逐题评分
+            # 模型返回: {"no": 1, "transcript": "回答文本", "score": "S/A/B", "feedback": "评价"}
             for item_data in qwen_result.items:
+                # 转换 S/A/B 为数值: S=2, A=1, B=0
+                score_str = str(item_data.get("score", "A")).upper()
+                score_map = {"S": 2, "A": 1, "B": 0}
+                score_num = score_map.get(score_str, 1)  # 默认 A=1
+                
                 item = TestItemModel(
                     test_id=task.test_id,
                     question_no=item_data.get("no"),
-                    score=item_data.get("score_0_2", 0),
-                    feedback=item_data.get("reason", ""),
-                    evidence=item_data.get("evidence", "")
+                    score=score_num,
+                    feedback=item_data.get("feedback", ""),  # 评价反馈
+                    evidence=item_data.get("transcript", "")  # 学生回答转写
                 )
                 self.db.add(item)
             

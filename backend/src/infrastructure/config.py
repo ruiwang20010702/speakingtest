@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     
     # Frontend URLs
-    FRONTEND_STUDENT_URL: str = "http://localhost:3001/s"
+    FRONTEND_STUDENT_URL: str = "http://localhost:3001/s"  # Student H5 entry path
+    FRONTEND_PARENT_URL: str = "http://localhost:3000"     # Parent H5
 
     # Database (PostgreSQL)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/speakingtest"
@@ -37,7 +38,8 @@ class Settings(BaseSettings):
     # Qwen API
     QWEN_API_KEY: str = ""
     QWEN_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    QWEN_MODEL: str = "qwen3-omni-flash"
+    QWEN_MODEL: str = "qwen3-omni-flash"  # 用于音频评测 (Part1/Part2)
+    QWEN_PLUS_MODEL: str = "qwen-plus"     # 用于文本分析 (测评汇总/报告解读)
     QWEN_RPM_LIMIT: int = 60  # Requests per minute
 
     # Aliyun OSS

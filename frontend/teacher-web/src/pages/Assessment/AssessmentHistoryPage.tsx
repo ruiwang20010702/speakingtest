@@ -84,12 +84,8 @@ export const AssessmentHistoryPage: React.FC = () => {
         setIsCreating(true);
         try {
             const res = await studentsApi.generateToken(Number(id), level, unit);
-            // Construct link assuming student app is on /student-h5/ relative to root
-            // or use the token directly if that's what's needed.
-            const token = res.data.access_token;
-            // Use environment variable if available, otherwise default
-            const baseUrl = import.meta.env.VITE_STUDENT_APP_URL || window.location.origin.replace('teacher', 'student');
-            const link = `${baseUrl}/?token=${token}`;
+            // Use the entry_url directly from backend response
+            const link = res.data.entry_url;
             
             setGeneratedLink(link);
             setModalConfig({ title: '测评链接已生成', subtitle: '请分享给学生' });

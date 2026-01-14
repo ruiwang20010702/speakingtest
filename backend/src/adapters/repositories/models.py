@@ -121,6 +121,8 @@ class TestModel(Base):
     interpretation_suggestions = Column(Text, nullable=True)
     interpretation_parent_script = Column(Text, nullable=True)
     interpretation_generated_at = Column(DateTime(timezone=True), nullable=True)
+    # Report Override (用户手动编辑的内容，优先于原始数据)
+    report_override = Column(JSON_TYPE, nullable=True)
     # Timestamps
     created_at = Column(DateTime(timezone=True), default=lambda: china_now())
     updated_at = Column(DateTime(timezone=True), default=lambda: china_now(), onupdate=lambda: china_now())

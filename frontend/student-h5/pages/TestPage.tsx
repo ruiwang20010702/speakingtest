@@ -107,13 +107,22 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
   // 滑动相关状态
   const minSwipeDistance = 50;
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   useEffect(() => {
-    const fetch = async () => {
-      const q = await getQuestions(level, unit);
-      setQuestions(q);
-      setIsLoading(false);
+    const fetchQuestions = async () => {
+      try {
+        setLoadError(null);
+        const q = await getQuestions(level, unit);
+        setQuestions(q);
+      } catch (error: any) {
+        console.error('Failed to load questions:', error);
+        setLoadError(error.response?.data?.detail || '加载题目失败，请检查网络连接');
+      } finally {
+        setIsLoading(false);
+      }
     };
-    fetch();
+    fetchQuestions();
 
     // 清理函数：组件卸载时停止语音播放
     return () => {
@@ -266,6 +275,21 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
   }, [currentIndex, currentPart, questions.length, isLoading]);
 
   if (isLoading) return <div className="h-screen flex items-center justify-center font-black text-[#1CB0F6]">加载中...</div>;
+
+  if (loadError) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center p-6 text-center">
+        <div className="text-red-500 text-xl font-bold mb-4">😞 加载失败</div>
+        <div className="text-gray-600 mb-6">{loadError}</div>
+        <button
+          onClick={() => window.location.href = '/'}
+          className="px-6 py-3 bg-[#1CB0F6] text-white rounded-xl font-bold"
+        >
+          返回首页
+        </button>
+      </div>
+    );
+  }
 
   if (showTransition) {
     return (

@@ -67,6 +67,15 @@ export const testsApi = {
 
   generateShareLink: (testId: number) =>
     api.post<{ token: string; share_url: string; message: string }>(`/tests/${testId}/share`),
+
+  updateReport: (testId: number, data: ReportOverrideRequest) =>
+    api.patch<UpdateReportResponse>(`/tests/${testId}/report`, data),
+
+  getReportOverride: (testId: number) =>
+    api.get<GetReportOverrideResponse>(`/tests/${testId}/report/override`),
+
+  resetReportOverride: (testId: number) =>
+    api.delete<UpdateReportResponse>(`/tests/${testId}/report/override`),
 };
 
 // Admin API
@@ -268,6 +277,86 @@ export interface Interpretation {
   evidence: string[];
   suggestions: string[];
   parent_script: string;
+}
+
+// Report Override Types (Full Edit)
+export interface RadarScoreOverride {
+  fluency?: number;         // 流利度 0-100
+  pronunciation?: number;   // 发音 0-100
+  confidence?: number;      // 自信度 0-100
+  vocabulary?: number;      // 词汇 0-100
+  sentence?: number;        // 整句输出 0-100
+}
+
+export interface Part1WordOverride {
+  text: string;             // 单词文本
+  status: 'perfect' | 'unclear' | 'failed';
+  score?: number;           // 分数 0-100
+}
+
+export interface Part2ItemOverride {
+  question_no: number;      // 题号
+  score: number;            // 0/1/2
+  feedback?: string;        // 反馈
+  evidence?: string;        // 学生回答
+}
+
+export interface SuggestionOverride {
+  highlights?: string[];    // 亮点
+  weaknesses?: string[];    // 短板
+  suggestions?: string[];   // 建议
+  parent_script?: string;   // 家长话术
+}
+
+export interface ReportOverrideRequest {
+  // 基础信息
+  student_name?: string;
+  level?: string;
+  unit?: string;
+  
+  // 分数
+  part1_score?: number;
+  part2_score?: number;
+  total_score?: number;
+  star_level?: number;
+  
+  // 五维雷达图
+  radar?: RadarScoreOverride;
+  
+  // Part1 词汇详情
+  part1_words?: Part1WordOverride[];
+  
+  // Part2 对话详情
+  part2_items?: Part2ItemOverride[];
+  
+  // 学习建议
+  suggestion?: SuggestionOverride;
+}
+
+export interface UpdateReportResponse {
+  success: boolean;
+  message: string;
+  override_keys?: string[];
+}
+
+export interface OriginalReportData {
+  student_name: string;
+  level: string;
+  unit: string;
+  part1_score?: number;
+  part2_score?: number;
+  total_score?: number;
+  star_level?: number;
+  radar?: RadarScoreOverride;
+  part1_words?: Part1WordOverride[];
+  part2_items?: Part2ItemOverride[];
+  suggestion?: SuggestionOverride;
+}
+
+export interface GetReportOverrideResponse {
+  has_override: boolean;
+  override?: ReportOverrideRequest;
+  original?: OriginalReportData;  // 原始数据用于初始化
 }
 
 // Questions API

@@ -11,8 +11,8 @@ interface NewAssessmentModalProps {
 export const NewAssessmentModal: React.FC<NewAssessmentModalProps> = ({ isOpen, onClose, onSubmit, isCreating }) => {
     if (!isOpen) return null;
 
-    const [level, setLevel] = useState('L0 (Beginner)');
-    const [unit, setUnit] = useState('All Units');
+    const [level, setLevel] = useState('L0');
+    const [unit, setUnit] = useState('All');
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -36,9 +36,9 @@ export const NewAssessmentModal: React.FC<NewAssessmentModalProps> = ({ isOpen, 
                             onChange={(e) => setLevel(e.target.value)}
                             className="input-field appearance-none bg-[url('https://api.iconify.design/lucide/chevron-down.svg?color=%2394a3b8')] bg-no-repeat bg-[right_1rem_center]"
                         >
-                            <option>L0 (Beginner)</option>
-                            <option>L1 (Elementary)</option>
-                            <option>L2 (Intermediate)</option>
+                            <option value="L0">L0 (Beginner)</option>
+                            <option value="L1">L1 (Elementary)</option>
+                            <option value="L2">L2 (Intermediate)</option>
                         </select>
                     </div>
 
@@ -49,9 +49,10 @@ export const NewAssessmentModal: React.FC<NewAssessmentModalProps> = ({ isOpen, 
                             onChange={(e) => setUnit(e.target.value)}
                             className="input-field appearance-none bg-[url('https://api.iconify.design/lucide/chevron-down.svg?color=%2394a3b8')] bg-no-repeat bg-[right_1rem_center]"
                         >
-                            <option>全部单元</option>
-                            <option>单元 1</option>
-                            <option>单元 2</option>
+                            <option value="All">全部单元</option>
+                            <option value="Unit 1">单元 1</option>
+                            <option value="Unit 1-3">单元 1-3</option>
+                            <option value="Unit 4-8">单元 4-8</option>
                         </select>
                     </div>
                 </div>

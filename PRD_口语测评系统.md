@@ -265,9 +265,24 @@ graph TD
 
 #### 老师端（解读版）
 
-- **生成方式**：**Qwen-Omni 模型动态生成**（原计划 MVP 规则生成，现已升级为 AI 生成），引用学生转写作为证据点
-- **家长沟通话术**：亮点、短板、证据点（引用报告片段/示例/转写摘录）、行动建议（1 周练习计划）
+- **生成方式**：**qwen-plus 模型 + 结构化输出**（确保输出格式稳定可靠），引用学生转写作为证据点
+- **目标用户**：班主任（用于向家长解读报告）
+- **输出内容**：
+  - 亮点 (highlights): 1-2 条最突出的优点
+  - 短板 (weaknesses): 1-2 条需要提升的方向
+  - 证据点 (evidence): 1-3 条具体证据（引用报告片段/示例/转写摘录）
+  - 行动建议 (suggestions): 3 条具体的练习建议
+  - 家长沟通话术 (parent_script): Markdown 格式，200-400 字
 - **风险提示**：如录音环境差导致的置信度下降说明（若可判断）
+
+#### 家长端（测评汇总分析）
+
+- **生成方式**：**qwen-plus 模型 + 结构化输出**
+- **目标用户**：家长（在家长端 H5 报告中展示）
+- **输出内容**：
+  - 亮点 (highlights): 1-2 条
+  - 短板 (weaknesses): 1-2 条（表述委婉）
+  - 本周练习计划 (weekly_plan): 3 条具体可行的建议
 
 #### 家长端（专属链接）
 
@@ -626,10 +641,66 @@ for chunk in completion:
 
 | 场景 | 推荐引擎 | 原因 |
 |------|----------|------|
-| **Part1 词汇朗读** | Qwen-Omni | 统一技术栈，降低维护成本，效果满足需求 |
-| **Part2 问答表达** | Qwen-Omni | 语义理解能力强，可评估回答内容是否正确 |
-| **录音转写** | Qwen-Omni | 端到端 ASR + 评测，减少调用链路 |
-| **个性化反馈** | Qwen-Omni | 可根据学生表现生成针对性建议 |
+| **Part1 词汇朗读** | `qwen3-omni-flash` | 统一技术栈，降低维护成本，效果满足需求 |
+| **Part2 问答表达** | `qwen3-omni-flash` | 语义理解能力强，可评估回答内容是否正确 |
+| **录音转写** | `qwen3-omni-flash` | 端到端 ASR + 评测，减少调用链路 |
+| **测评汇总分析** | `qwen-plus` | 文本分析场景，生成家长可见的学习建议（亮点/短板/计划），**结构化输出** |
+| **报告解读** | `qwen-plus` | 文本分析场景，生成班主任用的沟通话术，**结构化输出** |
+
+### 7.8 qwen-plus 结构化输出 (新增)
+
+> **用途**：测评汇总分析（给家长看）和报告解读（给班主任用）均使用 qwen-plus 模型 + 结构化输出，确保输出格式稳定可靠。
+
+**价格** (元/百万 Tokens)：
+- 输入: ¥0.8
+- 输出: ¥2
+
+**测评汇总分析 JSON Schema**：
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "highlights": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 2},
+    "weaknesses": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 2},
+    "weekly_plan": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3}
+  },
+  "required": ["highlights", "weaknesses", "weekly_plan"]
+}
+```
+
+**报告解读 JSON Schema**：
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "highlights": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 2},
+    "weaknesses": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 2},
+    "evidence": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 3},
+    "suggestions": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
+    "parent_script": {"type": "string", "description": "家长沟通话术 (Markdown格式，200-400字)"}
+  },
+  "required": ["highlights", "weaknesses", "evidence", "suggestions", "parent_script"]
+}
+```
+
+**调用方式**：
+
+```python
+request_body = {
+    "model": "qwen-plus",
+    "messages": [...],
+    "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "summary_analysis",
+            "strict": True,
+            "schema": SUMMARY_ANALYSIS_SCHEMA
+        }
+    }
+}
+```
 
 ---
 
@@ -1231,8 +1302,8 @@ POST /tests/{id}/submit-part2
 
 ---
 
-*文档版本：v1.0*  
-*最后更新：2026-01-09*
+*文档版本：v1.5*  
+*最后更新：2026-01-14*
 
 ---
 
@@ -1247,4 +1318,5 @@ POST /tests/{id}/submit-part2
 | v1.2 | 2026-01-09 | **全链路 Qwen-Omni 升级**：Part 1/2 统一使用 Qwen-Omni；新增费用统计 (Cost Tracking) 与 Token 用量明细；数据库结构同步 (CRM 字段、URL、Raw Result)；统一 UTC 时间标准；更新 OSS 上传策略。 |
 | v1.3 | 2026-01-12 | **动态题目数量支持**：Part 1/2 题目数量不再固定，支持后台动态配置；评分改为 0-100 分制（Part 1 + Part 2 平均分）；星级规则同步更新为基于 0-100 总分。 |
 | v1.4 | 2026-01-13 | **报告解读功能落地**：实现基于 Qwen-Omni 的 AI 报告解读生成（亮点/短板/证据/建议/话术）；数据库 tests 表新增 interpretation 相关字段；新增生成解读 API。 |
+| v1.5 | 2026-01-14 | **qwen-plus 结构化输出**：测评汇总分析（给家长看）和报告解读（给班主任用）改用 `qwen-plus` 模型 + JSON Schema 结构化输出，确保输出格式稳定；新增 7.8 章节详述 qwen-plus 用法；更新引擎分工表（7.7）区分音频评测与文本分析场景。 |
 

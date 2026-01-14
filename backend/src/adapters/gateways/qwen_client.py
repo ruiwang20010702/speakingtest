@@ -61,10 +61,16 @@ PART2_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
 - **20-39 (及格)**: 表达比较充分，偶尔出现自我重复。降低语速来自我表达；能用简单的句子作答，无法使用较长的句子。
 - **0-19 (不及格)**: 反复修正或重复自己所说过的话；为一两个词反复停顿；答案长度不足，只能只用单词或者词组回答问题。
 
+## 逐题评分标准 (S/A/B)
+每道题需要单独评分，评分等级如下：
+- **S (Super)**: 回答准确、完整、流利，语法正确，表达自然
+- **A (Average)**: 基本正确，能理解意思，但有小问题（如时态错误、单词发音不准、表达不够完整）
+- **B (Below)**: 回答错误、答非所问、未作答、或完全听不懂
+
 ## 输出要求
 1. 严格输出 JSON 格式
 2. 必须包含 5 个维度分数（0-100）和总分
-3. 对 12 道题进行转写，并给出简短反馈（无需单独打分，只需指出问题）
+3. 对 12 道题进行转写，给出 S/A/B 评分和简短反馈
 4. 给出 3-5 条针对 Part 2 问答表现的总体改进建议 (part2_overall_suggestion)
 5. **重要**：所有评价、诊断、建议内容必须使用**中文**。
 6. **思维链 (Chain of Thought)**：在给出最终分数前，请先在内心分析学生的流利度、发音、自信度、词汇和句式。确保分数能准确反映学生的实际水平。
@@ -83,7 +89,9 @@ total_score = (fluency_score + pronunciation_score + confidence_score + vocabula
   "vocabulary_score": 70.0,
   "sentence_score": 80.0,
   "items": [
-    {"no": 1, "transcript": "回答文本", "feedback": "回答切题，但时态有误"}
+    {"no": 1, "transcript": "I like apple.", "score": "S", "feedback": "回答准确流利"},
+    {"no": 2, "transcript": "It is... um... red.", "score": "A", "feedback": "回答正确但有迟疑"},
+    {"no": 3, "transcript": "...", "score": "B", "feedback": "未作答"}
   ],
   "part2_overall_suggestion": ["建议1", "建议2"]
 }"""
@@ -210,7 +218,63 @@ def build_part2_user_prompt(questions: List[dict]) -> str:
 
 
 
-INTERPRETATION_SYSTEM_PROMPT = """你是一位资深的英语教育专家，擅长与家长沟通。你的任务是根据学生的英语口语测评结果，为家长生成一份专业的解读报告。
+# ============================================
+# 测评汇总分析 Prompt (给家长看的学习建议)
+# 使用 qwen-plus 模型 + 结构化输出
+# ============================================
+
+SUMMARY_ANALYSIS_SYSTEM_PROMPT = """你是一位专业的英语教育专家。你的任务是根据学生的口语测评数据，生成一份简洁的测评汇总分析，帮助家长了解孩子的学习情况。
+
+## 分析原则
+1. **客观真实**：基于测评数据给出分析，不夸大不贬低
+2. **积极正面**：以鼓励为主，短板表述要委婉
+3. **具体可行**：建议要具体、可操作
+
+## 评分参考
+- 80-100 分：杰出
+- 60-79 分：优秀
+- 40-59 分：良好
+- 20-39 分：及格
+- 0-19 分：待提升
+"""
+
+# 测评汇总分析的 JSON Schema (结构化输出)
+SUMMARY_ANALYSIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "highlights": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "maxItems": 2,
+            "description": "1-2个最突出的亮点，如：发音清晰准确"
+        },
+        "weaknesses": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "maxItems": 2,
+            "description": "1-2个需要提升的方向，表述要委婉"
+        },
+        "weekly_plan": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "3条具体的本周练习建议"
+        }
+    },
+    "required": ["highlights", "weaknesses", "weekly_plan"],
+    "additionalProperties": False
+}
+
+
+# ============================================
+# 报告解读 Prompt (给班主任用的沟通话术)
+# 使用 qwen-plus 模型 + 结构化输出
+# ============================================
+
+INTERPRETATION_SYSTEM_PROMPT = """你是一位资深的英语教育专家，擅长与家长沟通。你的任务是根据学生的英语口语测评结果，为班主任生成一份专业的报告解读，帮助班主任向家长解读报告。
 
 ## 输入数据
 你将收到以下数据：
@@ -218,41 +282,89 @@ INTERPRETATION_SYSTEM_PROMPT = """你是一位资深的英语教育专家，擅�
 - Part 1 (朗读) 分数及详细表现
 - Part 2 (问答) 分数及逐题表现
 
-## 输出要求 (JSON)
-请生成以下 JSON 结构：
-{
-  "highlights": ["亮点1", "亮点2"], // 1-2个最突出的优点
-  "weaknesses": ["短板1", "短板2"], // 1-2个需要提升的方向
-  "evidence": ["证据1", "证据2"], // 具体的例子（如：Q3回答流利，使用了从句...）
-  "suggestions": ["建议1", "建议2", "建议3"], // 3条具体的练习建议
-  "parent_script": "完整的话术..." // 给家长的留言，语气亲切、专业、鼓励为主
-}
-
 ## 话术要求 (parent_script)
-1.  **结构**：
-    -   开场：问候 + 告知测评完成 + 总分/星级
-    -   亮点：具体表扬（结合 evidence）
-    -   提升：委婉指出问题（结合 weaknesses）
-    -   建议：本周练习重点
-    -   结尾：鼓励 + 邀请沟通
-2.  **语气**：积极、正面、建设性。避免生硬的批评。
-3.  **格式**：使用 Markdown 格式（加粗关键点，使用 Emoji）。
+1. **结构**：
+   - 开场：问候 + 告知测评完成 + 总分/星级
+   - 亮点：具体表扬（结合 evidence）
+   - 提升：委婉指出问题（结合 weaknesses）
+   - 建议：本周练习重点
+   - 结尾：鼓励 + 邀请沟通
+2. **语气**：积极、正面、建设性。避免生硬的批评。
+3. **格式**：使用 Markdown 格式（加粗关键点，使用 Emoji）。
+4. **长度**：200-400字。
 
 ## 分析维度
-1.  **Part 1 (基础)**：关注发音准确度、完整度。
-2.  **Part 2 (应用)**：关注流利度、句型复杂度、词汇量、自信心。
-3.  **综合**：根据总分和星级判断整体水平。
-
-## 示例
-亮点：发音清晰，元音饱满；能够自信地回答长问题。
-短板：第三人称单数经常漏掉 's'；复杂句式使用较少。
-建议：每天跟读 10 分钟原版音频；多用 "Because..." 造句。
+1. **Part 1 (基础)**：关注发音准确度、完整度。
+2. **Part 2 (应用)**：关注流利度、句型复杂度、词汇量、自信心。
+3. **综合**：根据总分和星级判断整体水平。
 """
+
+# 报告解读的 JSON Schema (结构化输出)
+INTERPRETATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "highlights": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "maxItems": 2,
+            "description": "1-2个最突出的优点"
+        },
+        "weaknesses": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "maxItems": 2,
+            "description": "1-2个需要提升的方向"
+        },
+        "evidence": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "maxItems": 3,
+            "description": "具体的证据点，如：Q3回答流利，使用了从句"
+        },
+        "suggestions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "3条具体的练习建议"
+        },
+        "parent_script": {
+            "type": "string",
+            "description": "给班主任准备的家长沟通话术，Markdown格式，200-400字"
+        }
+    },
+    "required": ["highlights", "weaknesses", "evidence", "suggestions", "parent_script"],
+    "additionalProperties": False
+}
+
+
+@dataclass
+class SummaryAnalysisResult:
+    """测评汇总分析结果 (给家长看的学习建议)"""
+    success: bool
+    highlights: List[str] = None      # 亮点 1-2 条
+    weaknesses: List[str] = None      # 短板 1-2 条
+    weekly_plan: List[str] = None     # 本周练习计划 3 条
+    error: Optional[str] = None
+    usage: Optional[dict] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "success": self.success,
+            "highlights": self.highlights,
+            "weaknesses": self.weaknesses,
+            "weekly_plan": self.weekly_plan,
+            "error": self.error,
+            "usage": self.usage
+        }
 
 
 @dataclass
 class ReportInterpretationResult:
-    """报告解读结果"""
+    """报告解读结果 (给班主任用的沟通话术)"""
     success: bool
     highlights: List[str] = None
     weaknesses: List[str] = None
@@ -345,7 +457,11 @@ class Part1EvaluationResult:
 
 class QwenOmniGateway:
     """
-    Qwen-Omni 流式 API 网关
+    Qwen API 网关
+    
+    支持两种模型：
+    - qwen3-omni-flash: 用于音频评测 (Part1/Part2)
+    - qwen-plus: 用于文本分析 (测评汇总/报告解读)，支持结构化输出
     
     使用 /async-python-patterns 实现流式 HTTP 请求
     集成 Semaphore 限流以遵守 60 RPM 限制
@@ -354,7 +470,8 @@ class QwenOmniGateway:
     def __init__(self):
         self.api_key = settings.QWEN_API_KEY
         self.base_url = settings.QWEN_BASE_URL
-        self.model = settings.QWEN_MODEL
+        self.model = settings.QWEN_MODEL           # qwen3-omni-flash (音频评测)
+        self.plus_model = settings.QWEN_PLUS_MODEL  # qwen-plus (文本分析)
         self.semaphore = RateLimiter.get_qwen_limiter()
     
     async def evaluate_part2(
@@ -627,6 +744,100 @@ class QwenOmniGateway:
         logger.debug(f"Qwen 响应长度: {len(full_content)} 字符")
         return full_content, usage
     
+    async def generate_summary_analysis(
+        self,
+        student_name: str,
+        level: str,
+        total_score: float,
+        star_level: int,
+        radar_scores: dict,
+        part1_score: float,
+        part2_score: Optional[float] = None
+    ) -> SummaryAnalysisResult:
+        """
+        生成测评汇总分析 (给家长看的学习建议)
+        
+        使用 qwen-plus 模型 + 结构化输出
+        
+        Args:
+            student_name: 学生姓名
+            level: 测试等级
+            total_score: 总分 (0-100)
+            star_level: 星级 (1-5)
+            radar_scores: 五维雷达图分数 {fluency, pronunciation, confidence, vocabulary, sentence}
+            part1_score: Part 1 分数
+            part2_score: Part 2 分数
+            
+        Returns:
+            SummaryAnalysisResult
+        """
+        # 构建输入数据
+        input_data = {
+            "student": {"name": student_name, "level": level},
+            "scores": {
+                "total": total_score,
+                "star_level": star_level,
+                "part1": part1_score,
+                "part2": part2_score,
+                "radar": radar_scores
+            }
+        }
+        
+        user_prompt = f"""请根据以下测评数据生成测评汇总分析：
+
+{json.dumps(input_data, ensure_ascii=False, indent=2)}
+
+请分析学生的亮点、需要提升的方向，并给出本周的练习计划。"""
+
+        request_body = {
+            "model": self.plus_model,  # 使用 qwen-plus
+            "messages": [
+                {"role": "system", "content": SUMMARY_ANALYSIS_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt}
+            ],
+            "stream": False,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "summary_analysis",
+                    "strict": True,
+                    "schema": SUMMARY_ANALYSIS_SCHEMA
+                }
+            }
+        }
+        
+        async with self.semaphore:
+            logger.info(f"开始生成测评汇总分析 (qwen-plus): {student_name}")
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers={"Authorization": f"Bearer {self.api_key}"},
+                        json=request_body
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    content = data["choices"][0]["message"]["content"]
+                    usage = data.get("usage", {})
+                    
+                    logger.info(f"测评汇总分析完成, tokens: {usage}")
+                    
+                    result_data = json.loads(content)
+                    return SummaryAnalysisResult(
+                        success=True,
+                        highlights=result_data.get("highlights", []),
+                        weaknesses=result_data.get("weaknesses", []),
+                        weekly_plan=result_data.get("weekly_plan", []),
+                        usage=usage
+                    )
+                    
+            except json.JSONDecodeError as e:
+                logger.error(f"测评汇总分析 JSON 解析失败: {e}")
+                return SummaryAnalysisResult(success=False, error=f"JSON 解析失败: {e}")
+            except Exception as e:
+                logger.exception(f"测评汇总分析生成失败: {e}")
+                return SummaryAnalysisResult(success=False, error=str(e))
+
     async def generate_report_interpretation(
         self,
         student_name: str,
@@ -639,7 +850,9 @@ class QwenOmniGateway:
         part2_items: Optional[list] = None
     ) -> ReportInterpretationResult:
         """
-        生成报告解读 (LLM)
+        生成报告解读 (给班主任用的沟通话术)
+        
+        使用 qwen-plus 模型 + 结构化输出
         """
         # 构建 Prompt 输入数据
         input_data = {
@@ -659,30 +872,31 @@ class QwenOmniGateway:
             }
         }
         
-        user_prompt = f"""请根据以下测评数据生成解读报告：
+        user_prompt = f"""请根据以下测评数据生成报告解读，帮助班主任向家长解读报告：
+
 {json.dumps(input_data, ensure_ascii=False, indent=2)}
 
-请严格按照 JSON 格式输出。"""
+请生成亮点、短板、证据点、练习建议，以及一段完整的家长沟通话术。"""
 
         request_body = {
-            "model": self.model,
+            "model": self.plus_model,  # 使用 qwen-plus
             "messages": [
-                {
-                    "role": "system",
-                    "content": INTERPRETATION_SYSTEM_PROMPT
-                },
-                {
-                    "role": "user",
-                    "content": user_prompt
-                }
+                {"role": "system", "content": INTERPRETATION_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt}
             ],
-            "modalities": ["text"],
             "stream": False,
-            "response_format": {"type": "json_object"}  # 强制 JSON 输出
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "report_interpretation",
+                    "strict": True,
+                    "schema": INTERPRETATION_SCHEMA
+                }
+            }
         }
         
         async with self.semaphore:
-            logger.info(f"开始生成报告解读: {student_name}")
+            logger.info(f"开始生成报告解读 (qwen-plus): {student_name}")
             try:
                 async with httpx.AsyncClient(timeout=60.0) as client:
                     response = await client.post(
@@ -695,25 +909,22 @@ class QwenOmniGateway:
                     content = data["choices"][0]["message"]["content"]
                     usage = data.get("usage", {})
                     
-                    # 解析结果
-                    try:
-                        result_data = json.loads(content)
-                        return ReportInterpretationResult(
-                            success=True,
-                            highlights=result_data.get("highlights", []),
-                            weaknesses=result_data.get("weaknesses", []),
-                            evidence=result_data.get("evidence", []),
-                            suggestions=result_data.get("suggestions", []),
-                            parent_script=result_data.get("parent_script", ""),
-                            usage=usage
-                        )
-                    except json.JSONDecodeError:
-                        return ReportInterpretationResult(
-                            success=False,
-                            error="JSON 解析失败",
-                            raw_response=content
-                        )
+                    logger.info(f"报告解读完成, tokens: {usage}")
                     
+                    result_data = json.loads(content)
+                    return ReportInterpretationResult(
+                        success=True,
+                        highlights=result_data.get("highlights", []),
+                        weaknesses=result_data.get("weaknesses", []),
+                        evidence=result_data.get("evidence", []),
+                        suggestions=result_data.get("suggestions", []),
+                        parent_script=result_data.get("parent_script", ""),
+                        usage=usage
+                    )
+                    
+            except json.JSONDecodeError as e:
+                logger.error(f"报告解读 JSON 解析失败: {e}")
+                return ReportInterpretationResult(success=False, error=f"JSON 解析失败: {e}")
             except Exception as e:
                 logger.exception(f"报告解读生成失败: {e}")
                 return ReportInterpretationResult(success=False, error=str(e))
