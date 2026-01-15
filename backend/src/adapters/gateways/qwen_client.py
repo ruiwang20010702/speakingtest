@@ -1060,15 +1060,15 @@ class QwenOmniGateway:
                     # 移除可能的思考标签
                     cleaned_content = strip_thinking_tags(content)
                     result_data = json.loads(cleaned_content)
-                        return ReportInterpretationResult(
-                            success=True,
-                            highlights=result_data.get("highlights", []),
-                            weaknesses=result_data.get("weaknesses", []),
-                            evidence=result_data.get("evidence", []),
-                            suggestions=result_data.get("suggestions", []),
-                            parent_script=result_data.get("parent_script", ""),
-                            usage=usage
-                        )
+                    return ReportInterpretationResult(
+                        success=True,
+                        highlights=result_data.get("highlights", []),
+                        weaknesses=result_data.get("weaknesses", []),
+                        evidence=result_data.get("evidence", []),
+                        suggestions=result_data.get("suggestions", []),
+                        parent_script=result_data.get("parent_script", ""),
+                        usage=usage
+                    )
                     
             except json.JSONDecodeError as e:
                 logger.error(f"报告解读 JSON 解析失败: {e}, content={content[:200] if content else 'empty'}")

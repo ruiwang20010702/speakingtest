@@ -17,7 +17,11 @@ frontend/teacher-web/dist/
 .DS_Store
 Thumbs.db
 
+# IDE
+.idea/
+
 # Project specific temp files
+.agent/
 *.m4a
 *.mp3
 stream_result.json
@@ -32,3 +36,4 @@ backend/tests/test_results/
 # Legacy/Old
 server/
 client/
+_legacy_mvp/
