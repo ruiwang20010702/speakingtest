@@ -62,8 +62,8 @@ export const testsApi = {
   getInterpretation: (testId: number) =>
     api.get<Interpretation>(`/tests/${testId}/interpretation`),
 
-  generateInterpretation: (testId: number) =>
-    api.post<Interpretation>(`/tests/${testId}/interpretation`),
+  generateInterpretation: (testId: number, force: boolean = false) =>
+    api.post<Interpretation>(`/tests/${testId}/interpretation${force ? '?force=true' : ''}`),
 
   generateShareLink: (testId: number) =>
     api.post<{ token: string; share_url: string; message: string }>(`/tests/${testId}/share`),
@@ -285,12 +285,17 @@ export interface TestItem {
   evidence?: string;
 }
 
+// 报告解读（班主任演讲稿，按6页组织）
 export interface Interpretation {
-  highlights: string[];
-  weaknesses: string[];
-  evidence: string[];
-  suggestions: string[];
-  parent_script: string;
+  pages: {
+    cover: string;    // 封面页演讲话术
+    radar: string;    // 能力图谱演讲话术
+    vocab: string;    // 词汇掌握演讲话术
+    dialogue: string; // 对话表现演讲话术
+    roadmap: string;  // 成长计划演讲话术
+    badge: string;    // 徽章页演讲话术
+  };
+  full_script: string;  // 完整演讲稿（约10分钟）
 }
 
 // Report Override Types (Full Edit)

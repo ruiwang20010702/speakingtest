@@ -1,8 +1,68 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Loader2, Copy, CheckCircle, BookOpen, Lightbulb, Target, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Loader2, Copy, CheckCircle, BookOpen, Radar, BookText, MessageCircle, Map, Award, FileText, RefreshCw } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
 import { testsApi, type Interpretation, type TestReport } from '../../api';
+
+// 页面配置
+const PAGE_CONFIG = {
+    cover: { 
+        label: '封面', 
+        icon: BookOpen, 
+        color: 'blue',
+        description: '开场问候',
+        duration: '约1分钟'
+    },
+    radar: { 
+        label: '能力图谱', 
+        icon: Radar, 
+        color: 'purple',
+        description: '五维能力分析',
+        duration: '约2分钟'
+    },
+    vocab: { 
+        label: '词汇掌握', 
+        icon: BookText, 
+        color: 'green',
+        description: '单词发音分析',
+        duration: '约2分钟'
+    },
+    dialogue: { 
+        label: '对话表现', 
+        icon: MessageCircle, 
+        color: 'orange',
+        description: '问答环节分析',
+        duration: '约2分钟'
+    },
+    roadmap: { 
+        label: '成长计划', 
+        icon: Map, 
+        color: 'rose',
+        description: '综合建议',
+        duration: '约2分钟'
+    },
+    badge: { 
+        label: '徽章', 
+        icon: Award, 
+        color: 'amber',
+        description: '结束语',
+        duration: '约1分钟'
+    },
+} as const;
+
+type PageKey = keyof typeof PAGE_CONFIG;
+
+const PAGE_ORDER: PageKey[] = ['cover', 'radar', 'vocab', 'dialogue', 'roadmap', 'badge'];
+
+// 颜色映射
+const colorClasses = {
+    blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100' },
+    purple: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', badge: 'bg-purple-100' },
+    green: { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700', badge: 'bg-green-100' },
+    orange: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', badge: 'bg-orange-100' },
+    rose: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', badge: 'bg-rose-100' },
+    amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100' },
+};
 
 export const InterpretationPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -11,8 +71,11 @@ export const InterpretationPage: React.FC = () => {
     const [interpretation, setInterpretation] = useState<Interpretation | null>(null);
     const [report, setReport] = useState<TestReport | null>(null);
     const [loading, setLoading] = useState(true);
+    const [regenerating, setRegenerating] = useState(false);
     const [error, setError] = useState('');
-    const [copiedScript, setCopiedScript] = useState(false);
+    const [copiedPage, setCopiedPage] = useState<string | null>(null);
+    const [copiedFull, setCopiedFull] = useState(false);
+    const [activeTab, setActiveTab] = useState<PageKey>('cover');
 
     useEffect(() => {
         if (id) {
@@ -35,21 +98,52 @@ export const InterpretationPage: React.FC = () => {
         } catch (err: any) {
             console.error('Failed to load interpretation:', err);
             if (err.response?.status === 404) {
-                setError('报告解读尚未生成，请先在测评历史页面点击"生成报告解读"按钮');
+                setError('演讲稿尚未生成，请先在测评历史页面点击"生成报告解读"按钮');
             } else {
-                setError(err.response?.data?.detail || '加载报告解读失败');
+                setError(err.response?.data?.detail || '加载演讲稿失败');
             }
         } finally {
             setLoading(false);
         }
     };
 
-    const handleCopyScript = async () => {
-        if (!interpretation?.parent_script) return;
+    const handleRegenerate = async () => {
+        if (!id || regenerating) return;
+        
+        if (!confirm('确定要重新生成演讲稿吗？这将覆盖当前的内容。')) {
+            return;
+        }
+        
         try {
-            await navigator.clipboard.writeText(interpretation.parent_script);
-            setCopiedScript(true);
-            setTimeout(() => setCopiedScript(false), 2000);
+            setRegenerating(true);
+            const res = await testsApi.generateInterpretation(parseInt(id), true);
+            setInterpretation(res.data);
+            setError('');
+        } catch (err: any) {
+            console.error('Failed to regenerate interpretation:', err);
+            alert(err.response?.data?.detail || '重新生成失败');
+        } finally {
+            setRegenerating(false);
+        }
+    };
+
+    const handleCopyPage = async (pageKey: PageKey) => {
+        if (!interpretation?.pages[pageKey]) return;
+        try {
+            await navigator.clipboard.writeText(interpretation.pages[pageKey]);
+            setCopiedPage(pageKey);
+            setTimeout(() => setCopiedPage(null), 2000);
+        } catch (err) {
+            console.error('Failed to copy:', err);
+        }
+    };
+
+    const handleCopyFullScript = async () => {
+        if (!interpretation?.full_script) return;
+        try {
+            await navigator.clipboard.writeText(interpretation.full_script);
+            setCopiedFull(true);
+            setTimeout(() => setCopiedFull(false), 2000);
         } catch (err) {
             console.error('Failed to copy:', err);
         }
@@ -76,11 +170,11 @@ export const InterpretationPage: React.FC = () => {
                     >
                         <ArrowLeft size={24} />
                     </button>
-                    <h1 className="text-2xl font-bold text-text-main">报告解读</h1>
+                    <h1 className="text-2xl font-bold text-text-main">班主任演讲稿</h1>
                 </div>
                 <div className="text-center py-10 bg-amber-50 text-amber-700 rounded-xl border border-amber-100">
-                    <BookOpen className="mx-auto mb-3 opacity-50" size={40} />
-                    <p>{error || '报告解读不存在'}</p>
+                    <FileText className="mx-auto mb-3 opacity-50" size={40} />
+                    <p>{error || '演讲稿不存在'}</p>
                     <button
                         onClick={() => navigate(-1)}
                         className="mt-4 text-primary hover:underline"
@@ -92,10 +186,15 @@ export const InterpretationPage: React.FC = () => {
         );
     }
 
+    const currentScript = interpretation.pages[activeTab];
+    const config = PAGE_CONFIG[activeTab];
+    const colors = colorClasses[config.color];
+    const Icon = config.icon;
+
     return (
         <DashboardLayout>
             {/* Header */}
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => navigate(-1)}
@@ -104,202 +203,194 @@ export const InterpretationPage: React.FC = () => {
                         <ArrowLeft size={24} />
                     </button>
                     <div>
-                        <h1 className="text-3xl font-bold text-text-main flex items-center gap-3">
-                            <span className="bg-gradient-to-br from-primary to-blue-600 text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-                                <BookOpen size={20} />
+                        <h1 className="text-2xl font-bold text-text-main flex items-center gap-3">
+                            <span className="bg-gradient-to-br from-primary to-blue-600 text-white w-9 h-9 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+                                <FileText size={18} />
                             </span>
-                            AI 报告解读
+                            班主任演讲稿
                         </h1>
                         {report && (
-                            <p className="text-text-sub text-sm mt-1 ml-[52px]">
-                                {report.student_name} · {report.level} - {report.unit}
+                            <p className="text-text-sub text-sm mt-1 ml-12">
+                                {report.student_name} · {report.level} - {report.unit} · 约10分钟
                             </p>
                         )}
                     </div>
                 </div>
-                <button
-                    onClick={() => navigate(`/report/${id}`)}
-                    className="px-4 py-2 border border-border bg-white text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors"
-                >
-                    查看完整报告
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleRegenerate}
+                        disabled={regenerating}
+                        className="px-4 py-2 border border-orange-200 bg-orange-50 text-orange-700 rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-orange-100 transition-colors disabled:opacity-50"
+                        title="修改报告内容后可重新生成"
+                    >
+                        {regenerating ? (
+                            <>
+                                <Loader2 size={16} className="animate-spin" />
+                                生成中...
+                            </>
+                        ) : (
+                            <>
+                                <RefreshCw size={16} />
+                                重新生成
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => navigate(`/report/${id}`)}
+                        className="px-4 py-2 border border-border bg-white text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors"
+                    >
+                        查看报告
+                    </button>
+                </div>
             </div>
 
-            <div className="max-w-4xl mx-auto space-y-8">
-                {/* Score Summary (if available) */}
-                {report && (
-                    <div className="bg-gradient-to-r from-primary/5 to-secondary/5 rounded-2xl p-6 border border-primary/10">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-6">
-                                <div className="text-center">
-                                    <span className="block text-text-sub text-xs mb-1">总分</span>
-                                    <span className="text-4xl font-bold text-primary font-mono">
-                                        {report.total_score?.toFixed(1) || 'N/A'}
-                                    </span>
-                                </div>
-                                <div className="w-px h-12 bg-gray-200"></div>
-                                <div className="flex text-yellow-400 text-xl">
-                                    {'⭐'.repeat(report.star_level || 0)}
-                                    <span className="text-gray-200">
-                                        {'⭐'.repeat(5 - (report.star_level || 0))}
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="flex gap-8 text-sm">
-                                <div className="text-center">
-                                    <span className="block text-text-sub text-xs mb-1">朗读</span>
-                                    <span className="font-bold text-text-main font-mono">{report.part1_score?.toFixed(1) || '-'}</span>
-                                </div>
-                                <div className="text-center">
-                                    <span className="block text-text-sub text-xs mb-1">问答</span>
-                                    <span className="font-bold text-text-main font-mono">{report.part2_score?.toFixed(1) || '-'}</span>
-                                </div>
-                            </div>
+            {/* 一键复制完整演讲稿 */}
+            <div className="bg-gradient-to-r from-primary/5 to-secondary/5 rounded-2xl p-4 border border-primary/10 mb-6">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <FileText className="text-primary" size={20} />
+                        <div>
+                            <span className="font-medium text-text-main">完整演讲稿</span>
+                            <span className="text-text-sub text-sm ml-2">约 {interpretation.full_script.length} 字</span>
                         </div>
                     </div>
-                )}
+                    <button
+                        onClick={handleCopyFullScript}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+                            copiedFull 
+                                ? 'bg-emerald-100 text-emerald-700' 
+                                : 'bg-primary text-white hover:bg-primary/90'
+                        }`}
+                    >
+                        {copiedFull ? (
+                            <>
+                                <CheckCircle size={16} />
+                                已复制
+                            </>
+                        ) : (
+                            <>
+                                <Copy size={16} />
+                                一键复制全部
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
 
-                {/* Highlights */}
-                {interpretation.highlights && interpretation.highlights.length > 0 && (
-                    <div className="card-surface p-6 border-l-4 border-emerald-500 animate-in slide-in-from-left-4 duration-500">
-                        <h3 className="text-xl font-bold text-emerald-700 mb-5 flex items-center gap-3">
-                            <span className="bg-emerald-100 w-10 h-10 rounded-xl flex items-center justify-center">
-                                ✨
-                            </span>
-                            表现亮点
-                        </h3>
-                        <div className="grid gap-4">
-                            {interpretation.highlights.map((item, i) => (
-                                <div 
-                                    key={i} 
-                                    className="flex gap-4 p-4 bg-emerald-50/50 rounded-xl border border-emerald-100"
-                                    style={{ animationDelay: `${i * 100}ms` }}
-                                >
-                                    <span className="flex-shrink-0 w-8 h-8 bg-emerald-500 text-white rounded-lg flex items-center justify-center font-bold text-sm">
-                                        {i + 1}
-                                    </span>
-                                    <p className="text-emerald-900/80 leading-relaxed pt-1">{item}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Weaknesses */}
-                {interpretation.weaknesses && interpretation.weaknesses.length > 0 && (
-                    <div className="card-surface p-6 border-l-4 border-rose-500 animate-in slide-in-from-left-4 duration-500" style={{ animationDelay: '100ms' }}>
-                        <h3 className="text-xl font-bold text-rose-700 mb-5 flex items-center gap-3">
-                            <span className="bg-rose-100 w-10 h-10 rounded-xl flex items-center justify-center">
-                                <Target size={20} className="text-rose-600" />
-                            </span>
-                            待提升点
-                        </h3>
-                        <div className="grid gap-4">
-                            {interpretation.weaknesses.map((item, i) => (
-                                <div 
-                                    key={i} 
-                                    className="flex gap-4 p-4 bg-rose-50/50 rounded-xl border border-rose-100"
-                                >
-                                    <span className="flex-shrink-0 w-8 h-8 bg-rose-500 text-white rounded-lg flex items-center justify-center font-bold text-sm">
-                                        {i + 1}
-                                    </span>
-                                    <p className="text-rose-900/80 leading-relaxed pt-1">{item}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Evidence */}
-                {interpretation.evidence && interpretation.evidence.length > 0 && (
-                    <div className="card-surface p-6 border-l-4 border-slate-400 animate-in slide-in-from-left-4 duration-500" style={{ animationDelay: '200ms' }}>
-                        <h3 className="text-xl font-bold text-slate-700 mb-5 flex items-center gap-3">
-                            <span className="bg-slate-100 w-10 h-10 rounded-xl flex items-center justify-center">
-                                📋
-                            </span>
-                            评估依据
-                        </h3>
-                        <div className="space-y-3">
-                            {interpretation.evidence.map((item, i) => (
-                                <div 
-                                    key={i} 
-                                    className="flex gap-3 text-slate-700 text-sm leading-relaxed"
-                                >
-                                    <span className="text-slate-400 font-mono text-xs mt-0.5">#{i + 1}</span>
-                                    <p className="flex-1 bg-slate-50 rounded-lg p-3 border border-slate-100">{item}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Suggestions */}
-                {interpretation.suggestions && interpretation.suggestions.length > 0 && (
-                    <div className="card-surface p-6 border-l-4 border-blue-500 animate-in slide-in-from-left-4 duration-500" style={{ animationDelay: '300ms' }}>
-                        <h3 className="text-xl font-bold text-blue-700 mb-5 flex items-center gap-3">
-                            <span className="bg-blue-100 w-10 h-10 rounded-xl flex items-center justify-center">
-                                <Lightbulb size={20} className="text-blue-600" />
-                            </span>
-                            学习建议
-                        </h3>
-                        <div className="grid md:grid-cols-2 gap-4">
-                            {interpretation.suggestions.map((item, i) => (
-                                <div 
-                                    key={i} 
-                                    className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <span className="flex-shrink-0 w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold text-xs">
-                                            {i + 1}
+            <div className="grid lg:grid-cols-4 gap-6">
+                {/* 左侧：Tab 导航 */}
+                <div className="lg:col-span-1">
+                    <div className="bg-white rounded-2xl border border-gray-100 p-2 sticky top-6">
+                        <h3 className="text-sm font-semibold text-gray-500 px-3 py-2 mb-1">演讲流程</h3>
+                        <div className="space-y-1">
+                            {PAGE_ORDER.map((key, index) => {
+                                const cfg = PAGE_CONFIG[key];
+                                const isActive = activeTab === key;
+                                const cls = colorClasses[cfg.color];
+                                
+                                return (
+                                    <button
+                                        key={key}
+                                        onClick={() => setActiveTab(key)}
+                                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
+                                            isActive 
+                                                ? `${cls.bg} ${cls.border} border ${cls.text}` 
+                                                : 'hover:bg-gray-50 text-gray-600'
+                                        }`}
+                                    >
+                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                            isActive ? cls.badge + ' ' + cls.text : 'bg-gray-100 text-gray-500'
+                                        }`}>
+                                            {index + 1}
                                         </span>
-                                        <p className="text-blue-900/80 leading-relaxed text-sm">{item}</p>
-                                    </div>
-                                </div>
-                            ))}
+                                        <div className="flex-1 min-w-0">
+                                            <span className={`block text-sm font-medium ${isActive ? cls.text : ''}`}>
+                                                {cfg.label}
+                                            </span>
+                                            <span className="block text-xs text-gray-400">
+                                                {cfg.duration}
+                                            </span>
+                                        </div>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
-                )}
+                </div>
 
-                {/* Parent Script */}
-                {interpretation.parent_script && (
-                    <div className="card-surface p-6 border-l-4 border-amber-500 bg-gradient-to-br from-amber-50/80 to-orange-50/80 animate-in slide-in-from-left-4 duration-500" style={{ animationDelay: '400ms' }}>
-                        <div className="flex items-center justify-between mb-5">
-                            <h3 className="text-xl font-bold text-amber-700 flex items-center gap-3">
-                                <span className="bg-amber-100 w-10 h-10 rounded-xl flex items-center justify-center">
-                                    <MessageSquare size={20} className="text-amber-600" />
-                                </span>
-                                家长沟通话术
-                            </h3>
+                {/* 右侧：演讲内容 */}
+                <div className="lg:col-span-3">
+                    <div className={`rounded-2xl border ${colors.border} ${colors.bg} p-6`}>
+                        {/* 页面标题 */}
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-xl ${colors.badge} flex items-center justify-center`}>
+                                    <Icon size={20} className={colors.text} />
+                                </div>
+                                <div>
+                                    <h3 className={`text-lg font-bold ${colors.text}`}>{config.label}</h3>
+                                    <p className="text-xs text-gray-500">{config.description} · {config.duration}</p>
+                                </div>
+                            </div>
                             <button
-                                onClick={handleCopyScript}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-                                    copiedScript 
+                                onClick={() => handleCopyPage(activeTab)}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-medium text-sm transition-all ${
+                                    copiedPage === activeTab 
                                         ? 'bg-emerald-100 text-emerald-700' 
-                                        : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                        : `${colors.badge} ${colors.text} hover:opacity-80`
                                 }`}
                             >
-                                {copiedScript ? (
+                                {copiedPage === activeTab ? (
                                     <>
-                                        <CheckCircle size={16} />
+                                        <CheckCircle size={14} />
                                         已复制
                                     </>
                                 ) : (
                                     <>
-                                        <Copy size={16} />
-                                        复制话术
+                                        <Copy size={14} />
+                                        复制此页
                                     </>
                                 )}
                             </button>
                         </div>
-                        <div className="bg-white/80 rounded-xl p-6 text-amber-900/80 leading-relaxed whitespace-pre-wrap border border-amber-100 shadow-inner">
-                            {interpretation.parent_script}
+
+                        {/* 演讲内容 */}
+                        <div className="bg-white/80 rounded-xl p-5 border border-gray-100 shadow-inner">
+                            <p className="text-gray-700 leading-relaxed whitespace-pre-wrap text-[15px]">
+                                {currentScript}
+                            </p>
                         </div>
-                        <p className="text-xs text-amber-600/70 mt-4 flex items-center gap-1">
-                            <span>💡</span>
-                            此话术由 AI 生成，请根据实际情况适当调整后使用
-                        </p>
+
+                        {/* 导航按钮 */}
+                        <div className="flex justify-between mt-4">
+                            <button
+                                onClick={() => {
+                                    const idx = PAGE_ORDER.indexOf(activeTab);
+                                    if (idx > 0) setActiveTab(PAGE_ORDER[idx - 1]);
+                                }}
+                                disabled={activeTab === 'cover'}
+                                className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                                ← 上一页
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const idx = PAGE_ORDER.indexOf(activeTab);
+                                    if (idx < PAGE_ORDER.length - 1) setActiveTab(PAGE_ORDER[idx + 1]);
+                                }}
+                                disabled={activeTab === 'badge'}
+                                className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                                下一页 →
+                            </button>
+                        </div>
                     </div>
-                )}
+
+                    {/* 提示 */}
+                    <p className="text-xs text-gray-400 mt-4 text-center">
+                        💡 此演讲稿由 AI 生成，建议根据实际情况适当调整后使用
+                    </p>
+                </div>
             </div>
         </DashboardLayout>
     );

@@ -114,13 +114,10 @@ CREATE TABLE tests (
     -- Failure Info
     failure_reason      VARCHAR(255),
     retry_count         SMALLINT DEFAULT 0,
-    -- Interpretation (报告解读，存储后避免重复生成)
-    interpretation_highlights       TEXT,  -- JSON array of highlights
-    interpretation_weaknesses       TEXT,  -- JSON array of weaknesses
-    interpretation_evidence         TEXT,  -- JSON array of evidence points
-    interpretation_suggestions      TEXT,  -- JSON array of suggestions
-    interpretation_parent_script    TEXT,  -- Parent communication script
-    interpretation_generated_at     TIMESTAMPTZ,  -- NULL = not generated yet
+    -- Interpretation (报告解读，按页面组织，存储后避免重复生成)
+    interpretation_pages            JSONB,  -- 按6页组织的解读内容 (cover/radar/vocab/dialogue/roadmap/badge)
+    interpretation_parent_script    TEXT,   -- 家长沟通话术（保留）
+    interpretation_generated_at     TIMESTAMPTZ,  -- 生成时间（仅作记录，判定"已生成"以 interpretation_pages 非空为准）
     -- Timestamps
     created_at          TIMESTAMPTZ DEFAULT NOW(),
     updated_at          TIMESTAMPTZ DEFAULT NOW(),

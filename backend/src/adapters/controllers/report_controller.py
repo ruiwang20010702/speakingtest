@@ -5,7 +5,7 @@ Handles report viewing and sharing for teachers and parents.
 import json
 import secrets
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel
@@ -1147,6 +1147,9 @@ async def get_parent_h5_report(
         # 没有生成过，使用 None 让 ParentReportService 生成默认建议
         interpretation = None
     
+    # 获取 AI 生成的五维评语（用于雷达图 comment 和 tags）
+    dimension_feedback = test.summary_dimension_feedback if hasattr(test, 'summary_dimension_feedback') else None
+    
     # Apply radar override if available
     override_radar = override.get("radar")
     part1_raw = test.part1_raw_result or {}
@@ -1188,7 +1191,8 @@ async def get_parent_h5_report(
         part2_raw=part2_raw,
         part2_transcript=test.part2_transcript or "",
         test_items=test_items,
-        interpretation=interpretation
+        interpretation=interpretation,
+        dimension_feedback=dimension_feedback  # AI 生成的五维评语
     )
     
     await db.commit()
@@ -1251,19 +1255,16 @@ from src.use_cases.report_interpretation import ReportInterpretationService
 
 
 class InterpretationResponse(BaseModel):
-    """Response for report interpretation."""
-    highlights: List[str]
-    weaknesses: List[str]
-    evidence: List[str]
-    suggestions: List[str]
-    parent_script: str
+    """Response for report interpretation (班主任演讲稿，按6页组织)."""
+    pages: Dict[str, str]  # 每页一段演讲话术：cover/radar/vocab/dialogue/roadmap/badge
+    full_script: str       # 完整演讲稿（约1500字，10分钟）
 
 
 @router.get(
     "/tests/{test_id}/interpretation",
     response_model=InterpretationResponse,
     summary="获取报告解读",
-    description="获取已生成的报告解读。如果尚未生成，返回 404。"
+    description="获取已生成的报告解读（按6页组织）。如果尚未生成，返回 404。"
 )
 async def get_test_interpretation(
     test_id: int,
@@ -1299,20 +1300,20 @@ async def get_test_interpretation(
                 detail="Not authorized"
             )
     
-    # Check if interpretation exists
-    if not test.interpretation_generated_at:
+    # Check if interpretation exists (以 interpretation_pages 非空为准)
+    if not test.interpretation_pages:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="解读尚未生成，请先调用 POST 接口生成解读"
         )
     
+    # 解析 pages 数据（新格式：每页是字符串）
+    pages_data = test.interpretation_pages if isinstance(test.interpretation_pages, dict) else {}
+    
     # Return stored interpretation
     return InterpretationResponse(
-        highlights=json.loads(test.interpretation_highlights) if test.interpretation_highlights else [],
-        weaknesses=json.loads(test.interpretation_weaknesses) if test.interpretation_weaknesses else [],
-        evidence=json.loads(test.interpretation_evidence) if test.interpretation_evidence else [],
-        suggestions=json.loads(test.interpretation_suggestions) if test.interpretation_suggestions else [],
-        parent_script=test.interpretation_parent_script or ""
+        pages=pages_data,
+        full_script=test.interpretation_parent_script or ""  # full_script 存储在 parent_script 字段
     )
 
 
@@ -1320,23 +1321,29 @@ async def get_test_interpretation(
     "/tests/{test_id}/interpretation",
     response_model=InterpretationResponse,
     summary="生成报告解读",
-    description="生成 AI 报告解读并存储到数据库，包含亮点、短板、证据和家长沟通话术。"
+    description="生成 AI 报告解读并存储到数据库（按6页组织：cover/radar/vocab/dialogue/roadmap/badge）。使用 force=true 可强制重新生成。"
 )
 async def generate_test_interpretation(
     test_id: int,
+    force: bool = False,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Generate and store AI interpretation for a test.
+    Generate and store AI speech script for a test.
     
-    Generates:
-    - Highlights (亮点)
-    - Weaknesses (短板)
-    - Evidence points (证据点)
-    - Suggestions (行动建议)
-    - Parent communication script (家长沟通话术)
+    生成班主任演讲稿（约10分钟，1500字），按6页组织：
+    - cover（封面）：开场问候，介绍总分和星级
+    - radar（能力图谱）：五维能力分析，融合亮点/问题/建议
+    - vocab（词汇掌握）：单词掌握情况分析
+    - dialogue（对话表现）：问答环节分析
+    - roadmap（成长计划）：综合分析和练习建议
+    - badge（徽章）：祝贺和结束语
+    - full_script（完整演讲稿）：可直接复制使用
+    
+    Query Parameters:
+    - force: 是否强制重新生成（即使已存在解读）。修改报告内容后需要使用此参数重新生成。
     """
     # Get test with items
     stmt = select(TestModel).options(
@@ -1372,15 +1379,17 @@ async def generate_test_interpretation(
             detail="只有已完成的测评才能生成解读"
         )
     
-    # Check if already generated (return existing)
-    if test.interpretation_generated_at:
+    # Check if already generated (以 interpretation_pages 非空为准，return existing)
+    # 如果 force=True，则跳过此检查，强制重新生成
+    if test.interpretation_pages and not force:
+        pages_data = test.interpretation_pages if isinstance(test.interpretation_pages, dict) else {}
         return InterpretationResponse(
-            highlights=json.loads(test.interpretation_highlights) if test.interpretation_highlights else [],
-            weaknesses=json.loads(test.interpretation_weaknesses) if test.interpretation_weaknesses else [],
-            evidence=json.loads(test.interpretation_evidence) if test.interpretation_evidence else [],
-            suggestions=json.loads(test.interpretation_suggestions) if test.interpretation_suggestions else [],
-            parent_script=test.interpretation_parent_script or ""
-            )
+            pages=pages_data,
+            full_script=test.interpretation_parent_script or ""  # full_script 存储在 parent_script 字段
+        )
+    
+    if force:
+        logger.info(f"强制重新生成报告解读: test_id={test_id}")
     
     # Get student name
     stmt = select(StudentProfileModel).where(StudentProfileModel.user_id == test.student_id)
@@ -1388,23 +1397,68 @@ async def generate_test_interpretation(
     student_profile = result.scalar_one_or_none()
     student_name = student_profile.student_name if student_profile else "学生"
     
+    # ========== 应用 report_override 数据（如果有修改）==========
+    override = test.report_override or {}
+    
+    # 基础字段覆盖
+    final_student_name = override.get("student_name") or student_name
+    final_level = override.get("level") or test.level
+    final_total_score = override.get("total_score") if override.get("total_score") is not None else (float(test.total_score) if test.total_score else 0)
+    final_star_level = override.get("star_level") if override.get("star_level") is not None else (test.star_level or 1)
+    final_part1_score = override.get("part1_score") if override.get("part1_score") is not None else (float(test.part1_score) if test.part1_score else 0)
+    final_part2_score = override.get("part2_score") if override.get("part2_score") is not None else (float(test.part2_score) if test.part2_score else None)
+    
+    # Part 1 词汇详情覆盖
+    part1_details = test.part1_raw_result or {}
+    override_part1_words = override.get("part1_words")
+    if override_part1_words:
+        # 使用修改后的单词列表
+        part1_details = {"words": override_part1_words}
+    
+    # Part 2 问答项覆盖
+    override_part2_items = override.get("part2_items")
+    if override_part2_items:
+        final_part2_items = [
+            {"question_no": item.get("question_no"), "score": item.get("score"), "evidence": item.get("evidence")}
+            for item in override_part2_items
+        ]
+    elif test.items:
+        final_part2_items = [
+            {"question_no": item.question_no, "score": item.score, "evidence": item.evidence}
+            for item in test.items
+        ]
+    else:
+        final_part2_items = None
+    
+    # 雷达图数据覆盖
+    override_radar = override.get("radar")
+    radar_data = None
+    if override_radar:
+        radar_data = [
+            {"name": "流利度", "value": override_radar.get("fluency", 0)},
+            {"name": "发音", "value": override_radar.get("pronunciation", 0)},
+            {"name": "自信度", "value": override_radar.get("confidence", 0)},
+            {"name": "词汇", "value": override_radar.get("vocabulary", 0)},
+            {"name": "整句输出", "value": override_radar.get("sentence", 0)},
+        ]
+    
+    logger.info(f"生成报告解读，使用{'修改后' if override else '原始'}数据: student={final_student_name}, total_score={final_total_score}, star_level={final_star_level}")
+    
     # Generate interpretation
     from src.adapters.gateways.qwen_client import QwenOmniGateway
     qwen_gateway = QwenOmniGateway()
     service = ReportInterpretationService(qwen_gateway)
     
     interpretation = await service.generate(
-        student_name=student_name,
-        level=test.level,
-        total_score=float(test.total_score) if test.total_score else 0,
-        part1_score=float(test.part1_score) if test.part1_score else 0,
-        part2_score=float(test.part2_score) if test.part2_score else None,
-        star_level=test.star_level or 1,
-        part1_details=test.part1_raw_result,
-        part2_items=[
-            {"question_no": item.question_no, "score": item.score, "evidence": item.evidence}
-            for item in test.items
-        ] if test.items else None
+        student_name=final_student_name,
+        level=final_level,
+        total_score=final_total_score,
+        part1_score=final_part1_score,
+        part2_score=final_part2_score,
+        star_level=final_star_level,
+        part1_details=part1_details,
+        part2_items=final_part2_items,
+        radar_data=radar_data,
     )
     
     # 记录 qwen-plus 调用费用
@@ -1448,20 +1502,14 @@ async def generate_test_interpretation(
         
         logger.info(f"报告解读 Cost: {cost:.4f} RMB, tokens: {usage}")
     
-    # Store interpretation to database
-    test.interpretation_highlights = json.dumps(interpretation.highlights, ensure_ascii=False)
-    test.interpretation_weaknesses = json.dumps(interpretation.weaknesses, ensure_ascii=False)
-    test.interpretation_evidence = json.dumps(interpretation.evidence, ensure_ascii=False)
-    test.interpretation_suggestions = json.dumps(interpretation.suggestions, ensure_ascii=False)
-    test.interpretation_parent_script = interpretation.parent_script
+    # Store interpretation to database (演讲稿格式)
+    test.interpretation_pages = interpretation.pages_to_json()  # 存储 pages dict（每页一段字符串）
+    test.interpretation_parent_script = interpretation.full_script  # full_script 存储在 parent_script 字段
     test.interpretation_generated_at = china_now()
     
     await db.commit()
     
     return InterpretationResponse(
-        highlights=interpretation.highlights,
-        weaknesses=interpretation.weaknesses,
-        evidence=interpretation.evidence,
-        suggestions=interpretation.suggestions,
-        parent_script=interpretation.parent_script
+        pages=interpretation.pages,
+        full_script=interpretation.full_script
     )

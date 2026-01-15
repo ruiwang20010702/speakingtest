@@ -100,15 +100,17 @@ class ScoreFusionService:
     """
     
     # Rating thresholds (0-100 scale)
-    RATING_EXCELLENT = 80
-    RATING_GOOD = 60
-    RATING_FAIR = 40
-    RATING_POOR = 20
+    # ≥ 90 杰出, 70-89 优秀, 60-69 良好, < 60 待提升
+    RATING_EXCELLENT = 90  # 杰出
+    RATING_GOOD = 70       # 优秀
+    RATING_FAIR = 60       # 良好
+    RATING_POOR = 0        # 待提升（低于60分）
     
     def fuse_scores(
         self,
         part1_raw: Optional[dict],
-        part2_raw: Optional[dict]
+        part2_raw: Optional[dict],
+        ai_dimension_feedback: Optional[dict] = None
     ) -> List[RadarDimension]:
         """
         Fuse Part 1 and Part 2 raw results into 5-dimension radar data.
@@ -116,6 +118,8 @@ class ScoreFusionService:
         Args:
             part1_raw: Part 1 raw result from Qwen (contains accuracy, fluency, pronunciation, integrity)
             part2_raw: Part 2 raw result from Qwen (contains fluency, pronunciation, confidence, vocabulary, sentence)
+            ai_dimension_feedback: AI 生成的五维评语（可选），格式：{"fluency": {"comment": "...", "tags": [...]}, ...}
+                如果提供，则使用 AI 评语；否则使用规则模板
             
         Returns:
             List of 5 RadarDimension objects
@@ -142,44 +146,58 @@ class ScoreFusionService:
         
         logger.debug(
             f"Score Fusion: fluency={fused_fluency:.1f}, pronunciation={fused_pronunciation:.1f}, "
-            f"confidence={fused_confidence:.1f}, vocabulary={fused_vocabulary:.1f}, sentence={fused_sentence:.1f}"
+            f"confidence={fused_confidence:.1f}, vocabulary={fused_vocabulary:.1f}, sentence={fused_sentence:.1f}, "
+            f"using_ai_feedback={ai_dimension_feedback is not None}"
         )
+        
+        # Helper to get comment/tags - AI feedback 优先，否则使用规则模板
+        def get_feedback(dim_key: str, score: float, rule_comment_fn, rule_tags_fn):
+            if ai_dimension_feedback and dim_key in ai_dimension_feedback:
+                ai_fb = ai_dimension_feedback[dim_key]
+                return ai_fb.get("comment", rule_comment_fn(score)), ai_fb.get("tags", rule_tags_fn(score))
+            return rule_comment_fn(score), rule_tags_fn(score)
+        
+        fluency_comment, fluency_tags = get_feedback("fluency", fused_fluency, self._get_fluency_comment, self._get_fluency_tags)
+        pronunciation_comment, pronunciation_tags = get_feedback("pronunciation", fused_pronunciation, self._get_pronunciation_comment, self._get_pronunciation_tags)
+        confidence_comment, confidence_tags = get_feedback("confidence", fused_confidence, self._get_confidence_comment, self._get_confidence_tags)
+        vocabulary_comment, vocabulary_tags = get_feedback("vocabulary", fused_vocabulary, self._get_vocabulary_comment, self._get_vocabulary_tags)
+        sentence_comment, sentence_tags = get_feedback("sentence", fused_sentence, self._get_sentence_comment, self._get_sentence_tags)
         
         return [
             RadarDimension(
                 subject="流利度",
                 score=round(fused_fluency, 1),
                 icon="fluency",
-                comment=self._get_fluency_comment(fused_fluency),
-                tags=self._get_fluency_tags(fused_fluency)
+                comment=fluency_comment,
+                tags=fluency_tags
             ),
             RadarDimension(
                 subject="发音",
                 score=round(fused_pronunciation, 1),
                 icon="pronunciation",
-                comment=self._get_pronunciation_comment(fused_pronunciation),
-                tags=self._get_pronunciation_tags(fused_pronunciation)
+                comment=pronunciation_comment,
+                tags=pronunciation_tags
             ),
             RadarDimension(
                 subject="自信度",
                 score=round(fused_confidence, 1),
                 icon="confidence",
-                comment=self._get_confidence_comment(fused_confidence),
-                tags=self._get_confidence_tags(fused_confidence)
+                comment=confidence_comment,
+                tags=confidence_tags
             ),
             RadarDimension(
                 subject="词汇",
                 score=round(fused_vocabulary, 1),
                 icon="vocab",
-                comment=self._get_vocabulary_comment(fused_vocabulary),
-                tags=self._get_vocabulary_tags(fused_vocabulary)
+                comment=vocabulary_comment,
+                tags=vocabulary_tags
             ),
             RadarDimension(
                 subject="整句输出",
                 score=round(fused_sentence, 1),
                 icon="sentence",
-                comment=self._get_sentence_comment(fused_sentence),
-                tags=self._get_sentence_tags(fused_sentence)
+                comment=sentence_comment,
+                tags=sentence_tags
             ),
         ]
     
@@ -206,115 +224,126 @@ class ScoreFusionService:
         return score1 * weight1 + score2 * weight2
     
     def _get_rating_level(self, score: float) -> str:
-        """Get rating level based on score."""
-        if score >= self.RATING_EXCELLENT:
+        """Get rating level based on score.
+        ≥ 90: 杰出, 70-89: 优秀, 60-69: 良好, < 60: 待提升
+        """
+        if score >= self.RATING_EXCELLENT:  # >= 90
             return "杰出"
-        elif score >= self.RATING_GOOD:
+        elif score >= self.RATING_GOOD:     # >= 70
             return "优秀"
-        elif score >= self.RATING_FAIR:
+        elif score >= self.RATING_FAIR:     # >= 60
             return "良好"
-        elif score >= self.RATING_POOR:
-            return "及格"
-        else:
+        else:                               # < 60
             return "待提升"
     
     # ---- Fluency Comments & Tags ----
+    # 阈值：≥90 杰出, 70-89 优秀, 60-69 良好, <60 待提升
     def _get_fluency_comment(self, score: float) -> str:
         level = self._get_rating_level(score)
-        if score >= 80:
-            return f"等级：{level} - 语速流畅自然，节奏感强，断句清晰准确。"
+        if score >= 90:
+            return f"等级：{level} - 语速流畅自然，节奏感强，断句清晰准确，接近母语水平。"
+        elif score >= 70:
+            return f"等级：{level} - 整体连贯流畅，节奏感好，偶有轻微停顿。"
         elif score >= 60:
-            return f"等级：{level} - 整体连贯，偶有轻微停顿，节奏感较好。"
-        elif score >= 40:
-            return f"等级：{level} - 语速尚可，有不自然的停顿，需加强连贯性。"
+            return f"等级：{level} - 语速尚可，有一些不自然的停顿，需加强连贯性。"
         else:
-            return f"等级：{level} - 断断续续，需要更多练习以提升流畅度。"
+            return f"等级：{level} - 语速断断续续，需要更多练习以提升流畅度。"
     
     def _get_fluency_tags(self, score: float) -> List[str]:
-        if score >= 80:
-            return ["节奏清晰", "断句准确"]
-        elif score >= 60:
+        if score >= 90:
+            return ["流畅自然", "节奏清晰"]
+        elif score >= 70:
             return ["整体连贯", "偶有停顿"]
+        elif score >= 60:
+            return ["语速一般", "需加强"]
         else:
-            return ["需加强连贯"]
+            return ["需多练习"]
     
     # ---- Pronunciation Comments & Tags ----
     def _get_pronunciation_comment(self, score: float) -> str:
         level = self._get_rating_level(score)
-        if score >= 80:
-            return f"等级：{level} - 发音地道清晰，元音饱满，辅音准确。"
+        if score >= 90:
+            return f"等级：{level} - 发音地道清晰，元音饱满，辅音准确，听者理解毫无障碍。"
+        elif score >= 70:
+            return f"等级：{level} - 发音清晰准确，偶有轻微口音，整体易于理解。"
         elif score >= 60:
-            return f"等级：{level} - 发音清晰，偶有轻微口音，整体易于理解。"
-        elif score >= 40:
-            return f"等级：{level} - 发音尚可，部分元音或辅音需要纠正。"
+            return f"等级：{level} - 发音基本清晰，部分元音或辅音需要纠正。"
         else:
             return f"等级：{level} - 发音有明显错误，建议跟读标准音频练习。"
     
     def _get_pronunciation_tags(self, score: float) -> List[str]:
-        if score >= 80:
+        if score >= 90:
             return ["发音地道", "易于理解"]
-        elif score >= 60:
+        elif score >= 70:
             return ["发音清晰", "轻微口音"]
+        elif score >= 60:
+            return ["基本清晰", "需纠正"]
         else:
-            return ["需纠正发音"]
+            return ["需加强发音"]
     
     # ---- Confidence Comments & Tags ----
     def _get_confidence_comment(self, score: float) -> str:
         level = self._get_rating_level(score)
-        if score >= 80:
-            return f"等级：{level} - 声音洪亮，主动表达，自信满满！"
+        if score >= 90:
+            return f"等级：{level} - 声音洪亮，主动表达，自信满满，敢于分享想法！"
+        elif score >= 70:
+            return f"等级：{level} - 表达主动自信，声音适中，愿意分享想法。"
         elif score >= 60:
-            return f"等级：{level} - 表达主动，声音适中，愿意分享想法。"
-        elif score >= 40:
             return f"等级：{level} - 表达较为被动，声音偏小，需鼓励更多开口。"
         else:
-            return f"等级：{level} - 表达被动，需要更多鼓励和练习机会。"
+            return f"等级：{level} - 表达比较被动，需要更多鼓励和练习机会。"
     
     def _get_confidence_tags(self, score: float) -> List[str]:
-        if score >= 80:
-            return ["声音洪亮", "主动分享", "自信满满"]
-        elif score >= 60:
+        if score >= 90:
+            return ["声音洪亮", "自信满满"]
+        elif score >= 70:
             return ["表达主动", "愿意沟通"]
+        elif score >= 60:
+            return ["稍显被动", "需鼓励"]
         else:
             return ["需更多鼓励"]
     
     # ---- Vocabulary Comments & Tags ----
     def _get_vocabulary_comment(self, score: float) -> str:
         level = self._get_rating_level(score)
-        if score >= 80:
-            return f"等级：{level} - 单词发音准确无误，词汇基础扎实。"
+        if score >= 90:
+            return f"等级：{level} - 单词发音准确无误，词汇基础非常扎实。"
+        elif score >= 70:
+            return f"等级：{level} - 绝大多数单词准确，偶有轻微错误，基础良好。"
         elif score >= 60:
-            return f"等级：{level} - 绝大多数单词准确，偶有轻微错误。"
-        elif score >= 40:
-            return f"等级：{level} - 大部分单词正确，部分需要纠正。"
+            return f"等级：{level} - 大部分单词正确，部分发音需要纠正。"
         else:
             return f"等级：{level} - 词汇基础需加强，建议每日跟读练习。"
     
     def _get_vocabulary_tags(self, score: float) -> List[str]:
-        if score >= 80:
+        if score >= 90:
             return ["准确率高", "基础扎实"]
-        elif score >= 60:
+        elif score >= 70:
             return ["词汇良好", "偶有错误"]
+        elif score >= 60:
+            return ["基础一般", "需纠正"]
         else:
             return ["需加强基础"]
     
     # ---- Sentence Comments & Tags ----
     def _get_sentence_comment(self, score: float) -> str:
         level = self._get_rating_level(score)
-        if score >= 80:
-            return f"等级：{level} - 能完整输出长句，逻辑清晰，句式多样。"
-        elif score >= 60:
+        if score >= 90:
+            return f"等级：{level} - 能完整输出长句，逻辑清晰，句式多样，表达自然。"
+        elif score >= 70:
             return f"等级：{level} - 整句表达流畅，偶有自我纠正，连贯恰当。"
-        elif score >= 40:
+        elif score >= 60:
             return f"等级：{level} - 能用简单句回答，复杂句式需要加强。"
         else:
             return f"等级：{level} - 主要用词组回答，建议练习完整句子输出。"
     
     def _get_sentence_tags(self, score: float) -> List[str]:
-        if score >= 80:
-            return ["逻辑连贯", "句式多样"]
+        if score >= 90:
+            return ["逻辑清晰", "句式多样"]
+        elif score >= 70:
+            return ["表达流畅", "整体连贯"]
         elif score >= 60:
-            return ["表达流畅", "自我纠正"]
+            return ["简单句为主", "需加强"]
         else:
             return ["需练习整句"]
 
@@ -339,7 +368,8 @@ class ParentReportService:
         part2_raw: Optional[dict],
         part2_transcript: str,
         test_items: List[dict],
-        interpretation: Optional[dict] = None
+        interpretation: Optional[dict] = None,
+        dimension_feedback: Optional[dict] = None
     ) -> ParentReportData:
         """
         Generate complete report data for parent H5.
@@ -356,12 +386,13 @@ class ParentReportService:
             part2_transcript: Part 2 transcript text
             test_items: List of test items (Part 2 questions)
             interpretation: Optional pre-generated interpretation
+            dimension_feedback: AI 生成的五维评语（可选），格式：{"fluency": {"comment": "...", "tags": [...]}, ...}
             
         Returns:
             ParentReportData object
         """
-        # 1. Fuse radar scores
-        radar = self.fusion_service.fuse_scores(part1_raw, part2_raw)
+        # 1. Fuse radar scores (传入 AI 评语)
+        radar = self.fusion_service.fuse_scores(part1_raw, part2_raw, ai_dimension_feedback=dimension_feedback)
         
         # 2. Build Part 1 detail
         part1 = self._build_part1_detail(part1_score, part1_raw)

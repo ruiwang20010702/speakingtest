@@ -118,14 +118,12 @@ class TestModel(Base):
     summary_highlights = Column(Text, nullable=True)      # JSON array: 亮点
     summary_weaknesses = Column(Text, nullable=True)      # JSON array: 短板
     summary_weekly_plan = Column(Text, nullable=True)     # JSON array: 周计划
+    summary_dimension_feedback = Column(JSON_TYPE, nullable=True)  # AI 生成的五维评语 {"fluency": {"comment": "...", "tags": [...]}, ...}
     summary_generated_at = Column(DateTime(timezone=True), nullable=True)
-    # Interpretation (报告解读，给班主任用，手动触发生成)
-    interpretation_highlights = Column(Text, nullable=True)
-    interpretation_weaknesses = Column(Text, nullable=True)
-    interpretation_evidence = Column(Text, nullable=True)
-    interpretation_suggestions = Column(Text, nullable=True)
-    interpretation_parent_script = Column(Text, nullable=True)
-    interpretation_generated_at = Column(DateTime(timezone=True), nullable=True)
+    # Interpretation (报告解读，按页面组织，给班主任用，手动触发生成)
+    interpretation_pages = Column(JSON_TYPE, nullable=True)  # 按6页组织的解读内容
+    interpretation_parent_script = Column(Text, nullable=True)  # 家长沟通话术
+    interpretation_generated_at = Column(DateTime(timezone=True), nullable=True)  # 生成时间
     # Report Override (用户手动编辑的内容，优先于原始数据)
     report_override = Column(JSON_TYPE, nullable=True)
     # Timestamps

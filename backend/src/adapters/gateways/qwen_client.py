@@ -276,24 +276,24 @@ def build_part2_user_prompt(questions: List[dict]) -> str:
 
 
 # ============================================
-# 测评汇总分析 Prompt (给家长看的学习建议)
+# 测评汇总分析 Prompt (给家长看的学习建议 + 五维评语)
 # 使用 qwen-plus 模型 + 结构化输出
 # ============================================
 
-SUMMARY_ANALYSIS_SYSTEM_PROMPT = """你是一位专业的英语教育专家。你的任务是根据学生的口语测评数据，生成一份详细的测评汇总分析，帮助家长了解孩子的学习情况。
+SUMMARY_ANALYSIS_SYSTEM_PROMPT = """你是一位专业的英语教育专家。你的任务是根据学生的口语测评数据，生成一份详细的测评汇总分析和五维能力评语，帮助家长了解孩子的学习情况。
 
 ## 分析原则
 1. **客观真实**：基于测评数据给出分析，不夸大不贬低
 2. **积极正面**：以鼓励为主，短板表述要委婉
 3. **具体举例**：亮点和短板都必须结合具体的词汇或回答举例说明
 4. **建议详细**：每条建议至少20字，要具体可执行
+5. **评语个性化**：五维评语要结合学生的具体表现，不要使用模板化语言
 
-## 评分参考
-- 80-100 分：杰出
-- 60-79 分：优秀
-- 40-59 分：良好
-- 20-39 分：及格
-- 0-19 分：待提升
+## 评分参考（新标准）
+- 90-100 分：杰出
+- 70-89 分：优秀
+- 60-69 分：良好
+- 0-59 分：待提升
 
 ## S/A/B 评分含义
 - S (Super): 回答完美
@@ -304,9 +304,37 @@ SUMMARY_ANALYSIS_SYSTEM_PROMPT = """你是一位专业的英语教育专家。�
 - 亮点举例：如"词汇发音准确，如 'apple'、'banana' 等单词发音清晰标准"
 - 短板举例：如"部分词汇发音需加强，如 'three' 读成了 'free'"
 - 问答举例：如"能用完整句子回答问题，如Q3回答'I like playing basketball'表达流畅"
+
+## 五维能力评语要求
+为每个维度生成**个性化评语**，需要：
+1. **comment**：一句话评语（20-40字），包含等级和具体表现描述
+2. **tags**：2-3个标签词，概括该维度的特点
+
+评语格式示例：
+- 流利度 comment："等级：优秀 - 整体语速流畅，节奏感好，在回答Q5时有轻微停顿但很快恢复"
+- 流利度 tags：["整体流畅", "节奏感好"]
 """
 
-# 测评汇总分析的 JSON Schema (结构化输出)
+# 测评汇总分析的 JSON Schema (结构化输出，包含五维评语)
+_DIMENSION_FEEDBACK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "comment": {
+            "type": "string",
+            "description": "该维度的评语，格式：等级：{杰出/优秀/良好/待提升} - {具体表现描述}，20-40字"
+        },
+        "tags": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 2,
+            "maxItems": 3,
+            "description": "2-3个标签词，概括该维度的特点"
+        }
+    },
+    "required": ["comment", "tags"],
+    "additionalProperties": False
+}
+
 SUMMARY_ANALYSIS_SCHEMA = {
     "type": "object",
     "properties": {
@@ -315,7 +343,7 @@ SUMMARY_ANALYSIS_SCHEMA = {
             "items": {"type": "string", "minLength": 15},
             "minItems": 1,
             "maxItems": 2,
-            "description": "1-2个最突出的亮点，必须结合具体词汇或回答举例，如：词汇发音准确，'apple'、'banana'等单词发音清晰"
+            "description": "1-2个最突出的亮点，必须结合具体词汇或回答举例"
         },
         "weaknesses": {
             "type": "array",
@@ -329,93 +357,149 @@ SUMMARY_ANALYSIS_SCHEMA = {
             "items": {"type": "string", "minLength": 20},
             "minItems": 3,
             "maxItems": 3,
-            "description": "3条具体的本周练习建议，每条至少20字，要具体可执行"
+            "description": "3条具体的本周练习建议，每条至少20字"
+        },
+        "dimension_feedback": {
+            "type": "object",
+            "description": "五维能力的个性化评语",
+            "properties": {
+                "fluency": _DIMENSION_FEEDBACK_SCHEMA,
+                "pronunciation": _DIMENSION_FEEDBACK_SCHEMA,
+                "confidence": _DIMENSION_FEEDBACK_SCHEMA,
+                "vocabulary": _DIMENSION_FEEDBACK_SCHEMA,
+                "sentence": _DIMENSION_FEEDBACK_SCHEMA
+            },
+            "required": ["fluency", "pronunciation", "confidence", "vocabulary", "sentence"],
+            "additionalProperties": False
         }
     },
-    "required": ["highlights", "weaknesses", "weekly_plan"],
+    "required": ["highlights", "weaknesses", "weekly_plan", "dimension_feedback"],
     "additionalProperties": False
 }
 
 
 # ============================================
-# 报告解读 Prompt (给班主任用的沟通话术)
+# 报告解读 Prompt (班主任演讲稿)
 # 使用 qwen-plus 模型 + 结构化输出
+# 按6页组织：cover, radar, vocab, dialogue, roadmap, badge
+# 总时长约10分钟（1500-2000字）
 # ============================================
 
-INTERPRETATION_SYSTEM_PROMPT = """你是一位资深的英语教育专家，擅长与家长沟通。你的任务是根据学生的英语口语测评结果，为班主任生成一份专业的报告解读，帮助班主任向家长解读报告。
+INTERPRETATION_SYSTEM_PROMPT = """你是一位资深的英语教育专家和演讲稿撰写专家。你的任务是为班主任撰写一份**完整的家长会演讲稿**，用于向家长解读学生的英语口语测评报告。
 
-## 输入数据
-你将收到以下数据：
-- 学生姓名、等级、总分、星级
-- Part 1 (朗读) 分数及详细表现
-- Part 2 (问答) 分数及逐题表现
+## 演讲稿要求
 
-## 话术要求 (parent_script)
-1. **结构**：
-   - 开场：问候 + 告知测评完成 + 总分/星级
-   - 亮点：具体表扬（结合 evidence）
-   - 提升：委婉指出问题（结合 weaknesses）
-   - 建议：本周练习重点
-   - 结尾：鼓励 + 邀请沟通
-2. **语气**：积极、正面、建设性。避免生硬的批评。
-3. **格式**：使用 Markdown 格式（加粗关键点，使用 Emoji）。
-4. **长度**：200-400字。
+### 整体要求
+- **总时长**：约10分钟（按每分钟150字计算，总共约1500字）
+- **语气**：亲切、专业、积极、建设性
+- **风格**：口语化，像在和家长面对面交流
+- **格式**：纯文本，不需要 Markdown 格式，但可以用口语化的强调方式
 
-## 分析维度
-1. **Part 1 (基础)**：关注发音准确度、完整度。
-2. **Part 2 (应用)**：关注流利度、句型复杂度、词汇量、自信心。
-3. **综合**：根据总分和星级判断整体水平。
+### 按页面组织（6页）
+
+每一页对应家长端 H5 报告的一个页面。班主任会边展示报告边讲解。
+
+#### 1. cover（封面页，约1分钟，150字）
+- 开场问候，介绍今天要解读的内容
+- 告知总分和星级评定
+- 简要说明评分体系的意义
+
+#### 2. radar（能力图谱，约2分钟，300字）
+- 解释五维能力图谱的含义（流利度、发音、自信度、词汇、整句输出）
+- **融入亮点**：哪些维度表现好，具体表现是什么
+- **融入待提升**：哪些维度需要加强
+- **融入建议**：针对弱项的具体练习方法
+
+#### 3. vocab（词汇掌握，约2分钟，300字）
+- 解释词汇能量站的三种状态（完美/模糊/未学）
+- **融入亮点**：掌握好的单词类型或数量
+- **融入待提升**：需要重点练习的单词
+- **融入建议**：如何在家练习这些单词
+
+#### 4. dialogue（对话表现，约2分钟，300字）
+- 解释问答环节的评分标准
+- **融入亮点**：回答出色的题目示例
+- **融入待提升**：需要改进的回答示例
+- **融入建议**：如何提升问答能力
+
+#### 5. roadmap（成长计划，约2分钟，300字）
+- 综合分析孩子的整体表现
+- **融入亮点**：总结孩子的优势
+- **融入待提升**：明确改进方向
+- **融入建议**：本周的具体练习计划（3-5条）
+
+#### 6. badge（徽章页，约1分钟，150字）
+- 祝贺孩子获得的星级徽章
+- 鼓励的话语
+- 结束语，邀请家长有问题随时沟通
+
+### 写作技巧
+1. 每页话术要**自然衔接**，像在讲故事
+2. 用"我们可以看到..."、"在这里..."等过渡语
+3. 多用"孩子"、"宝贝"等亲切称呼
+4. 批评要委婉，用"还可以进一步提升"代替"不好"
+5. 每个建议要**具体可操作**，不要泛泛而谈
+6. 引用具体数据和例子增加说服力
+
+## 输出格式
+按6页分别输出演讲话术，同时输出一份完整的演讲稿（full_script）供一键复制。
 """
 
-# 报告解读的 JSON Schema (结构化输出)
+# 报告解读的 JSON Schema (演讲稿格式)
+# 每页一段完整的演讲话术（字符串）
 INTERPRETATION_SCHEMA = {
     "type": "object",
     "properties": {
-        "highlights": {
-            "type": "array",
-            "items": {"type": "string"},
-            "minItems": 1,
-            "maxItems": 2,
-            "description": "1-2个最突出的优点"
+        "pages": {
+            "type": "object",
+            "properties": {
+                "cover": {
+                    "type": "string",
+                    "description": "封面页演讲话术，约150字，包含开场问候和总分介绍"
+                },
+                "radar": {
+                    "type": "string",
+                    "description": "能力图谱演讲话术，约300字，融合数据解释、亮点、问题、建议"
+                },
+                "vocab": {
+                    "type": "string",
+                    "description": "词汇掌握演讲话术，约300字，融合数据解释、亮点、问题、建议"
+                },
+                "dialogue": {
+                    "type": "string",
+                    "description": "对话表现演讲话术，约300字，融合数据解释、亮点、问题、建议"
+                },
+                "roadmap": {
+                    "type": "string",
+                    "description": "成长计划演讲话术，约300字，融合总结和具体练习计划"
+                },
+                "badge": {
+                    "type": "string",
+                    "description": "徽章页演讲话术，约150字，包含祝贺和结束语"
+                }
+            },
+            "required": ["cover", "radar", "vocab", "dialogue", "roadmap", "badge"],
+            "additionalProperties": False
         },
-        "weaknesses": {
-            "type": "array",
-            "items": {"type": "string"},
-            "minItems": 1,
-            "maxItems": 2,
-            "description": "1-2个需要提升的方向"
-        },
-        "evidence": {
-            "type": "array",
-            "items": {"type": "string"},
-            "minItems": 1,
-            "maxItems": 3,
-            "description": "具体的证据点，如：Q3回答流利，使用了从句"
-        },
-        "suggestions": {
-            "type": "array",
-            "items": {"type": "string"},
-            "minItems": 3,
-            "maxItems": 3,
-            "description": "3条具体的练习建议"
-        },
-        "parent_script": {
+        "full_script": {
             "type": "string",
-            "description": "给班主任准备的家长沟通话术，Markdown格式，200-400字"
+            "description": "完整演讲稿，将6页内容自然连接，约1500字，可直接复制使用"
         }
     },
-    "required": ["highlights", "weaknesses", "evidence", "suggestions", "parent_script"],
+    "required": ["pages", "full_script"],
     "additionalProperties": False
 }
 
 
 @dataclass
 class SummaryAnalysisResult:
-    """测评汇总分析结果 (给家长看的学习建议)"""
+    """测评汇总分析结果 (给家长看的学习建议 + 五维评语)"""
     success: bool
     highlights: List[str] = None      # 亮点 1-2 条
     weaknesses: List[str] = None      # 短板 1-2 条
     weekly_plan: List[str] = None     # 本周练习计划 3 条
+    # 五维能力的 AI 生成评语（用于家长端雷达图展示）
+    dimension_feedback: Optional[dict] = None  # {"fluency": {"comment": "...", "tags": [...]}, ...}
     error: Optional[str] = None
     usage: Optional[dict] = None
 
@@ -425,6 +509,7 @@ class SummaryAnalysisResult:
             "highlights": self.highlights,
             "weaknesses": self.weaknesses,
             "weekly_plan": self.weekly_plan,
+            "dimension_feedback": self.dimension_feedback,
             "error": self.error,
             "usage": self.usage
         }
@@ -432,24 +517,18 @@ class SummaryAnalysisResult:
 
 @dataclass
 class ReportInterpretationResult:
-    """报告解读结果 (给班主任用的沟通话术)"""
+    """报告解读结果 (班主任演讲稿，按6页组织)"""
     success: bool
-    highlights: List[str] = None
-    weaknesses: List[str] = None
-    evidence: List[str] = None
-    suggestions: List[str] = None
-    parent_script: str = None
+    pages: Optional[dict] = None  # 按页面组织的演讲话术（每页一段字符串）
+    full_script: str = None       # 完整演讲稿（约1500字，10分钟）
     error: Optional[str] = None
     usage: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return {
             "success": self.success,
-            "highlights": self.highlights,
-            "weaknesses": self.weaknesses,
-            "evidence": self.evidence,
-            "suggestions": self.suggestions,
-            "parent_script": self.parent_script,
+            "pages": self.pages,
+            "full_script": self.full_script,
             "error": self.error,
             "usage": self.usage
         }
@@ -468,6 +547,8 @@ class Part2EvaluationResult:
     confidence_score: float = 0.0
     vocabulary_score: float = 0.0
     sentence_score: float = 0.0
+    # 每个维度的 AI 生成评语（用于家长端雷达图展示）
+    dimension_feedback: Optional[dict] = None  # {"fluency": {"comment": "...", "tags": [...]}, ...}
     error: Optional[str] = None
     raw_response: Optional[str] = None
     usage: Optional[dict] = None  # Token usage
@@ -484,6 +565,7 @@ class Part2EvaluationResult:
             "confidence_score": self.confidence_score,
             "vocabulary_score": self.vocabulary_score,
             "sentence_score": self.sentence_score,
+            "dimension_feedback": self.dimension_feedback,
             "error": self.error,
             "usage": self.usage
         }
@@ -951,14 +1033,19 @@ class QwenOmniGateway:
         if part2_suggestion:
             input_data["part2_model_suggestion"] = part2_suggestion[:2]
         
-        user_prompt = f"""请根据以下测评数据生成测评汇总分析：
+        user_prompt = f"""请根据以下测评数据生成测评汇总分析和五维能力评语：
 
 {json.dumps(input_data, ensure_ascii=False, indent=2)}
 
 ## 输出要求
 1. **亮点**：必须结合具体的词汇（如good_words中的单词）或回答（如good_answers）举例说明
 2. **短板**：必须结合具体的词汇（如weak_words）或回答（如weak_answers）举例说明，表述要委婉
-3. **周计划**：每条建议至少20字，要具体说明练习什么、怎么练、练多久"""
+3. **周计划**：每条建议至少20字，要具体说明练习什么、怎么练、练多久
+4. **五维评语**（dimension_feedback）：
+   - 根据 radar 分数判断等级：≥90杰出，70-89优秀，60-69良好，<60待提升
+   - 每个维度的 comment 必须包含"等级：xxx - "前缀，然后是具体表现描述
+   - 结合学生的具体表现（词汇、回答）生成个性化评语，不要使用模板化语言
+   - 如流利度评语："等级：优秀 - 整体语速流畅，节奏感好，Q5回答时有轻微停顿但很快恢复\""""
 
         request_body = {
             "model": self.plus_model,  # 使用 qwen-plus
@@ -1003,6 +1090,7 @@ class QwenOmniGateway:
                         highlights=result_data.get("highlights", []),
                         weaknesses=result_data.get("weaknesses", []),
                         weekly_plan=result_data.get("weekly_plan", []),
+                        dimension_feedback=result_data.get("dimension_feedback"),  # AI 生成的五维评语
                         usage=usage
                     )
                     
@@ -1024,14 +1112,15 @@ class QwenOmniGateway:
         part2_score: Optional[float],
         star_level: int,
         part1_details: Optional[dict] = None,
-        part2_items: Optional[list] = None
+        part2_items: Optional[list] = None,
+        radar_data: Optional[list] = None,
     ) -> ReportInterpretationResult:
         """
-        生成报告解读 (给班主任用的沟通话术)
+        生成报告解读 (按6页组织：cover/radar/vocab/dialogue/roadmap/badge)
         
         使用 qwen-plus 模型 + 结构化输出
         """
-        # 构建 Prompt 输入数据
+        # 构建 Prompt 输入数据（按页面说明数据来源）
         input_data = {
             "student": {
                 "name": student_name,
@@ -1041,19 +1130,28 @@ class QwenOmniGateway:
             },
             "part1": {
                 "score": part1_score,
-                "details": part1_details
+                "details": part1_details  # 包含 words 列表，每个 word 有 text/score/status
             },
             "part2": {
                 "score": part2_score,
-                "items": part2_items
-            }
+                "items": part2_items  # 包含每题的 question_no/score/evidence
+            },
+            "radar": radar_data  # 五维能力图谱：流利度/发音/自信度/词汇/整句输出
         }
         
-        user_prompt = f"""请根据以下测评数据生成报告解读，帮助班主任向家长解读报告：
+        user_prompt = f"""请根据以下测评数据，按6个页面生成报告解读：
 
 {json.dumps(input_data, ensure_ascii=False, indent=2)}
 
-请生成亮点、短板、证据点、练习建议，以及一段完整的家长沟通话术。"""
+## 数据来源说明
+- **cover（封面页）**：使用 student.total_score, student.star_level, student.level
+- **radar（雷达图）**：使用 radar 数据（流利度/发音/自信度/词汇/整句输出）
+- **vocab（词汇页）**：使用 part1.details.words（单词掌握情况）
+- **dialogue（对话页）**：使用 part2.items（每题得分和评价）
+- **roadmap（成长计划）**：综合所有数据
+- **badge（徽章页）**：使用 student.star_level
+
+请按 JSON Schema 要求输出。"""
 
         request_body = {
             "model": self.plus_model,  # 使用 qwen-plus
@@ -1073,11 +1171,11 @@ class QwenOmniGateway:
         }
         
         async with self.semaphore:
-            logger.info(f"开始生成报告解读 (qwen-plus): {student_name}")
+            logger.info(f"开始生成报告解读 (qwen-plus, 6页结构): {student_name}")
             usage = {}  # 初始化 usage，确保失败时也能访问
             content = ""
             try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
+                async with httpx.AsyncClient(timeout=90.0) as client:  # 增加超时时间
                     response = await client.post(
                         f"{self.base_url}/chat/completions",
                         headers={"Authorization": f"Bearer {self.api_key}"},
@@ -1095,11 +1193,8 @@ class QwenOmniGateway:
                     result_data = json.loads(cleaned_content)
                     return ReportInterpretationResult(
                         success=True,
-                        highlights=result_data.get("highlights", []),
-                        weaknesses=result_data.get("weaknesses", []),
-                        evidence=result_data.get("evidence", []),
-                        suggestions=result_data.get("suggestions", []),
-                        parent_script=result_data.get("parent_script", ""),
+                        pages=result_data.get("pages", {}),
+                        full_script=result_data.get("full_script", ""),
                         usage=usage
                     )
                     

@@ -502,20 +502,24 @@ class ProcessPart2TaskUseCase:
                 test.summary_highlights = json.dumps(summary_result.highlights, ensure_ascii=False)
                 test.summary_weaknesses = json.dumps(summary_result.weaknesses, ensure_ascii=False)
                 test.summary_weekly_plan = json.dumps(summary_result.weekly_plan, ensure_ascii=False)
+                # 存储 AI 生成的五维评语（用于家长端雷达图）
+                if summary_result.dimension_feedback:
+                    test.summary_dimension_feedback = summary_result.dimension_feedback
                 test.summary_generated_at = china_now()
                 
                 await self.db.commit()
-                logger.info(f"测评汇总分析生成成功: test_id={test.id}")
+                logger.info(f"测评汇总分析生成成功: test_id={test.id}, has_dimension_feedback={summary_result.dimension_feedback is not None}")
             else:
                 logger.warning(f"测评汇总分析生成失败: {summary_result.error}，将使用规则生成")
                 # 失败时使用规则生成默认建议
                 default_highlights = []
                 default_weaknesses = []
                 
+                # 新阈值：≥90 杰出, 70-89 优秀, 60-69 良好, <60 待提升
                 for dim_name, score in radar_scores.items():
                     dim_cn = {"fluency": "流利度", "pronunciation": "发音", "confidence": "自信度", 
                               "vocabulary": "词汇", "sentence": "整句输出"}.get(dim_name, dim_name)
-                    if score >= 80:
+                    if score >= 70:
                         default_highlights.append(f"{dim_cn}表现优秀")
                     elif score < 60:
                         default_weaknesses.append(f"{dim_cn}有提升空间")
@@ -527,6 +531,7 @@ class ProcessPart2TaskUseCase:
                     "多用完整句子回答问题",
                     "保持自信，大声开口练习"
                 ], ensure_ascii=False)
+                # 失败时不设置 dimension_feedback，将使用规则模板
                 test.summary_generated_at = china_now()
                 
                 await self.db.commit()
