@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Monkey } from '@/components/monkey';
 import { WordStatus as WordStatusType } from '@/types';
@@ -26,6 +26,16 @@ const getStatusColor = (status: 'perfect' | 'unclear' | 'failed') => {
     case 'unclear': return '#F39C12';
     case 'failed': return '#E74C3C';
     default: return '#fff';
+  }
+};
+
+// 获取基于状态的卡片背景色
+const getCardBgColor = (status: 'perfect' | 'unclear' | 'failed') => {
+  switch (status) {
+    case 'perfect': return '#F0FDF4';   // 淡绿色
+    case 'unclear': return '#FFF7ED';   // 淡橙色
+    case 'failed': return '#FEF2F2';    // 淡红色
+    default: return '#FFFFFF';
   }
 };
 
@@ -94,9 +104,10 @@ interface CardPosition {
   height: string;
 }
 
-const generateCardPositions = (total: number): CardPosition[] => {
+// 生成卡片位置，支持 perfect 卡片部分重叠增加层次感
+const generateCardPositions = (total: number, words: ExtendedVocabWord[]): CardPosition[] => {
   const positions: CardPosition[] = [];
-  const usedAreas: Array<{ x: number; y: number; width: number; height: number }> = [];
+  const usedAreas: Array<{ x: number; y: number; width: number; height: number; status: string }> = [];
   
   const random = (index: number, offset: number) => {
     const seed = index * 137.508 + offset;
@@ -104,14 +115,20 @@ const generateCardPositions = (total: number): CardPosition[] => {
     return x - Math.floor(x);
   };
   
-  const checkOverlap = (x: number, y: number, width: number, height: number): boolean => {
-    const padding = 1.5;
+  // 检查重叠，perfect 卡片允许与其他 perfect 卡片部分重叠
+  const checkOverlap = (x: number, y: number, width: number, height: number, status: string): boolean => {
+    // perfect 卡片允许更小的间距（可以部分重叠）
+    const padding = status === 'perfect' ? -2 : 1.5;
+    
     for (const area of usedAreas) {
+      // 如果当前卡片和已有卡片都是 perfect，允许更多重叠
+      const effectivePadding = (status === 'perfect' && area.status === 'perfect') ? -3 : padding;
+      
       if (
-        x < area.x + area.width + padding &&
-        x + width + padding > area.x &&
-        y < area.y + area.height + padding &&
-        y + height + padding > area.y
+        x < area.x + area.width + effectivePadding &&
+        x + width + effectivePadding > area.x &&
+        y < area.y + area.height + effectivePadding &&
+        y + height + effectivePadding > area.y
       ) {
         return true;
       }
@@ -120,41 +137,48 @@ const generateCardPositions = (total: number): CardPosition[] => {
   };
   
   for (let i = 0; i < total; i++) {
+    const word = words[i];
     const sizeType: CardSize = 'medium';
     const scale = 1.0;
-    const baseWidth = 22;
+    
+    // 根据单词长度动态调整卡片宽度
+    const wordLength = word?.text?.length || 4;
+    // 短单词(1-4字符): 18%, 中等(5-7字符): 22%, 长单词(8+字符): 26%
+    const baseWidth = wordLength <= 4 ? 18 : wordLength <= 7 ? 22 : 26;
     const baseHeight = 9;
     
     const col = i % 3;
     const row = Math.floor(i / 3);
     const totalRows = Math.ceil(total / 3);
     
-    const gridWidth = 98;
-    const gridLeft = -8;
-    const gridTop = -1;
-    const gridBottom = 1;
-    const availableHeight = 100 - gridTop - gridBottom;
+    // 确保卡片在边界内：考虑卡片宽高的一半（因为使用 transform: translate(-50%, -50%)）
+    const halfWidth = baseWidth / 2;
+    const halfHeight = baseHeight / 2;
     
-    const colOffset = (random(i, 500) - 0.5) * 5;
-    let baseX = gridLeft + (col + 0.5) * (gridWidth / 3) + colOffset;
+    // 边界留出足够空间
+    const leftMargin = halfWidth + 2;
+    const rightMargin = halfWidth + 2;
+    const topMargin = halfHeight + 2;
+    const bottomMargin = halfHeight + 2;
+    
+    const availableWidth = 100 - leftMargin - rightMargin;
+    const availableHeight = 100 - topMargin - bottomMargin;
+    
+    const colOffset = (random(i, 500) - 0.5) * 8;
+    let baseX = leftMargin + (col + 0.5) * (availableWidth / 3) + colOffset;
     const rowSpacing = availableHeight / totalRows;
-    let baseY = gridTop + row * rowSpacing + rowSpacing * 0.5;
+    let baseY = topMargin + row * rowSpacing + rowSpacing * 0.5;
     
     let finalX = baseX;
     let finalY = baseY;
     let attempts = 0;
-    const maxAttempts = 60;
-    
-    const leftMargin = -8;
-    const topMargin = -3;
-    const rightMargin = 0.5;
-    const bottomMargin = 0.5;
+    const maxAttempts = 80;
     
     let foundPosition = false;
     
     while (attempts < maxAttempts && !foundPosition) {
-      const offsetRangeX = 12;
-      const offsetRangeY = 10;
+      const offsetRangeX = 15;
+      const offsetRangeY = 12;
       
       const offsetX = (random(i, attempts * 2) - 0.5) * offsetRangeX;
       const offsetY = (random(i, attempts * 2 + 1) - 0.5) * offsetRangeY;
@@ -162,16 +186,19 @@ const generateCardPositions = (total: number): CardPosition[] => {
       const testX = baseX + offsetX;
       const testY = baseY + offsetY;
       
-      const cardLeft = testX - baseWidth / 2;
-      const cardTop = testY - baseHeight / 2;
+      const cardLeft = testX - halfWidth;
+      const cardTop = testY - halfHeight;
+      const cardRight = testX + halfWidth;
+      const cardBottom = testY + halfHeight;
       
+      // 确保卡片完全在边界内
       if (
-        cardLeft >= leftMargin &&
-        cardLeft + baseWidth <= 100 - rightMargin &&
-        cardTop >= topMargin &&
-        cardTop + baseHeight <= 100 - bottomMargin
+        cardLeft >= 0 &&
+        cardRight <= 100 &&
+        cardTop >= 0 &&
+        cardBottom <= 100
       ) {
-        if (!checkOverlap(cardLeft, cardTop, baseWidth, baseHeight)) {
+        if (!checkOverlap(cardLeft, cardTop, baseWidth, baseHeight, word?.status || 'perfect')) {
           finalX = testX;
           finalY = testY;
           foundPosition = true;
@@ -180,19 +207,21 @@ const generateCardPositions = (total: number): CardPosition[] => {
       attempts++;
     }
     
-      if (!foundPosition) {
-        finalX = baseX;
-        finalY = baseY;
+    // 如果没找到合适位置，确保在边界内
+    if (!foundPosition) {
+      finalX = Math.max(halfWidth, Math.min(100 - halfWidth, baseX));
+      finalY = Math.max(halfHeight, Math.min(100 - halfHeight, baseY));
     }
     
-    const rotationRange = 15;
+    const rotationRange = 18;
     const rotation = (random(i, 100) - 0.5) * rotationRange;
     
     usedAreas.push({
-      x: finalX - baseWidth / 2,
-      y: finalY - baseHeight / 2,
+      x: finalX - halfWidth,
+      y: finalY - halfHeight,
       width: baseWidth,
       height: baseHeight,
+      status: word?.status || 'perfect',
     });
     
     positions.push({
@@ -209,11 +238,33 @@ const generateCardPositions = (total: number): CardPosition[] => {
   return positions;
 };
 
-const WordCard: React.FC<{ word: ExtendedVocabWord; index: number; positions: CardPosition[] }> = ({ word, index, positions }) => {
-  const statusBg = getStatusColor(word.status);
+interface WordCardProps {
+  word: ExtendedVocabWord;
+  index: number;
+  positions: CardPosition[];
+  dragConstraints: React.RefObject<HTMLDivElement | null>;
+  isActive: boolean;
+  onDragStart: () => void;
+  baseZIndex: number;
+}
+
+const WordCard: React.FC<WordCardProps> = ({ 
+  word, 
+  index, 
+  positions, 
+  dragConstraints, 
+  isActive, 
+  onDragStart,
+  baseZIndex 
+}) => {
+  const statusBadgeBg = getStatusColor(word.status);
+  const cardBg = getCardBgColor(word.status);
   const position = positions[index];
   
   if (!position) return null;
+  
+  // 基础 z-index：active 卡片最高，否则根据 baseZIndex
+  const zIndex = isActive ? 200 : baseZIndex;
   
   return (
     <motion.div
@@ -230,28 +281,42 @@ const WordCard: React.FC<{ word: ExtendedVocabWord; index: number; positions: Ca
         damping: 20,
         delay: index * 0.04 
       }}
-      whileHover={{ scale: position.scale * 1.1, rotate: position.rotate + (index % 2 === 0 ? 2 : -2) }}
-      className={`absolute ${word.status === 'failed' ? 'opacity-50' : 'opacity-100'}`}
+      // 启用拖拽
+      drag
+      dragConstraints={dragConstraints}
+      dragMomentum={false}
+      dragElastic={0}
+      onDragStart={onDragStart}
+      whileHover={{ scale: position.scale * 1.05, rotate: position.rotate + (index % 2 === 0 ? 2 : -2) }}
+      whileDrag={{ scale: position.scale * 1.15, cursor: 'grabbing' }}
+      className={`absolute cursor-grab active:cursor-grabbing ${word.status === 'failed' ? 'opacity-60' : 'opacity-100'}`}
       style={{
         left: position.left,
         top: position.top,
         transform: 'translate(-50%, -50%)',
         width: position.width,
         height: position.height,
+        zIndex: zIndex,
       }}
     >
       <WordBubbles index={index} />
       
-      <div className="bg-white border-[1.5px] border-black rounded-lg shadow-[3px_3px_0px_rgba(0,0,0,1)] flex flex-col items-center justify-center h-full relative overflow-hidden px-1 group">
+      <div 
+        className="border-[1.5px] border-black rounded-lg shadow-[3px_3px_0px_rgba(0,0,0,1)] flex flex-col items-center justify-center h-full relative overflow-hidden px-1 group transition-shadow hover:shadow-[4px_4px_0px_rgba(0,0,0,1)]"
+        style={{ backgroundColor: cardBg }}
+      >
         <div 
           className="absolute top-0 right-0 px-0.5 py-0.25 rounded-bl-sm border-l border-b border-black/10 z-10"
-          style={{ backgroundColor: statusBg }}
+          style={{ backgroundColor: statusBadgeBg }}
         >
           <span className="text-[5px] font-black text-white leading-none whitespace-nowrap">
             {word.statusText}
           </span>
         </div>
-        <span className="text-klein font-black italic tracking-tighter text-[13px] leading-tight text-center break-words w-full mt-1 pr-2">
+        <span 
+          className="text-klein font-black italic tracking-tighter leading-tight text-center whitespace-nowrap mt-1 pr-2 select-none"
+          style={{ fontSize: word.text.length > 7 ? '11px' : '13px' }}
+        >
           {word.text}
         </span>
       </div>
@@ -261,6 +326,14 @@ const WordCard: React.FC<{ word: ExtendedVocabWord; index: number; positions: Ca
 
 export const VocabPage: React.FC = () => {
   const { data, isLoading } = useReport();
+  
+  // 拖拽边界引用
+  const dragConstraintsRef = useRef<HTMLDivElement>(null);
+  
+  // 追踪当前激活的卡片（最后被拖动的）
+  const [activeCardIndex, setActiveCardIndex] = useState<number | null>(null);
+  // 追踪 z-index 顺序：记录每张卡片被拖动的顺序
+  const [zIndexOrder, setZIndexOrder] = useState<number[]>([]);
   
   // Transform data from API to display format
   const words: ExtendedVocabWord[] = useMemo(() => {
@@ -272,8 +345,8 @@ export const VocabPage: React.FC = () => {
     }));
   }, [data?.part1?.words]);
   
-  // Generate positions based on actual word count
-  const cardPositions = useMemo(() => generateCardPositions(words.length), [words.length]);
+  // Generate positions based on actual word count，传入 words 以支持 perfect 卡片重叠
+  const cardPositions = useMemo(() => generateCardPositions(words.length, words), [words]);
   
   // Calculate stats
   const stats = useMemo(() => {
@@ -283,6 +356,27 @@ export const VocabPage: React.FC = () => {
     const starLevel = masteryRate >= 90 ? 5 : masteryRate >= 75 ? 4 : masteryRate >= 60 ? 3 : masteryRate >= 40 ? 2 : 1;
     return { masteryRate, starLevel };
   }, [words]);
+  
+  // 处理卡片开始拖动
+  const handleCardDragStart = (index: number) => {
+    setActiveCardIndex(index);
+    // 更新 z-index 顺序：将当前卡片移到最后（最高层）
+    setZIndexOrder(prev => {
+      const newOrder = prev.filter(i => i !== index);
+      return [...newOrder, index];
+    });
+  };
+  
+  // 获取卡片的 z-index
+  const getCardZIndex = (index: number) => {
+    const orderIndex = zIndexOrder.indexOf(index);
+    // 如果卡片还没被拖动过，使用初始 index
+    if (orderIndex === -1) {
+      return 10 + index;
+    }
+    // 被拖动过的卡片，根据顺序设置 z-index
+    return 50 + orderIndex;
+  };
 
   if (isLoading) {
     return (
@@ -300,21 +394,22 @@ export const VocabPage: React.FC = () => {
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(#fff_1px,transparent_1px)] bg-[length:20px_20px]" />
       </div>
 
-      <div className="relative z-20 flex justify-between items-start mb-2 px-2">
-        <div className="space-y-0">
+      {/* 顶部 Header - 添加 flex-wrap 支持小屏幕 */}
+      <div className="relative z-20 flex flex-wrap justify-between items-start mb-2 px-1 gap-2">
+        <div className="space-y-0 min-w-0 flex-shrink">
           <motion.div 
             initial={{ x: -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             className="inline-flex items-center space-x-1.5 bg-baby px-2 py-0.5 rounded border border-black shadow-[1px_1px_0px_rgba(0,0,0,1)]"
           >
             <Flame size={10} className="text-klein fill-klein" />
-            <span className="text-[9px] font-black text-klein uppercase tracking-widest">词汇能量</span>
+            <span className="text-[8px] font-black text-klein uppercase tracking-widest">词汇能量</span>
           </motion.div>
           <motion.h2 
             initial={{ x: -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ delay: 0.1 }}
-            className="text-4xl font-black text-white italic tracking-tighter leading-tight"
+            className="text-3xl font-black text-white italic tracking-tighter leading-tight"
           >
             能量词汇站
           </motion.h2>
@@ -322,7 +417,7 @@ export const VocabPage: React.FC = () => {
             initial={{ x: -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ delay: 0.2 }}
-            className="text-[10px] font-bold text-baby/80 tracking-wide mt-0.5"
+            className="text-[9px] font-bold text-baby/80 tracking-wide mt-0.5"
           >
             让每一个单词都充满成长的能量
           </motion.p>
@@ -332,70 +427,82 @@ export const VocabPage: React.FC = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
-          className="relative -mt-4"
+          className="relative flex-shrink-0"
         >
-          <Monkey variant="glasses" layoutId="monkey" className="w-20 h-20 drop-shadow-2xl" />
+          <Monkey variant="glasses" layoutId="monkey" className="w-16 h-16 drop-shadow-2xl" />
         </motion.div>
       </div>
 
       <div className="relative z-10 flex-1 overflow-hidden my-3">
-        <div className="relative w-full h-full">
+        <div ref={dragConstraintsRef} className="relative w-full h-full">
           {words.map((word, i) => (
-            <WordCard key={i} word={word} index={i} positions={cardPositions} />
+            <WordCard 
+              key={i} 
+              word={word} 
+              index={i} 
+              positions={cardPositions} 
+              dragConstraints={dragConstraintsRef}
+              isActive={activeCardIndex === i}
+              onDragStart={() => handleCardDragStart(i)}
+              baseZIndex={getCardZIndex(i)}
+            />
           ))}
         </div>
       </div>
 
       <div className="relative z-20 mt-4">
-        <div className="w-full h-px bg-white/20 mb-4" />
+        <div className="w-full h-px bg-white/20 mb-3" />
         
-        <div className="flex items-end justify-between">
-          <div className="flex flex-col space-y-3">
-            <div className="flex items-center space-x-4">
+        {/* 使用 flex-wrap 允许换行，gap 控制间距 */}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          {/* 左侧统计信息 - 设置最小宽度确保不被过度压缩 */}
+          <div className="flex flex-col space-y-2 min-w-0 flex-shrink">
+            <div className="flex items-center space-x-3">
               <div className="flex flex-col">
                 <div className="flex items-center space-x-1 text-baby/60 mb-0.5">
                    <Activity size={10} />
-                   <span className="text-[8px] font-black uppercase tracking-widest">单词数量</span>
+                   <span className="text-[7px] font-black uppercase tracking-widest">单词数量</span>
                 </div>
-                <span className="text-lg font-black text-white italic leading-none">{words.length}<span className="text-baby/40 text-xs ml-1 font-mono">个</span></span>
+                <span className="text-base font-black text-white italic leading-none">{words.length}<span className="text-baby/40 text-[10px] ml-1 font-mono">个</span></span>
               </div>
-              <div className="w-px h-8 bg-white/10" />
+              <div className="w-px h-6 bg-white/10" />
               <div className="flex flex-col">
                 <div className="flex items-center space-x-1 text-baby/60 mb-0.5">
                    <ShieldCheck size={10} />
-                   <span className="text-[8px] font-black uppercase tracking-widest">发音质量</span>
+                   <span className="text-[7px] font-black uppercase tracking-widest">发音质量</span>
                 </div>
-                <span className="text-lg font-black text-white italic leading-none">{stats.masteryRate >= 80 ? '优秀' : stats.masteryRate >= 60 ? '良好' : '加油'}</span>
+                <span className="text-base font-black text-white italic leading-none">{stats.masteryRate >= 80 ? '优秀' : stats.masteryRate >= 60 ? '良好' : '加油'}</span>
               </div>
             </div>
             
-            <div className="flex space-x-1">
-               {Array.from({ length: 12 }).map((_, i) => (
-                 <div key={i} className={`h-1 rounded-full ${i < Math.round(stats.masteryRate / 10) ? 'w-4 bg-baby' : 'w-1 bg-white/10'}`} />
+            <div className="flex space-x-0.5">
+               {Array.from({ length: 10 }).map((_, i) => (
+                 <div key={i} className={`h-1 rounded-full ${i < Math.round(stats.masteryRate / 10) ? 'w-3 bg-baby' : 'w-1 bg-white/10'}`} />
                ))}
             </div>
           </div>
 
+          {/* 右侧词汇掌握率卡片 - 允许收缩 */}
           <motion.div 
             initial={{ scale: 0, rotate: -5 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: "spring", delay: 1.2 }}
-            className="bg-white border-2 border-black p-1 rounded-2xl shadow-[6px_6px_0px_#FFF59D] flex items-stretch"
+            className="bg-white border-2 border-black p-1 rounded-xl shadow-[4px_4px_0px_#FFF59D] flex items-stretch flex-shrink-0"
           >
-            <div className="bg-klein text-white px-4 py-2 rounded-xl flex flex-col justify-center items-center">
-              <span className="text-[8px] font-black text-white/40 uppercase leading-none mb-1">词汇掌握率</span>
+            <div className="bg-klein text-white px-3 py-1.5 rounded-lg flex flex-col justify-center items-center">
+              <span className="text-[7px] font-black text-white/40 uppercase leading-none mb-0.5">词汇掌握率</span>
               <div className="flex items-baseline leading-none">
-                <span className="text-3xl font-black italic tracking-tighter">{stats.masteryRate}</span>
-                <span className="text-xs font-black ml-0.5 opacity-50">%</span>
+                <span className="text-2xl font-black italic tracking-tighter">{stats.masteryRate}</span>
+                <span className="text-[10px] font-black ml-0.5 opacity-50">%</span>
               </div>
             </div>
-            <div className="px-3 flex flex-col justify-center space-y-1">
+            <div className="px-2 flex flex-col justify-center space-y-0.5">
               <div className="flex space-x-0.5">
                 {[1, 2, 3, 4, 5].map(i => (
-                  <Star key={i} size={12} className={i <= stats.starLevel ? "text-klein fill-klein" : "text-klein/10"} strokeWidth={3} />
+                  <Star key={i} size={10} className={i <= stats.starLevel ? "text-klein fill-klein" : "text-klein/10"} strokeWidth={3} />
                 ))}
               </div>
-              <span className="text-[7px] font-black text-klein/40 text-center uppercase tracking-tighter">
+              <span className="text-[6px] font-black text-klein/40 text-center uppercase tracking-tighter">
                 {stats.starLevel >= 4 ? '黄金等级' : stats.starLevel >= 3 ? '白银等级' : '青铜等级'}
               </span>
             </div>

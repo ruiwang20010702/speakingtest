@@ -182,13 +182,13 @@ export const RadarPage: React.FC = () => {
          />
       </div>
 
-      {/* 2. Top UI: Header & Score */}
-      <div className="relative z-10 w-full px-6 pt-8 flex justify-between items-start flex-shrink-0">
-         <div className="flex flex-col">
+      {/* 2. Top UI: Header & Score - 添加 flex-wrap 支持换行 */}
+      <div className="relative z-10 w-full px-4 pt-6 flex flex-wrap justify-between items-start gap-3 flex-shrink-0">
+         <div className="flex flex-col min-w-0">
             <motion.span 
               initial={{ x: -20, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              className="text-xs font-bold text-white/60 tracking-widest uppercase"
+              className="text-[10px] font-bold text-white/60 tracking-widest uppercase"
             >
               Ability Map
             </motion.span>
@@ -196,24 +196,24 @@ export const RadarPage: React.FC = () => {
               initial={{ x: -20, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               transition={{ delay: 0.1 }}
-              className="text-3xl font-black text-white italic"
+              className="text-2xl font-black text-white italic"
             >
               五维<span className="text-baby">能力图谱</span>
             </motion.h2>
-            <span className="text-[10px] text-white/50 mt-1">点击维度查看详情</span>
+            <span className="text-[9px] text-white/50 mt-1">点击维度查看详情</span>
          </div>
          
          <motion.div 
            initial={{ scale: 0, rotate: -20 }}
            animate={{ scale: 1, rotate: 0 }}
            transition={{ type: "spring", delay: 0.3 }}
-           className="relative"
+           className="relative flex-shrink-0"
          >
-            <div className="w-16 h-16 bg-white rounded-2xl rotate-3 shadow-[4px_4px_0px_#FBC02D] flex flex-col items-center justify-center border-2 border-klein z-20 relative">
-               <span className="text-[8px] font-bold text-klein uppercase">AVG</span>
-               <span className="text-3xl font-black text-klein leading-none">{averageScore}</span>
+            <div className="w-14 h-14 bg-white rounded-xl rotate-3 shadow-[3px_3px_0px_#FBC02D] flex flex-col items-center justify-center border-2 border-klein z-20 relative">
+               <span className="text-[7px] font-bold text-klein uppercase">AVG</span>
+               <span className="text-2xl font-black text-klein leading-none">{averageScore}</span>
             </div>
-            <div className="absolute inset-0 bg-baby rounded-2xl rotate-12 -z-10" />
+            <div className="absolute inset-0 bg-baby rounded-xl rotate-12 -z-10" />
          </motion.div>
       </div>
 

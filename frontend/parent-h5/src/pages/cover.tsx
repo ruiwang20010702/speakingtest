@@ -106,16 +106,16 @@ export const Cover: React.FC = () => {
             <p className="text-white/60 text-sm font-bold">的口语能力分析报告</p>
          </motion.div>
 
-         {/* Bottom Footer / Barcode Area */}
+         {/* Bottom Footer / Barcode Area - 添加 flex-wrap 支持换行 */}
          <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1.5 }}
-            className="w-full border-t border-white/30 mt-6 pt-4 flex justify-between items-end"
+            className="w-full border-t border-white/30 mt-6 pt-4 flex flex-wrap justify-between items-end gap-3"
          >
-            <div className="flex items-center text-white/60 space-x-4">
-               <ArrowUpRight className="w-6 h-6 flex-shrink-0" />
-               <span className="text-xs max-w-[200px] leading-tight text-justify">
+            <div className="flex items-center text-white/60 space-x-3 min-w-0 flex-shrink">
+               <ArrowUpRight className="w-5 h-5 flex-shrink-0" />
+               <span className="text-[11px] leading-tight">
                   深度解析语言潜力，<br/>见证每一次发声的蜕变。
                </span>
             </div>
@@ -125,12 +125,12 @@ export const Cover: React.FC = () => {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 1.8, type: "spring" }}
-              className="flex flex-col items-end"
+              className="flex flex-col items-end flex-shrink-0"
             >
-               <span className="text-[8px] font-bold text-white/40 uppercase tracking-widest">总分 SCORE</span>
+               <span className="text-[7px] font-bold text-white/40 uppercase tracking-widest">总分 SCORE</span>
                <div className="flex items-baseline">
-                 <span className="text-4xl font-black text-baby">{Math.round(data?.overall?.total_score || 0)}</span>
-                 <span className="text-lg font-bold text-white/40 ml-1">/100</span>
+                 <span className="text-3xl font-black text-baby">{Math.round(data?.overall?.total_score || 0)}</span>
+                 <span className="text-base font-bold text-white/40 ml-1">/100</span>
                </div>
             </motion.div>
          </motion.div>
