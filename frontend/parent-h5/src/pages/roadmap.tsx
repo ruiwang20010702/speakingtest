@@ -96,7 +96,7 @@ export const RoadmapPage: React.FC = () => {
                   ))}
                 </div>
               </div>
-            </div>
+          </div>
           )}
 
           {/* 短板 */}
@@ -113,7 +113,7 @@ export const RoadmapPage: React.FC = () => {
                   ))}
                 </div>
               </div>
-            </div>
+          </div>
           )}
         </div>
       </motion.div>
@@ -136,27 +136,27 @@ export const RoadmapPage: React.FC = () => {
           })
         ) : (
           <>
-            <PlanCard 
-              icon={<Sun size={20} className="text-orange-600" />}
+        <PlanCard 
+          icon={<Sun size={20} className="text-orange-600" />}
               title="每日跟读"
               desc="每天 10 分钟标准音频跟读"
-              bgColor="bg-yellow-100"
-              index={0}
-            />
-            <PlanCard 
-              icon={<RefreshCw size={20} className="text-blue-600" />}
+          bgColor="bg-yellow-100"
+          index={0}
+        />
+        <PlanCard 
+          icon={<RefreshCw size={20} className="text-blue-600" />}
               title="整句练习"
               desc="多用完整句子回答问题"
-              bgColor="bg-blue-100"
-              index={1}
-            />
-            <PlanCard 
-              icon={<Clock size={20} className="text-red-600" />}
+          bgColor="bg-blue-100"
+          index={1}
+        />
+        <PlanCard 
+          icon={<Clock size={20} className="text-red-600" />}
               title="自信表达"
               desc="保持自信，大声开口练习"
-              bgColor="bg-red-100"
-              index={2}
-            />
+          bgColor="bg-red-100"
+          index={2}
+        />
           </>
         )}
       </div>

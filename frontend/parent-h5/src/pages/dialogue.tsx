@@ -198,15 +198,15 @@ export const DialoguePage: React.FC = () => {
             comment={bestSample.feedback}
           />
         ) : (
-          <PerformanceCard 
-            type="best"
-            index={0}
+        <PerformanceCard 
+          type="best"
+          index={0}
             title="最佳样本"
             question="暂无数据"
             studentAnswer="暂无数据"
             score="-"
             comment="暂无最佳表现样本"
-          />
+        />
         )}
 
         <div className="flex justify-center -my-2 relative z-30">
@@ -227,15 +227,15 @@ export const DialoguePage: React.FC = () => {
             comment={weakSample.feedback}
           />
         ) : (
-          <PerformanceCard 
-            type="needs-work"
-            index={1}
+        <PerformanceCard 
+          type="needs-work"
+          index={1}
             title="提升样本"
             question="暂无数据"
             studentAnswer="暂无数据"
             score="-"
             comment="暂无待提升样本"
-          />
+        />
         )}
       </div>
 

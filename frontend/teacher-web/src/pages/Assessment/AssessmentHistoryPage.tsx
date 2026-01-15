@@ -292,13 +292,13 @@ export const AssessmentHistoryPage: React.FC = () => {
                                         )}
                                     </>
                             ) : (
-                                <button 
-                                    onClick={() => handleShowQRCode(assessment)}
-                                    disabled={isGeneratingShareLink}
-                                    className="px-4 py-2 border border-border bg-white text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors disabled:opacity-50"
-                                >
+                                        <button 
+                                            onClick={() => handleShowQRCode(assessment)}
+                                            disabled={isGeneratingShareLink}
+                                            className="px-4 py-2 border border-border bg-white text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                                        >
                                     <QrCode size={16} /> 测试二维码
-                                </button>
+                                    </button>
                             )}
                         </div>
                     </div>

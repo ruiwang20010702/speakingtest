@@ -124,21 +124,21 @@ export const ReportPage: React.FC = () => {
                         <Edit3 size={18} />
                         <span>编辑报告</span>
                     </button>
-                    <button
-                        onClick={handleShare}
+                <button
+                    onClick={handleShare}
                         disabled={sharing || !shareUrl}
-                        className="btn-primary flex items-center gap-2 px-4 py-2"
-                    >
-                        {sharing ? (
-                            <Loader2 className="animate-spin" size={18} />
-                        ) : (
-                            <Share2 size={18} />
-                        )}
-                        <span>分享给家长</span>
-                    </button>
-                </div>
+                    className="btn-primary flex items-center gap-2 px-4 py-2"
+                >
+                    {sharing ? (
+                        <Loader2 className="animate-spin" size={18} />
+                    ) : (
+                        <Share2 size={18} />
+                    )}
+                    <span>分享给家长</span>
+                </button>
             </div>
-
+                                    </div>
+                                    
             {/* Phone Preview */}
             <div className="flex justify-center py-8">
                 <PhoneMockup 

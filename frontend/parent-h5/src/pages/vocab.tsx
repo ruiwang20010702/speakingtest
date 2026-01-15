@@ -180,9 +180,9 @@ const generateCardPositions = (total: number): CardPosition[] => {
       attempts++;
     }
     
-    if (!foundPosition) {
-      finalX = baseX;
-      finalY = baseY;
+      if (!foundPosition) {
+        finalX = baseX;
+        finalY = baseY;
     }
     
     const rotationRange = 15;
@@ -294,7 +294,7 @@ export const VocabPage: React.FC = () => {
 
   return (
     <div className="w-full h-full flex flex-col relative bg-klein overflow-hidden select-none px-4 pt-6 pb-6">
-      
+
       {/* Grid Pattern Overlay */}
       <div className="absolute inset-0 z-0 opacity-5 pointer-events-none">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(#fff_1px,transparent_1px)] bg-[length:20px_20px]" />

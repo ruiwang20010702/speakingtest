@@ -74,40 +74,40 @@ const App: React.FC = () => {
 
   return (
     <ReportProvider>
-      <Layout>
-        <div className="relative w-full h-full perspective-1000">
-          <AnimatePresence initial={false} custom={direction} mode="wait">
-            <motion.div
-              key={currentPage}
-              custom={direction}
-              variants={variants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{
-                x: { type: "spring", stiffness: 300, damping: 30 },
-                opacity: { duration: 0.2 }
-              }}
-              className="absolute w-full h-full cursor-grab active:cursor-grabbing bg-klein"
-              // Enable Dragging for Swipe
-              drag="x"
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={1}
-              onDragEnd={(e, { offset, velocity }) => {
-                const swipe = swipePower(offset.x, velocity.x);
+    <Layout>
+      <div className="relative w-full h-full perspective-1000">
+        <AnimatePresence initial={false} custom={direction} mode="wait">
+          <motion.div
+            key={currentPage}
+            custom={direction}
+            variants={variants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{
+              x: { type: "spring", stiffness: 300, damping: 30 },
+              opacity: { duration: 0.2 }
+            }}
+            className="absolute w-full h-full cursor-grab active:cursor-grabbing bg-klein"
+            // Enable Dragging for Swipe
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={1}
+            onDragEnd={(e, { offset, velocity }) => {
+              const swipe = swipePower(offset.x, velocity.x);
 
-                if (swipe < -swipeConfidenceThreshold) {
-                  handleNext();
-                } else if (swipe > swipeConfidenceThreshold) {
-                  handlePrev();
-                }
-              }}
-            >
-              {renderPage()}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </Layout>
+              if (swipe < -swipeConfidenceThreshold) {
+                handleNext();
+              } else if (swipe > swipeConfidenceThreshold) {
+                handlePrev();
+              }
+            }}
+          >
+            {renderPage()}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </Layout>
     </ReportProvider>
   );
 };

@@ -205,7 +205,7 @@ class ProcessPart2TaskUseCase:
                 current_usage = dict(test.tokens_used or {})
                 if not isinstance(current_usage, dict):
                     current_usage = {}
-                
+                    
                 # 记录本次调用的详情
                 attempt_record = {
                     "attempt": (test.retry_count or 0) + 1,

@@ -71,7 +71,7 @@ export const NewAssessmentModal: React.FC<NewAssessmentModalProps> = ({ isOpen, 
                         transition={{ type: "spring", damping: 25, stiffness: 300 }}
                         className="relative bg-surface rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-white/20"
                     >
-                        {/* Header */}
+                {/* Header */}
                         <div className="px-8 py-6 border-b border-border flex items-center justify-between bg-slate-50/50">
                             <div>
                                 <h3 className="font-bold text-xl text-text-main">发起新测评</h3>
@@ -81,70 +81,70 @@ export const NewAssessmentModal: React.FC<NewAssessmentModalProps> = ({ isOpen, 
                                 onClick={onClose} 
                                 className="p-2 text-text-sub hover:bg-slate-200 hover:text-text-main rounded-full transition-all"
                             >
-                                <X size={20} />
-                            </button>
-                        </div>
+                        <X size={20} />
+                    </button>
+                </div>
 
-                        {/* Body */}
+                {/* Body */}
                         <div className="p-8 space-y-6">
                             <div className="space-y-3">
                                 <label className="block text-sm font-bold text-text-main">
                                     📚 选择级别
                                 </label>
                                 <div className="relative">
-                                    <select
-                                        value={level}
+                        <select
+                            value={level}
                                         onChange={(e) => handleLevelChange(e.target.value)}
                                         className="w-full px-4 py-3.5 pr-10 text-base font-semibold text-text-main bg-white border-2 border-border rounded-2xl shadow-sm appearance-none cursor-pointer transition-all hover:border-primary focus:border-primary focus:ring-4 focus:ring-primary/10 focus:outline-none"
                                     >
                                         {LEVELS.map(lvl => (
                                             <option key={lvl} value={lvl}>{LEVEL_CONFIG[lvl].name}</option>
                                         ))}
-                                    </select>
+                        </select>
                                     <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none">
                                         <svg className="w-5 h-5 text-text-sub" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                         </svg>
                                     </div>
                                 </div>
-                            </div>
+                    </div>
 
                             <div className="space-y-3">
                                 <label className="block text-sm font-bold text-text-main">
                                     📖 选择单元
                                 </label>
                                 <div className="relative">
-                                    <select
-                                        value={unit}
-                                        onChange={(e) => setUnit(e.target.value)}
+                        <select
+                            value={unit}
+                            onChange={(e) => setUnit(e.target.value)}
                                         className="w-full px-4 py-3.5 pr-10 text-base font-semibold text-text-main bg-white border-2 border-border rounded-2xl shadow-sm appearance-none cursor-pointer transition-all hover:border-primary focus:border-primary focus:ring-4 focus:ring-primary/10 focus:outline-none"
-                                    >
+                        >
                                         {unitOptions.map(opt => (
                                             <option key={opt.value} value={opt.value}>{opt.label}</option>
                                         ))}
-                                    </select>
+                        </select>
                                     <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none">
                                         <svg className="w-5 h-5 text-text-sub" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                         </svg>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
+                    </div>
+                </div>
 
-                        {/* Footer */}
+                {/* Footer */}
                         <div className="px-8 py-6 border-t border-border bg-slate-50/50 flex justify-end gap-4">
-                            <button
-                                onClick={onClose}
+                    <button
+                        onClick={onClose}
                                 className="px-6 py-3 rounded-xl text-base font-bold text-text-sub hover:bg-slate-200 transition-all active:scale-95"
-                            >
-                                取消
-                            </button>
-                            <button
-                                onClick={() => onSubmit(level, unit)}
-                                disabled={isCreating}
+                    >
+                        取消
+                    </button>
+                    <button
+                        onClick={() => onSubmit(level, unit)}
+                        disabled={isCreating}
                                 className="btn-primary py-3 px-8 text-base font-bold flex items-center gap-2 shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-70 disabled:translate-y-0 disabled:shadow-none"
-                            >
+                    >
                                 {isCreating ? (
                                     <>
                                         <Loader2 className="animate-spin" size={20} />
@@ -153,7 +153,7 @@ export const NewAssessmentModal: React.FC<NewAssessmentModalProps> = ({ isOpen, 
                                 ) : (
                                     '生成测评链接'
                                 )}
-                            </button>
+                    </button>
                         </div>
                     </motion.div>
                 </div>

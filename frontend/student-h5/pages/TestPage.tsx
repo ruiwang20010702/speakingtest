@@ -113,13 +113,13 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
     const fetchQuestions = async () => {
       try {
         setLoadError(null);
-        const q = await getQuestions(level, unit);
-        setQuestions(q);
+      const q = await getQuestions(level, unit);
+      setQuestions(q);
       } catch (error: any) {
         console.error('Failed to load questions:', error);
         setLoadError(error.response?.data?.detail || '加载题目失败，请检查网络连接');
       } finally {
-        setIsLoading(false);
+      setIsLoading(false);
       }
     };
     fetchQuestions();
