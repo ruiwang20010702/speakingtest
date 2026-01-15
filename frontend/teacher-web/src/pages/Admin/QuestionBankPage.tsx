@@ -6,12 +6,12 @@ import { questionsApi, type Question, type QuestionCreate, type QuestionUpdate }
 
 // Available levels and units (can be fetched from API later)
 const LEVELS = ['L0', 'L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'L8', 'L9'];
-const UNITS = ['All', 'Unit 1', 'Unit 2', 'Unit 3', 'Unit 4', 'Unit 5', 'Unit 6', 'Unit 7', 'Unit 8', 'Unit 9', 'Unit 10', 'Unit 11', 'Unit 12'];
+const UNITS = ['Unit 1', 'Unit 2', 'Unit 3', 'Unit 4', 'Unit 5', 'Unit 6', 'Unit 7', 'Unit 8', 'Unit 9', 'Unit 10', 'Unit 11', 'Unit 12'];
 
 export const QuestionBankPage: React.FC = () => {
     const [questions, setQuestions] = useState<Question[]>([]);
     const [selectedLevel, setSelectedLevel] = useState<string>('L0');
-    const [selectedUnit, setSelectedUnit] = useState<string>('All');
+    const [selectedUnit, setSelectedUnit] = useState<string>('Unit 1');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     
