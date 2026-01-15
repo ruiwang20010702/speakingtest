@@ -505,14 +505,52 @@ class RetryTaskResponse(BaseModel):
     "/failed-tasks",
     response_model=FailedTasksResponse,
     summary="查看失败任务",
-    description="查看所有失败的测评任务。"
+    description="查看所有失败的测评任务。卡住超过5分钟的任务会自动标记为失败。"
 )
 async def list_failed_tasks(
     max_retry: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
     _ = Depends(require_admin)
 ):
-    """List all failed tests with optional retry count filter."""
+    """List all failed tests. Stuck tasks are auto-marked as failed."""
+    from datetime import timedelta
+    from src.infrastructure.timezone import now as china_now
+    from sqlalchemy import or_, and_
+    
+    # 先将卡住的任务标记为 failed
+    STUCK_THRESHOLD_MINUTES = 5
+    stuck_threshold = china_now() - timedelta(minutes=STUCK_THRESHOLD_MINUTES)
+    
+    # 查找卡住的任务
+    stuck_stmt = (
+        select(TestModel)
+        .where(
+            or_(
+                and_(
+                    TestModel.status == 'part1_processing',
+                    TestModel.updated_at < stuck_threshold
+                ),
+                and_(
+                    TestModel.status == 'processing',
+                    TestModel.updated_at < stuck_threshold
+                )
+            )
+        )
+    )
+    stuck_result = await db.execute(stuck_stmt)
+    stuck_tests = stuck_result.scalars().all()
+    
+    # 将卡住的任务标记为 failed
+    for test in stuck_tests:
+        original_status = test.status
+        test.status = 'failed'
+        test.failure_reason = f"任务处理超时（原状态: {original_status}，超过 {STUCK_THRESHOLD_MINUTES} 分钟未完成）"
+        test.updated_at = china_now()
+    
+    if stuck_tests:
+        await db.commit()
+    
+    # 查询所有失败的任务
     stmt = (
         select(TestModel, StudentProfileModel.student_name)
         .outerjoin(StudentProfileModel, TestModel.student_id == StudentProfileModel.user_id)
@@ -631,6 +669,200 @@ async def retry_failed_task(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retry task: {str(e)}"
+        )
+
+
+class RegenerateReportRequest(BaseModel):
+    """请求重新生成报告"""
+    reference_text: Optional[str] = None  # Part 1 的参考文本，如果不提供则从数据库获取
+
+
+class RegenerateReportResponse(BaseModel):
+    """重新生成报告响应"""
+    success: bool
+    message: str
+    test_id: int
+    part1_queued: bool = False
+    part2_queued: bool = False
+
+
+@router.post(
+    "/tests/{test_id}/regenerate",
+    response_model=RegenerateReportResponse,
+    summary="重新生成报告",
+    description="教师手动触发重新生成学生报告。要求两段音频的 OSS 链接都已保存。"
+)
+async def regenerate_report(
+    test_id: int,
+    request: RegenerateReportRequest = None,
+    db: AsyncSession = Depends(get_db),
+    _ = Depends(require_teacher)
+):
+    """
+    教师手动重新生成学生报告。
+    
+    适用场景：
+    - 任务卡住（part1_processing 或 processing 状态）
+    - 任务失败（failed 状态）
+    - 需要重新评测
+    
+    前提条件：
+    - Part 1 音频链接已保存（part1_audio_url）
+    - Part 2 音频链接已保存（part2_audio_url）
+    """
+    import uuid
+    import logging
+    from src.infrastructure.queue_service import Part1Task, Part2Task, enqueue_part1_task, enqueue_part2_task
+    from src.adapters.repositories.models import QuestionModel
+    from src.infrastructure.timezone import now as china_now
+    
+    logger = logging.getLogger(__name__)
+    
+    # 1. 获取测试信息
+    stmt = select(TestModel).where(TestModel.id == test_id)
+    result = await db.execute(stmt)
+    test = result.scalar_one_or_none()
+    
+    if not test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="测评记录不存在"
+        )
+    
+    # 2. 检查 OSS 链接是否存在
+    if not test.part1_audio_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Part 1 音频链接不存在，无法重新生成报告"
+        )
+    
+    if not test.part2_audio_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Part 2 音频链接不存在，无法重新生成报告"
+        )
+    
+    # 3. 检查重试次数限制
+    MAX_RETRIES = 5
+    if (test.retry_count or 0) >= MAX_RETRIES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"已达到最大重试次数 ({MAX_RETRIES})，请联系技术支持"
+        )
+    
+    # 4. 获取 Part 1 参考文本
+    reference_text = request.reference_text if request else None
+    if not reference_text:
+        # 从数据库获取该 level/unit 的 Part 1 参考文本
+        stmt = select(QuestionModel).where(
+            QuestionModel.level == test.level,
+            QuestionModel.unit == test.unit,
+            QuestionModel.part == 1,
+            QuestionModel.is_active == True
+        ).limit(1)
+        result = await db.execute(stmt)
+        part1_question = result.scalar_one_or_none()
+        if part1_question:
+            reference_text = part1_question.question  # Part 1 的 question 就是参考文本
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"找不到 {test.level} - {test.unit} 的 Part 1 参考文本"
+            )
+    
+    # 5. 获取 Part 2 题目
+    stmt = select(QuestionModel).where(
+        QuestionModel.level == test.level,
+        QuestionModel.unit == test.unit,
+        QuestionModel.part == 2,
+        QuestionModel.is_active == True
+    ).order_by(QuestionModel.question_no)
+    result = await db.execute(stmt)
+    questions = result.scalars().all()
+    
+    if not questions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"找不到 {test.level} - {test.unit} 的 Part 2 题目"
+        )
+    
+    question_list = [
+        {"no": q.question_no, "question": q.question, "reference_answer": q.reference_answer or "无"}
+        for q in questions
+    ]
+    
+    # 6. 根据当前状态决定从哪里开始
+    part1_queued = False
+    part2_queued = False
+    
+    try:
+        # 如果 Part 1 还没完成（pending, part1_processing, failed），从 Part 1 开始
+        if test.status in ('pending', 'part1_processing', 'failed') or test.part1_score is None:
+            task_id = f"regen-p1-{test_id}-{str(uuid.uuid4())[:4]}"
+            task = Part1Task(
+                task_id=task_id,
+                test_id=test_id,
+                audio_url=test.part1_audio_url,
+                reference_text=reference_text
+            )
+            await enqueue_part1_task(task)
+            test.status = 'part1_processing'
+            part1_queued = True
+            logger.info(f"重新生成报告: Part 1 任务已入队 task_id={task_id}")
+        
+        # 如果 Part 1 已完成，但 Part 2 没完成，只重试 Part 2
+        elif test.status in ('part1_done', 'processing') or test.part2_score is None:
+            task_id = f"regen-p2-{test_id}-{str(uuid.uuid4())[:4]}"
+            task = Part2Task(
+                task_id=task_id,
+                test_id=test_id,
+                audio_url=test.part2_audio_url,
+                questions=question_list
+            )
+            await enqueue_part2_task(task)
+            test.status = 'processing'
+            part2_queued = True
+            logger.info(f"重新生成报告: Part 2 任务已入队 task_id={task_id}")
+        
+        # 如果已经完成，但教师想重新生成，从 Part 1 开始
+        elif test.status == 'completed':
+            task_id = f"regen-p1-{test_id}-{str(uuid.uuid4())[:4]}"
+            task = Part1Task(
+                task_id=task_id,
+                test_id=test_id,
+                audio_url=test.part1_audio_url,
+                reference_text=reference_text
+            )
+            await enqueue_part1_task(task)
+            test.status = 'part1_processing'
+            part1_queued = True
+            logger.info(f"重新生成报告: 已完成测试重新评测，Part 1 任务已入队 task_id={task_id}")
+        
+        # 更新测试记录
+        test.retry_count = (test.retry_count or 0) + 1
+        test.failure_reason = f"教师手动触发重新生成 (第 {test.retry_count} 次)"
+        test.updated_at = china_now()
+        await db.commit()
+        
+        message_parts = []
+        if part1_queued:
+            message_parts.append("Part 1 评测任务已入队")
+        if part2_queued:
+            message_parts.append("Part 2 评测任务已入队")
+        
+        return RegenerateReportResponse(
+            success=True,
+            message="，".join(message_parts) + "，请等待处理完成",
+            test_id=test_id,
+            part1_queued=part1_queued,
+            part2_queued=part2_queued
+        )
+        
+    except Exception as e:
+        logger.exception(f"重新生成报告失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"重新生成报告失败: {str(e)}"
         )
 
 

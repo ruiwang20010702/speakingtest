@@ -98,6 +98,12 @@ export const adminApi = {
     api.get<FailedTasksResponse>('/admin/failed-tasks', { params: maxRetry !== undefined ? { max_retry: maxRetry } : {} }),
   retryTask: (testId: number) =>
     api.post<RetryTaskResponse>(`/admin/failed-tasks/${testId}/retry`),
+
+  // Regenerate Report (手动重新生成报告)
+  regenerateReport: (testId: number, referenceText?: string) =>
+    api.post<RegenerateReportResponse>(`/admin/tests/${testId}/regenerate`, 
+      referenceText ? { reference_text: referenceText } : {}
+    ),
 };
 
 // System API
@@ -206,6 +212,14 @@ export interface RetryTaskResponse {
   success: boolean;
   message: string;
   test_id: number;
+}
+
+export interface RegenerateReportResponse {
+  success: boolean;
+  message: string;
+  test_id: number;
+  part1_queued: boolean;
+  part2_queued: boolean;
 }
 
 export interface StudentListItem {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, RefreshCw, AlertTriangle, Clock, BookOpen } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Clock, BookOpen, FileText } from 'lucide-react';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
 import { adminApi, type FailedTaskItem } from '../../api';
 
@@ -9,6 +9,7 @@ export const FailedTasksPage: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [retryingId, setRetryingId] = useState<number | null>(null);
+    const [regeneratingId, setRegeneratingId] = useState<number | null>(null);
 
     useEffect(() => {
         loadTasks();
@@ -42,6 +43,22 @@ export const FailedTasksPage: React.FC = () => {
             alert(err.response?.data?.detail || '重试任务失败');
         } finally {
             setRetryingId(null);
+        }
+    };
+
+    const handleRegenerate = async (testId: number) => {
+        setRegeneratingId(testId);
+        try {
+            const response = await adminApi.regenerateReport(testId);
+            if (response.data.success) {
+                alert(`${response.data.message}`);
+                loadTasks();
+            }
+        } catch (err: any) {
+            console.error('Failed to regenerate report:', err);
+            alert(err.response?.data?.detail || '重新生成报告失败');
+        } finally {
+            setRegeneratingId(null);
         }
     };
 
@@ -170,11 +187,33 @@ export const FailedTasksPage: React.FC = () => {
                                 </div>
 
                                 {/* Actions */}
-                                <div className="ml-4">
+                                <div className="ml-4 flex flex-col gap-2">
+                                    <button
+                                        onClick={() => handleRegenerate(task.test_id)}
+                                        disabled={regeneratingId === task.test_id || task.retry_count >= 5}
+                                        className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {regeneratingId === task.test_id ? (
+                                            <>
+                                                <Loader2 size={16} className="animate-spin" />
+                                                生成中...
+                                            </>
+                                        ) : task.retry_count >= 5 ? (
+                                            <>
+                                                <AlertTriangle size={16} />
+                                                已达上限
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FileText size={16} />
+                                                重新生成报告
+                                            </>
+                                        )}
+                                    </button>
                                     <button
                                         onClick={() => handleRetry(task.test_id)}
                                         disabled={retryingId === task.test_id || task.retry_count >= 3}
-                                        className="px-4 py-2 bg-primary text-white rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="px-4 py-2 bg-gray-100 text-text-main rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {retryingId === task.test_id ? (
                                             <>
@@ -184,12 +223,12 @@ export const FailedTasksPage: React.FC = () => {
                                         ) : task.retry_count >= 3 ? (
                                             <>
                                                 <AlertTriangle size={16} />
-                                                已达上限
+                                                重试上限
                                             </>
                                         ) : (
                                             <>
                                                 <RefreshCw size={16} />
-                                                重试
+                                                仅重试 Part2
                                             </>
                                         )}
                                     </button>

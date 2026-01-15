@@ -39,6 +39,19 @@ async def handle_task(task: Part2Task) -> bool:
             
     except Exception as e:
         logger.exception(f"任务 {task.task_id} 处理异常: {e}")
+        # 确保异常时也更新数据库状态为 failed
+        try:
+            async with AsyncSessionLocal() as db:
+                from sqlalchemy import text
+                from src.infrastructure.timezone import now as china_now
+                await db.execute(
+                    text("UPDATE tests SET status = 'failed', failure_reason = :reason, updated_at = :now WHERE id = :id"),
+                    {"reason": f"Worker 异常: {str(e)[:200]}", "now": china_now(), "id": task.test_id}
+                )
+                await db.commit()
+                logger.info(f"已将 test_id={task.test_id} 标记为 failed")
+        except Exception as db_error:
+            logger.error(f"更新测试状态失败: {db_error}")
         return False
 
 

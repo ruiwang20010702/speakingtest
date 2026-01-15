@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Plus, QrCode, FileText, Loader2, Sparkles, BookOpen, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Plus, QrCode, FileText, Loader2, Sparkles, BookOpen, AlertCircle, RefreshCw } from 'lucide-react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
 import { StatusBadge } from '../../components/UI/StatusBadge';
 import { NewAssessmentModal } from './components/NewAssessmentModal';
 import { LinkGeneratedModal } from './components/LinkGeneratedModal';
-import { studentsApi, testsApi } from '../../api';
+import { studentsApi, testsApi, adminApi } from '../../api';
 import type { Student, Assessment } from '../../types';
 
 export const AssessmentHistoryPage: React.FC = () => {
@@ -25,6 +25,7 @@ export const AssessmentHistoryPage: React.FC = () => {
     const [isCreating, setIsCreating] = useState(false);
     const [isGeneratingShareLink, setIsGeneratingShareLink] = useState(false);
     const [generatingInterpretation, setGeneratingInterpretation] = useState<string | null>(null);
+    const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
 
     const loadData = async () => {
         if (!id) return;
@@ -158,6 +159,22 @@ export const AssessmentHistoryPage: React.FC = () => {
         }
     };
 
+    const handleRegenerate = async (testId: string) => {
+        setRegeneratingId(testId);
+        try {
+            const response = await adminApi.regenerateReport(Number(testId));
+            if (response.data.success) {
+                alert(response.data.message);
+                loadData();
+            }
+        } catch (error: any) {
+            console.error('Failed to regenerate report:', error);
+            alert(error.response?.data?.detail || '重新生成报告失败，请重试');
+        } finally {
+            setRegeneratingId(null);
+        }
+    };
+
     if (isLoading && !student) {
         return (
             <DashboardLayout>
@@ -253,6 +270,25 @@ export const AssessmentHistoryPage: React.FC = () => {
                                                     已重试 {assessment.retryCount} 次
                                                 </p>
                                             )}
+                                            <button
+                                                onClick={() => handleRegenerate(assessment.id)}
+                                                disabled={regeneratingId === assessment.id || (assessment.retryCount ?? 0) >= 5}
+                                                className="mt-2 px-3 py-1.5 bg-green-600 text-white rounded-md font-medium text-xs flex items-center gap-1.5 hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {regeneratingId === assessment.id ? (
+                                                    <>
+                                                        <Loader2 size={12} className="animate-spin" />
+                                                        生成中...
+                                                    </>
+                                                ) : (assessment.retryCount ?? 0) >= 5 ? (
+                                                    '已达重试上限'
+                                                ) : (
+                                                    <>
+                                                        <RefreshCw size={12} />
+                                                        重新生成报告
+                                                    </>
+                                                )}
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

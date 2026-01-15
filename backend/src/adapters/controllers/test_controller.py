@@ -2,12 +2,15 @@
 Test Controller
 Handles test-related endpoints including Part 1 and Part 2 evaluation.
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
 from src.infrastructure.database import get_db
+
+logger = logging.getLogger(__name__)
 from src.infrastructure.auth import get_current_user_id
 from src.infrastructure.responses import ErrorResponse
 from src.adapters.gateways.oss_client import get_oss_client
@@ -103,6 +106,7 @@ async def submit_part1(
     )
     
     if not result.success:
+        logger.error(f"Part 1 提交失败: {result.message}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": "SubmitFailed", "message": result.message}
@@ -248,6 +252,7 @@ async def submit_part2(
     )
     
     if not result.success:
+        logger.error(f"Part 2 提交失败: {result.message}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": "SubmitFailed", "message": result.message}

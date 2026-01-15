@@ -684,7 +684,8 @@ class QwenOmniGateway:
                 }
             ],
             "modalities": ["text"],
-            "stream": False # Part 1 不用流式，直接等结果
+            "stream": True,  # 模型要求必须使用流式输出
+            "stream_options": {"include_usage": True}
         }
         
         # 添加思考模式参数 (提高评测准确性)
@@ -696,25 +697,60 @@ class QwenOmniGateway:
         async with self.semaphore:
             logger.info(f"开始 Qwen Part 1 评测，音频大小: {len(audio_data)} bytes")
             try:
-                # 非流式请求
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    response = await client.post(
+                # 流式请求
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    async with client.stream(
+                        "POST",
                         f"{self.base_url}/chat/completions",
-                        headers={"Authorization": f"Bearer {self.api_key}"},
+                        headers=headers,
                         json=request_body
-                    )
-                    response.raise_for_status()
-                    data = response.json()
-                    content = data["choices"][0]["message"]["content"]
-                    usage = data.get("usage", {})
-                    
-                    result = self._parse_part1_response(content, reference_text)
-                    result.usage = usage
-                    return result
+                    ) as response:
+                        if response.status_code != 200:
+                            error_text = await response.aread()
+                            logger.error(f"Qwen Part 1 API 错误 [{response.status_code}]: {error_text.decode()}")
+                            # 截断错误信息，避免数据库字段溢出
+                            error_msg = error_text.decode()[:200]
+                            return Part1EvaluationResult(success=False, error=f"API错误: {error_msg}")
+                        
+                        # 收集流式响应
+                        content_parts = []
+                        usage = {}
+                        
+                        async for line in response.aiter_lines():
+                            if not line.startswith("data: "):
+                                continue
+                            
+                            data_str = line[6:]  # 去掉 "data: " 前缀
+                            if data_str.strip() == "[DONE]":
+                                break
+                            
+                            try:
+                                chunk = json.loads(data_str)
+                                # 获取 usage 信息
+                                if "usage" in chunk and chunk["usage"]:
+                                    usage = chunk["usage"]
+                                
+                                # 获取内容
+                                choices = chunk.get("choices", [])
+                                if choices:
+                                    delta = choices[0].get("delta", {})
+                                    if "content" in delta and delta["content"]:
+                                        content_parts.append(delta["content"])
+                            except json.JSONDecodeError:
+                                continue
+                        
+                        content = "".join(content_parts)
+                        logger.info(f"Part 1 流式响应完成，内容长度: {len(content)}")
+                        
+                        result = self._parse_part1_response(content, reference_text)
+                        result.usage = usage
+                        return result
                     
             except Exception as e:
                 logger.exception(f"Qwen Part 1 API 调用失败: {e}")
-                return Part1EvaluationResult(success=False, error=str(e))
+                # 截断错误信息
+                return Part1EvaluationResult(success=False, error=str(e)[:200])
 
     def _parse_part1_response(self, response_text: str, reference_text: str = "") -> Part1EvaluationResult:
         """解析 Part 1 JSON 响应 (新版 4 维度评分)"""
@@ -749,9 +785,6 @@ class QwenOmniGateway:
             # This fixes the issue where model hallucinates synonyms (e.g. dad -> father)
             details = data.get("details", [])
             if details and reference_text:
-                # Clean reference text and split into words
-                import re
-                # Remove punctuation for splitting, but keep original words if possible?
                 # Simple split by whitespace is usually enough for these word lists
                 ref_words = reference_text.strip().split()
                 

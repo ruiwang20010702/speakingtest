@@ -70,13 +70,25 @@ class SubmitPart2UseCase:
                 message="测评记录不存在"
             )
         
-        if test.status != "part1_done":
+        # 允许的状态：part1_done（Part 1 已完成）或 part1_processing（Part 1 处理中，Part 2 可以先入队）
+        allowed_statuses = ["part1_done", "part1_processing"]
+        if test.status not in allowed_statuses:
+            # 状态不允许时，仍保存 OSS 链接
+            if request.audio_url and not test.part2_audio_url:
+                test.part2_audio_url = request.audio_url
+                test.updated_at = china_now()
+                await self.db.commit()
+                logger.info(f"Part 2 状态检查失败，但已保存音频链接: {request.audio_url}")
             return SubmitPart2Response(
                 success=False,
                 message=f"无法提交 Part 2：当前状态为 {test.status}"
             )
         
-        # 2. 创建任务
+        # 2. 保存音频链接
+        if request.audio_url:
+            test.part2_audio_url = request.audio_url
+        
+        # 3. 创建任务
         task_id = str(uuid.uuid4())[:8]
         task = Part2Task(
             task_id=task_id,
@@ -85,7 +97,7 @@ class SubmitPart2UseCase:
             questions=request.questions
         )
         
-        # 3. 入队
+        # 4. 入队
         try:
             await enqueue_part2_task(task)
         except Exception as e:
@@ -95,8 +107,11 @@ class SubmitPart2UseCase:
                 message=f"任务入队失败: {str(e)}"
             )
         
-        # 4. 更新状态
-        test.status = "processing"
+        # 5. 更新状态
+        # 如果 Part 1 已完成，设为 processing；如果 Part 1 还在处理，保持 part1_processing
+        if test.status == "part1_done":
+            test.status = "processing"
+        # 如果是 part1_processing，状态不变，Worker 会等待 Part 1 完成
         test.updated_at = china_now()
         await self.db.commit()
         
@@ -135,6 +150,8 @@ class ProcessPart2TaskUseCase:
         Returns:
             bool - True 表示成功
         """
+        import asyncio
+        
         # 1. 查找测评
         stmt = select(TestModel).where(TestModel.id == task.test_id)
         result = await self.db.execute(stmt)
@@ -143,6 +160,39 @@ class ProcessPart2TaskUseCase:
         if not test:
             logger.error(f"测评不存在: {task.test_id}")
             return False
+        
+        # 等待 Part 1 完成（如果还在处理中）
+        max_wait_seconds = 120  # 最多等待 2 分钟
+        wait_interval = 5  # 每 5 秒检查一次
+        waited = 0
+        
+        while test.status == "part1_processing" and waited < max_wait_seconds:
+            logger.info(f"Part 2 等待 Part 1 完成... (已等待 {waited}s)")
+            await asyncio.sleep(wait_interval)
+            waited += wait_interval
+            
+            # 重新查询状态
+            await self.db.refresh(test)
+        
+        # 如果等待超时，Part 1 仍未完成
+        if test.status == "part1_processing":
+            logger.warning(f"Part 2 等待 Part 1 超时，test_id={task.test_id}")
+            test.failure_reason = "Part 1 处理超时，Part 2 无法继续"[:250]
+            test.status = "failed"
+            await self.db.commit()
+            return False
+        
+        # 如果 Part 1 失败了
+        if test.status == "failed":
+            logger.warning(f"Part 1 已失败，跳过 Part 2 处理，test_id={task.test_id}")
+            return False
+        
+        # Part 1 完成，更新状态为 processing
+        if test.status == "part1_done":
+            test.status = "processing"
+            test.updated_at = china_now()
+            await self.db.commit()
+            logger.info(f"Part 2 开始处理，test_id={task.test_id}")
         
         try:
             # 2. 下载音频
@@ -155,7 +205,7 @@ class ProcessPart2TaskUseCase:
             except Exception as e:
                 logger.exception(f"下载音频失败: {e}")
                 test.status = "failed"
-                test.failure_reason = f"下载音频失败: {str(e)}"
+                test.failure_reason = f"下载音频失败: {str(e)}"[:250]
                 await self.db.commit()
                 return False
             
@@ -251,7 +301,7 @@ class ProcessPart2TaskUseCase:
             # 5. 处理失败情况
             if not qwen_result.success:
                 test.status = "failed"
-                test.failure_reason = qwen_result.error
+                test.failure_reason = (qwen_result.error or "未知错误")[:250]
                 test.retry_count = (test.retry_count or 0) + 1
                 await self.db.commit()
                 return False
@@ -307,7 +357,7 @@ class ProcessPart2TaskUseCase:
             logger.exception(f"Part 2 处理异常: {e}")
             try:
                 test.status = "failed"
-                test.failure_reason = f"处理异常: {str(e)}"
+                test.failure_reason = f"处理异常: {str(e)}"[:250]
                 test.part2_audio_url = task.audio_url  # 保存音频 URL 以便排查
                 test.retry_count = (test.retry_count or 0) + 1
                 

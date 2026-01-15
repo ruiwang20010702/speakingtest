@@ -51,7 +51,7 @@ const TestContainer: React.FC = () => {
       if (!testIdStr) throw new Error('No test ID found');
       const testId = parseInt(testIdStr);
 
-      const { submitPart2 } = await import('./services/api');
+      const { submitPart2, getTestReport } = await import('./services/api');
 
       // 1. 提交 Part 2
       if (audios[1]) {
@@ -59,13 +59,32 @@ const TestContainer: React.FC = () => {
         await submitPart2(testId, audios[1]);
       }
 
-      // 2. 等待 Part 1 完成（如果还在处理中）
+      // 2. 等待 Part 1 提交完成（如果还在提交中）
       if (part1PromiseRef.current) {
-        console.log('Waiting for Part 1 to complete...');
+        console.log('Waiting for Part 1 submission...');
         await part1PromiseRef.current;
       }
 
-      // 3. 跳转到结果页
+      // 3. 轮询等待 Part 1 分数出来（最多等待 60 秒）
+      console.log('Waiting for Part 1 score...');
+      const maxWaitTime = 60000; // 60 秒
+      const pollInterval = 2000; // 每 2 秒检查一次
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitTime) {
+        try {
+          const report = await getTestReport(testId);
+          if (report.part1_score !== undefined && report.part1_score !== null) {
+            console.log('Part 1 score ready:', report.part1_score);
+            break;
+          }
+        } catch (e) {
+          // 报告还没准备好，继续等待
+        }
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+
+      // 4. 跳转到结果页
       window.location.href = '/result';
 
     } catch (error) {
@@ -77,9 +96,13 @@ const TestContainer: React.FC = () => {
 
   if (submitting) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-white">
-        <div className="w-12 h-12 border-4 border-[#1CB0F6] border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-[#1E293B] font-bold">正在上传评测结果...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white p-6">
+        <div className="w-16 h-16 border-4 border-[#1CB0F6] border-t-transparent rounded-full animate-spin mb-6"></div>
+        <p className="text-[#1E293B] font-black text-xl mb-2">正在生成报告...</p>
+        <p className="text-[#1E293B]/60 font-bold text-sm text-center">
+          AI 正在分析你的发音和回答<br />
+          请稍等片刻 ✨
+        </p>
       </div>
     );
   }

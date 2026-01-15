@@ -279,6 +279,12 @@ class SubmitPart1UseCase:
             return SubmitPart1Response(success=False, message="测评记录不存在")
         
         if test.status != "pending":
+            # 即使状态检查失败，也保存 OSS 链接（避免丢失已上传的资源）
+            if request.audio_url and not test.part1_audio_url:
+                test.part1_audio_url = request.audio_url
+                test.updated_at = china_now()
+                await self.db.commit()
+                logger.info(f"Part 1 状态检查失败，但已保存音频链接: {request.audio_url}")
             return SubmitPart1Response(
                 success=False,
                 message=f"无法提交 Part 1：当前状态为 {test.status}"
@@ -361,7 +367,7 @@ class ProcessPart1TaskUseCase:
             )
         except Exception as e:
             logger.exception(f"Qwen Part 1 API error: {e}")
-            test.failure_reason = str(e)
+            test.failure_reason = str(e)[:250]  # 截断避免数据库字段溢出
             test.retry_count += 1
             test.status = "failed"
             await self.db.commit()
@@ -369,7 +375,7 @@ class ProcessPart1TaskUseCase:
         
         # 4. 处理结果
         if not evaluation_result.success:
-            test.failure_reason = evaluation_result.error
+            test.failure_reason = (evaluation_result.error or "未知错误")[:250]  # 截断
             test.retry_count += 1
             test.status = "failed"
             await self.db.commit()
