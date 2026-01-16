@@ -37,3 +37,4 @@ backend/tests/test_results/
 server/
 client/
 _legacy_mvp/
+word/
