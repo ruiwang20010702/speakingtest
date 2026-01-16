@@ -1,4 +1,4 @@
-# PRD v1.6 Production｜口语测评系统
+# PRD v1.7 Production｜口语测评系统
 
 > **学生端测评 + 老师端报告/解读 + 家长端查看**
 
@@ -284,6 +284,10 @@ graph TD
 #### 家长端（测评汇总分析）
 
 - **生成方式**：**qwen-plus 模型 + 结构化输出**
+- **处理模式**：**协程内循环重试**（最多 3 次）
+  - Part 2 评测完成后自动调用
+  - 失败时自动重试（最多 3 次），3 次都失败则使用规则生成 fallback
+  - 每次尝试都会记录费用到 `summary_analysis_history[]` 数组（无论成功或失败，只要有 usage 返回）
 - **目标用户**：家长（在家长端 H5 报告中展示）
 - **输出内容**：
   - 亮点 (highlights): 1-2 条
@@ -619,7 +623,7 @@ for chunk in completion:
 **月度成本估算**（1000 学生 × 4 次/月）：
 - 4000 次评测 × ¥0.01 = **¥40/月**
 
-### 7.6 费用统计 (Cost Tracking) - 新增
+### 7.6 费用统计 (Cost Tracking)
 
 > **计费标准** (Qwen3-Omni-Flash):
 > - **输入 (音频)**: ¥15.8 / 百万 Tokens
@@ -628,21 +632,45 @@ for chunk in completion:
 
 **统计策略**：
 - 在 `tests` 表中新增 `cost` (Numeric) 和 `tokens_used` (JSONB) 字段。
-- `tokens_used` 记录详细消耗：
+- `tokens_used` 使用**历史记录数组**格式，支持重试场景下每次尝试的独立记录：
   ```json
   {
-    "part1": {
-      "prompt_tokens": 120,
-      "completion_tokens": 50,
-      "audio_tokens": 100,
-      "text_tokens": 20,
-      "total_tokens": 170,
-      "cost": 0.002251
-    },
-    "part2": { ... },
+    "part1_history": [
+      {
+        "attempt": 1,
+        "success": false,
+        "prompt_tokens": 120,
+        "completion_tokens": 0,
+        "audio_tokens": 100,
+        "text_tokens": 20,
+        "total_tokens": 120,
+        "cost": 0.00198,
+        "error": "API 超时",
+        "timestamp": "2026-01-16T10:00:00"
+      },
+      {
+        "attempt": 2,
+        "success": true,
+        "prompt_tokens": 120,
+        "completion_tokens": 50,
+        "audio_tokens": 100,
+        "text_tokens": 20,
+        "total_tokens": 170,
+        "cost": 0.002251,
+        "timestamp": "2026-01-16T10:00:05"
+      }
+    ],
+    "part2_history": [...],
+    "summary_analysis_history": [...],
+    "interpretation_history": [...],
     "total_cost": 0.027091
   }
   ```
+- **重要原则**：
+  - **支持重试场景**：每次尝试都有独立记录（`attempt` 字段标识尝试次数）
+  - **失败也记录费用**：即使调用失败，只要有 `usage` 返回就记录费用
+  - **历史记录追踪**：所有计费点（Part1/Part2/测评汇总分析/报告解读）都使用 `*_history[]` 数组格式
+  - **total_cost 计算**：遍历所有历史记录数组求和
 
 ### 7.7 引擎分工更新
 
@@ -1118,8 +1146,9 @@ Worker 异步处理：
 2. 转换为 base64 + data URL 格式
 3. 调用 Qwen-Omni API（流式）评测单词发音
 4. 返回：逐词得分、总分、改进建议
-5. 更新数据库 part1_score、part1_status
-6. 失败时增加 retry_count（最多 5 次）
+5. **记录费用**：每次调用都会记录费用到 `part1_history[]` 数组（无论成功或失败，只要有 usage 返回）
+6. 更新数据库 part1_score、part1_status
+7. 失败时增加 retry_count（最多 5 次），NACK 消息触发重试
 ```
 
 #### Part2 流程（Qwen-Omni 异步队列）
@@ -1138,9 +1167,10 @@ Worker 异步处理：
    POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
 4. 传入：音频 + 题目 + 参考答案 + 评测 prompt
 5. 接收：转写文本 + 逐题 0/1/2 分 + 评语 + 改进建议
-6. 更新数据库 part2_score、part2_status、part2_transcript
-7. 计算总分，更新 test.status = completed
-8. 失败时增加 retry_count（最多 5 次）
+6. **记录费用**：每次调用都会记录费用到 `part2_history[]` 数组（无论成功或失败，只要有 usage 返回）
+7. 更新数据库 part2_score、part2_status、part2_transcript
+8. 计算总分，更新 test.status = completed
+9. 失败时增加 retry_count（最多 5 次），NACK 消息触发重试
 ```
 
 #### 报告解读流程（Qwen-Plus 异步队列）
@@ -1164,8 +1194,10 @@ Worker 异步处理：
 1. 调用 Qwen-Plus API（结构化输出 JSON Schema）
 2. 传入：学生信息 + 评分数据 + Part2 转写
 3. 接收：6 页解读内容 + 家长沟通话术
-4. 更新数据库 interpretation_pages、interpretation_parent_script、interpretation_status = completed
-5. 失败时：interpretation_status = failed，增加 interpretation_retry_count（最多 3 次）
+4. **记录费用**：每次调用都会记录费用到 `interpretation_history[]` 数组（无论成功或失败，只要有 usage 返回）
+5. 检查调用结果：
+   - **成功**：更新数据库 interpretation_pages、interpretation_parent_script、interpretation_status = completed
+   - **失败**：interpretation_status = failed，增加 interpretation_retry_count（最多 3 次），抛出异常触发 NACK 重试
 6. 超时检测：90 秒无响应视为失败
 ```
 
@@ -1338,8 +1370,9 @@ Worker 异步处理：
 
 | 场景 | 触发条件 | 降级动作 | 恢复策略 |
 |------|----------|----------|----------|
-| **Part 1/2 评测失败** | Qwen API 5xx 或 超时 | **AI 正在深度分析**；前端提示“评分服务繁忙，稍后查看”；后端标记 `status=failed` | 队列 Worker 最多重试 **5 次**，超限标记为 `failed` |
-| **报告解读生成失败** | Qwen API 5xx 或 超时 > 90s | 标记 `interpretation_status=failed`；前端提示“AI 正在深度思考，请稍后查看报告”；前端提示"生成失败，请重试" | 用户可手动触发重新生成，最多重试 **3 次** |
+| **Part 1/2 评测失败** | Qwen API 5xx 或 超时 | **AI 正在深度分析**；前端提示"评分服务繁忙，稍后查看"；后端标记 `status=failed` | 队列 Worker 最多重试 **5 次**，超限标记为 `failed`。**费用记录**：失败时也记录费用（只要有 usage 返回），每次尝试都追加到 `part1_history[]` / `part2_history[]` |
+| **测评汇总分析失败** | Qwen API 5xx 或 超时 | 使用规则生成 fallback 建议 | 协程内循环重试 **3 次**，都失败则使用规则生成。**费用记录**：每次尝试都追加到 `summary_analysis_history[]`（无论成功或失败） |
+| **报告解读生成失败** | Qwen API 5xx 或 超时 > 90s | 标记 `interpretation_status=failed`；前端提示"AI 正在深度思考，请稍后查看报告"；前端提示"生成失败，请重试" | 队列 Worker 最多重试 **3 次**（NACK 重试）。**费用记录**：失败时也记录费用（只要有 usage 返回），每次尝试都追加到 `interpretation_history[]` |
 | **CRM 接口异常** | 接口超时/5xx | **使用本地缓存**；若无缓存，允许老师手动输入学生姓名（标记为 `unverified`） | 接口恢复后自动同步清洗数据 |
 
 ### 15.2 并发控制 (Concurrency Control)
@@ -1436,7 +1469,7 @@ Worker 异步处理：
 
 ---
 
-*文档版本：v1.6*  
+*文档版本：v1.7*  
 *最后更新：2026-01-16*
 
 ---
@@ -1454,4 +1487,5 @@ Worker 异步处理：
 | v1.4 | 2026-01-13 | **报告解读功能落地**：实现基于 Qwen-Omni 的 AI 报告解读生成（亮点/短板/证据/建议/话术）；数据库 tests 表新增 interpretation 相关字段；新增生成解读 API。 |
 | v1.5 | 2026-01-14 | **qwen-plus 结构化输出**：测评汇总分析（给家长看）和报告解读（给班主任用）改用 `qwen-plus` 模型 + JSON Schema 结构化输出，确保输出格式稳定；新增 7.8 章节详述 qwen-plus 用法；更新引擎分工表（7.7）区分音频评测与文本分析场景。 |
 | v1.6 | 2026-01-16 | **生产级优化**：(1) 报告解读改为**异步队列处理**（避免 60s 网关超时），前端轮询状态，最多重试 3 次；(2) 新增题库表 `questions`；(3) 更新 OSS 目录规范（音频含日期、题库图片按 level/unit/question 组织）；(4) 新增安全配置章节（环境变量管理 JWT 密钥、管理员邮箱、CORS 等）；(5) 队列任务最大重试 5 次；(6) 新增健康检查接口 `/health/detailed`；(7) 技术栈确认 PostgreSQL + RabbitMQ；(8) 数据库 schema 同步（`interpretation_status`、`interpretation_retry_count` 等字段）。 |
+| v1.7 | 2026-01-16 | **计费点重试机制完善**：(1) 费用统计改为**历史记录数组格式**（`part1_history[]`、`part2_history[]`、`summary_analysis_history[]`、`interpretation_history[]`）；(2) 所有计费点支持**重试场景**，每次尝试都有独立记录；(3) **失败也记录费用**：即使调用失败，只要有 usage 返回就记录费用；(4) 测评汇总分析添加**协程内循环重试**（最多 3 次），失败后使用规则 fallback；(5) 报告解读修复 success 检查 bug，失败时正确触发 NACK 重试；(6) 统一更新 total_cost 计算逻辑，遍历所有历史记录数组求和；(7) 更新降级策略表，补充费用记录策略说明。 |
 
