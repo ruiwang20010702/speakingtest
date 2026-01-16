@@ -51,7 +51,7 @@ class OSSClient:
         """
         生成 OSS 文件路径
         
-        格式: audio/{year}/{month}/{test_id}_{part}_{uuid}.{ext}
+        格式: audio/{year}/{month}/{day}/{test_id}_{part}_{uuid}.{ext}
         
         Args:
             test_id: 测评 ID
@@ -64,7 +64,7 @@ class OSSClient:
         now = china_now()
         unique_id = str(uuid.uuid4())[:8]
         
-        return f"audio/{now.year}/{now.month:02d}/{test_id}_{part}_{unique_id}.{extension}"
+        return f"audio/{now.year}/{now.month:02d}/{now.day:02d}/{test_id}_{part}_{unique_id}.{extension}"
     
     async def upload_audio(
         self,

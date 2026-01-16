@@ -17,6 +17,16 @@ class Settings(BaseSettings):
     # Frontend URLs
     FRONTEND_STUDENT_URL: str = "http://localhost:3001/s"  # Student H5 entry path
     FRONTEND_PARENT_URL: str = "http://localhost:3000"     # Parent H5
+    FRONTEND_TEACHER_URL: str = "http://localhost:3002"    # Teacher Web
+    
+    # CORS (逗号分隔的允许域名，生产环境应配置具体域名)
+    CORS_ORIGINS: str = ""  # 为空时允许所有域名（仅限开发环境）
+    
+    # 测试邮箱白名单 (逗号分隔，允许非 @51talk.com 邮箱登录)
+    TEST_EMAIL_WHITELIST: str = ""  # 仅限测试环境使用
+    
+    # 管理员邮箱列表 (逗号分隔)
+    ADMIN_EMAILS: str = ""  # 例如: "admin1@51talk.com,admin2@51talk.com"
 
     # Database (PostgreSQL)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/speakingtest"

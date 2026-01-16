@@ -20,15 +20,30 @@ logger = setup_logging()
 async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
-    - Startup: Initialize database tables
+    - Startup: Initialize database tables, security checks
     - Shutdown: Close connections
     """
     # Startup
     logger.info("Application starting up...")
-    async with engine.begin() as conn:
-        # Create tables if they don't exist (dev only; use Alembic in prod)
-        # await conn.run_sync(Base.metadata.create_all)
-        pass
+    
+    # Security check: Reject default JWT secret in production
+    DEFAULT_JWT_SECRET = "your-secret-key-change-in-production"
+    if settings.JWT_SECRET_KEY == DEFAULT_JWT_SECRET and not settings.DEBUG:
+        logger.critical("SECURITY ERROR: JWT_SECRET_KEY is using default value in production!")
+        logger.critical("Please set a secure JWT_SECRET_KEY in your environment variables.")
+        raise RuntimeError("Cannot start application with default JWT_SECRET_KEY in production")
+    elif settings.JWT_SECRET_KEY == DEFAULT_JWT_SECRET:
+        logger.warning("WARNING: Using default JWT_SECRET_KEY. This is only acceptable in development.")
+    
+    # Database health check
+    try:
+        async with engine.begin() as conn:
+            from sqlalchemy import text
+            await conn.execute(text("SELECT 1"))
+            logger.info("Database connection verified successfully")
+    except Exception as e:
+        logger.critical(f"Database connection failed: {e}")
+        raise RuntimeError(f"Cannot start application: Database connection failed - {e}")
 
     yield
 
@@ -44,23 +59,88 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS 配置：生产环境应在 CORS_ORIGINS 环境变量中配置允许的域名
+def _get_cors_origins() -> list:
+    """获取 CORS 允许的域名列表"""
+    if settings.CORS_ORIGINS:
+        # 从环境变量解析（逗号分隔）
+        return [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+    elif settings.DEBUG:
+        # 开发环境允许所有域名
+        return ["*"]
+    else:
+        # 生产环境默认使用配置的前端 URL
+        origins = []
+        if settings.FRONTEND_STUDENT_URL:
+            # 提取基础 URL（去掉路径）
+            from urllib.parse import urlparse
+            parsed = urlparse(settings.FRONTEND_STUDENT_URL)
+            origins.append(f"{parsed.scheme}://{parsed.netloc}")
+        if settings.FRONTEND_PARENT_URL:
+            origins.append(settings.FRONTEND_PARENT_URL)
+        if settings.FRONTEND_TEACHER_URL:
+            origins.append(settings.FRONTEND_TEACHER_URL)
+        return origins if origins else ["*"]
+
 # Middleware (order matters: first added = last executed)
 app.add_middleware(RequestLoggingMiddleware)  # Request logging with correlation ID
 app.add_middleware(RateLimitMiddleware, requests_per_minute=120)  # Rate limiting
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict in production
+    allow_origins=_get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# Health check endpoint
+# Health check endpoints
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Health check endpoint."""
+    """Basic health check endpoint."""
     return {"status": "healthy", "version": settings.APP_VERSION}
+
+
+@app.get("/health/detailed", tags=["Health"])
+async def detailed_health_check():
+    """
+    Detailed health check with dependency status.
+    Returns status of: database, redis, rabbitmq, oss
+    """
+    from sqlalchemy import text
+    import aio_pika
+    
+    health = {
+        "status": "healthy",
+        "version": settings.APP_VERSION,
+        "dependencies": {}
+    }
+    
+    # Database check
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+        health["dependencies"]["database"] = {"status": "healthy"}
+    except Exception as e:
+        health["dependencies"]["database"] = {"status": "unhealthy", "error": str(e)[:100]}
+        health["status"] = "degraded"
+    
+    # RabbitMQ check
+    try:
+        connection = await aio_pika.connect_robust(settings.RABBITMQ_URL, timeout=5)
+        await connection.close()
+        health["dependencies"]["rabbitmq"] = {"status": "healthy"}
+    except Exception as e:
+        health["dependencies"]["rabbitmq"] = {"status": "unhealthy", "error": str(e)[:100]}
+        health["status"] = "degraded"
+    
+    # OSS check (just verify credentials are configured)
+    if settings.OSS_ACCESS_KEY_ID and settings.OSS_BUCKET_NAME:
+        health["dependencies"]["oss"] = {"status": "configured"}
+    else:
+        health["dependencies"]["oss"] = {"status": "not_configured"}
+    
+    return health
 
 
 # Import and include routers

@@ -11,6 +11,7 @@ import { QuestionBankPage } from './pages/Admin/QuestionBankPage';
 import { AuditLogPage } from './pages/Admin/AuditLogPage';
 import { FailedTasksPage } from './pages/Admin/FailedTasksPage';
 import { useAuthStore } from './stores/authStore';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Protected Route Component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -41,8 +42,9 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <Router>
-      <Routes>
+    <ErrorBoundary>
+      <Router>
+        <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route
           path="/dashboard"
@@ -126,8 +128,9 @@ function App() {
           }
         />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </Router>
+        </Routes>
+      </Router>
+    </ErrorBoundary>
   );
 }
 

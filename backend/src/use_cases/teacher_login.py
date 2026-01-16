@@ -243,10 +243,16 @@ class TeacherLoginUseCase:
         result_user = await self.db.execute(stmt_user)
         user = result_user.scalar_one_or_none()
         
+        # 从配置获取管理员邮箱列表
+        from src.infrastructure.config import get_settings
+        settings = get_settings()
+        admin_emails = [e.strip().lower() for e in settings.ADMIN_EMAILS.split(",") if e.strip()]
+        is_admin = email.lower() in admin_emails
+        
         is_new_user = False
         if not user:
             # 创建新用户
-            role = "admin" if email == "704778107@qq.com" else "teacher"
+            role = "admin" if is_admin else "teacher"
             user = UserModel(
                 email=email,
                 role=role,
@@ -256,8 +262,8 @@ class TeacherLoginUseCase:
             await self.db.flush()  # 获取 ID
             is_new_user = True
             logger.info(f"创建新用户: id={user.id}, email={email}, role={role}")
-        elif email == "704778107@qq.com" and user.role != "admin":
-            # Ensure admin role
+        elif is_admin and user.role != "admin":
+            # Ensure admin role for configured admins
             user.role = "admin"
             logger.info(f"Updating user {email} to admin role")
         

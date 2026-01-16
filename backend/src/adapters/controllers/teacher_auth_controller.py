@@ -29,9 +29,17 @@ class SendCodeRequestSchema(BaseModel):
     
     @validator("email")
     def validate_email(cls, v):
+        from src.infrastructure.config import get_settings
+        settings = get_settings()
+        
         v = v.lower().strip()
-        if v == "704778107@qq.com":
-            return v
+        
+        # 检查测试邮箱白名单（仅限 DEBUG 模式）
+        if settings.DEBUG and settings.TEST_EMAIL_WHITELIST:
+            whitelist = [e.strip().lower() for e in settings.TEST_EMAIL_WHITELIST.split(",") if e.strip()]
+            if v in whitelist:
+                return v
+        
         if not v.endswith("@51talk.com"):
             raise ValueError("仅支持 @51talk.com 邮箱")
         return v

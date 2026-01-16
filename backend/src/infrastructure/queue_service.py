@@ -325,3 +325,164 @@ async def enqueue_part1_task(task: Part1Task):
         await producer.publish(task)
     finally:
         await producer.close()
+
+
+# ============================================
+# Interpretation 任务队列 (报告解读异步化)
+# ============================================
+
+@dataclass
+class InterpretationTask:
+    """报告解读任务"""
+    task_id: str
+    test_id: int
+    # 以下数据用于生成解读
+    student_name: str
+    level: str
+    total_score: float
+    part1_score: float
+    part2_score: float
+    star_level: int
+    part1_details: dict  # Part 1 评测详情
+    part2_items: list    # Part 2 题目详情
+    radar_data: list     # 雷达图数据
+    
+    def to_dict(self) -> dict:
+        return {
+            "task_id": self.task_id,
+            "test_id": self.test_id,
+            "student_name": self.student_name,
+            "level": self.level,
+            "total_score": self.total_score,
+            "part1_score": self.part1_score,
+            "part2_score": self.part2_score,
+            "star_level": self.star_level,
+            "part1_details": self.part1_details,
+            "part2_items": self.part2_items,
+            "radar_data": self.radar_data,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "InterpretationTask":
+        return cls(
+            task_id=data["task_id"],
+            test_id=data["test_id"],
+            student_name=data["student_name"],
+            level=data["level"],
+            total_score=data["total_score"],
+            part1_score=data["part1_score"],
+            part2_score=data["part2_score"],
+            star_level=data["star_level"],
+            part1_details=data["part1_details"],
+            part2_items=data["part2_items"],
+            radar_data=data["radar_data"],
+        )
+
+
+class InterpretationTaskProducer:
+    """报告解读任务生产者"""
+    
+    QUEUE_NAME = "interpretation_tasks"
+    
+    def __init__(self, rabbitmq_url: str = None):
+        self.url = rabbitmq_url or settings.RABBITMQ_URL
+        self.connection = None
+        self.channel = None
+    
+    async def connect(self):
+        self.connection = await connect_robust(self.url)
+        self.channel = await self.connection.channel()
+        await self.channel.declare_queue(self.QUEUE_NAME, durable=True)
+        logger.info(f"InterpretationTaskProducer 已连接到 {self.QUEUE_NAME}")
+    
+    async def publish(self, task: InterpretationTask):
+        if not self.channel:
+            await self.connect()
+        
+        message = Message(
+            body=json.dumps(task.to_dict()).encode(),
+            delivery_mode=DeliveryMode.PERSISTENT,
+        )
+        
+        await self.channel.default_exchange.publish(
+            message,
+            routing_key=self.QUEUE_NAME,
+        )
+        logger.info(f"已发布 Interpretation 任务: task_id={task.task_id}, test_id={task.test_id}")
+    
+    async def close(self):
+        if self.connection:
+            await self.connection.close()
+
+
+class InterpretationTaskConsumer:
+    """
+    报告解读任务消费者
+    
+    特性:
+    - 最大重试 3 次
+    - prefetch=1: 一次只处理一个任务
+    - 限速: 60 RPM
+    """
+    
+    QUEUE_NAME = "interpretation_tasks"
+    RPM_LIMIT = 60
+    MAX_RETRIES = 3
+    
+    def __init__(
+        self,
+        process_func: Callable[[InterpretationTask], Awaitable[bool]],
+        rabbitmq_url: str = None
+    ):
+        self.url = rabbitmq_url or settings.RABBITMQ_URL
+        self.process_func = process_func
+        self.connection = None
+        self.channel = None
+        self.interval = 60.0 / self.RPM_LIMIT
+    
+    async def connect(self):
+        self.connection = await connect_robust(self.url)
+        self.channel = await self.connection.channel()
+        await self.channel.set_qos(prefetch_count=1)
+        self.queue = await self.channel.declare_queue(self.QUEUE_NAME, durable=True)
+        logger.info(f"InterpretationTaskConsumer 已连接，限速: {self.RPM_LIMIT} RPM")
+    
+    async def _on_message(self, message: IncomingMessage):
+        async with message.process():
+            try:
+                task_data = json.loads(message.body.decode())
+                task = InterpretationTask.from_dict(task_data)
+                logger.info(f"开始处理 Interpretation 任务: {task.task_id}")
+                
+                success = await self.process_func(task)
+                
+                if success:
+                    logger.info(f"Interpretation 任务完成: {task.task_id}")
+                else:
+                    logger.warning(f"Interpretation 任务失败: {task.task_id}")
+                    
+            except Exception as e:
+                logger.exception(f"Interpretation 任务处理异常: {e}")
+                raise  # 抛出异常会触发 NACK 并重新入队
+            finally:
+                await asyncio.sleep(self.interval)
+    
+    async def start(self):
+        await self.connect()
+        await self.queue.consume(self._on_message)
+        logger.info("InterpretationTaskConsumer 已启动，等待任务...")
+        await asyncio.Future()
+    
+    async def close(self):
+        if self.connection:
+            await self.connection.close()
+
+
+async def enqueue_interpretation_task(task: InterpretationTask):
+    """快速入队一个 Interpretation 任务"""
+    producer = InterpretationTaskProducer()
+    try:
+        await producer.connect()
+        await producer.publish(task)
+    finally:
+        await producer.close()

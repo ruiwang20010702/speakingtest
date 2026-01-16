@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { ArrowLeft, Loader2, Copy, CheckCircle, BookOpen, Radar, BookText, MessageCircle, Map, Award, FileText, RefreshCw } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
-import { testsApi, type Interpretation, type TestReport } from '../../api';
+import { testsApi, type Interpretation, type TestReport, type InterpretationStatus } from '../../api';
 
 // 页面配置
 const PAGE_CONFIG = {
@@ -64,6 +64,10 @@ const colorClasses = {
     amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100' },
 };
 
+// 轮询配置
+const POLL_INTERVAL = 3000;  // 3秒轮询一次
+const MAX_POLL_ATTEMPTS = 40;  // 最多轮询40次（约2分钟）
+
 export const InterpretationPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -72,16 +76,83 @@ export const InterpretationPage: React.FC = () => {
     const [report, setReport] = useState<TestReport | null>(null);
     const [loading, setLoading] = useState(true);
     const [regenerating, setRegenerating] = useState(false);
+    const [generating, setGenerating] = useState(false);  // 异步生成中
     const [error, setError] = useState('');
     const [copiedPage, setCopiedPage] = useState<string | null>(null);
     const [copiedFull, setCopiedFull] = useState(false);
     const [activeTab, setActiveTab] = useState<PageKey>('cover');
+    
+    const pollCountRef = useRef(0);
+    const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // 清理轮询定时器
+    const clearPollTimer = useCallback(() => {
+        if (pollTimerRef.current) {
+            clearTimeout(pollTimerRef.current);
+            pollTimerRef.current = null;
+        }
+    }, []);
+
+    // 轮询状态
+    const pollStatus = useCallback(async () => {
+        if (!id) return;
+        
+        try {
+            const res = await testsApi.getInterpretationStatus(parseInt(id));
+            const status = res.data;
+            
+            if (status.status === 'completed' && status.pages) {
+                // 生成完成
+                setInterpretation({
+                    pages: status.pages,
+                    full_script: status.full_script || ''
+                });
+                setGenerating(false);
+                setRegenerating(false);
+                setError('');
+                clearPollTimer();
+                pollCountRef.current = 0;
+            } else if (status.status === 'failed') {
+                // 生成失败
+                setGenerating(false);
+                setRegenerating(false);
+                setError(status.message || '生成失败，请重试');
+                clearPollTimer();
+                pollCountRef.current = 0;
+            } else if (status.status === 'generating') {
+                // 继续轮询
+                pollCountRef.current += 1;
+                if (pollCountRef.current >= MAX_POLL_ATTEMPTS) {
+                    setGenerating(false);
+                    setRegenerating(false);
+                    setError('生成超时，请稍后刷新页面重试');
+                    clearPollTimer();
+                    pollCountRef.current = 0;
+                } else {
+                    pollTimerRef.current = setTimeout(pollStatus, POLL_INTERVAL);
+                }
+            }
+        } catch (err: any) {
+            console.error('Poll status failed:', err);
+            // 网络错误时继续轮询（除非达到上限）
+            pollCountRef.current += 1;
+            if (pollCountRef.current >= MAX_POLL_ATTEMPTS) {
+                setGenerating(false);
+                setRegenerating(false);
+                setError('网络错误，请稍后刷新页面重试');
+                clearPollTimer();
+            } else {
+                pollTimerRef.current = setTimeout(pollStatus, POLL_INTERVAL);
+            }
+        }
+    }, [id, clearPollTimer]);
 
     useEffect(() => {
         if (id) {
             loadData();
         }
-    }, [id]);
+        return () => clearPollTimer();
+    }, [id, clearPollTimer]);
 
     const loadData = async () => {
         if (!id) return;
@@ -98,7 +169,19 @@ export const InterpretationPage: React.FC = () => {
         } catch (err: any) {
             console.error('Failed to load interpretation:', err);
             if (err.response?.status === 404) {
-                setError('演讲稿尚未生成，请先在测评历史页面点击"生成报告解读"按钮');
+                // 检查是否正在生成中
+                try {
+                    const statusRes = await testsApi.getInterpretationStatus(parseInt(id));
+                    if (statusRes.data.status === 'generating') {
+                        setGenerating(true);
+                        pollCountRef.current = 0;
+                        pollTimerRef.current = setTimeout(pollStatus, POLL_INTERVAL);
+                    } else {
+                        setError('演讲稿尚未生成，请先在测评历史页面点击"生成报告解读"按钮');
+                    }
+                } catch {
+                    setError('演讲稿尚未生成，请先在测评历史页面点击"生成报告解读"按钮');
+                }
             } else {
                 setError(err.response?.data?.detail || '加载演讲稿失败');
             }
@@ -108,7 +191,7 @@ export const InterpretationPage: React.FC = () => {
     };
 
     const handleRegenerate = async () => {
-        if (!id || regenerating) return;
+        if (!id || regenerating || generating) return;
         
         if (!confirm('确定要重新生成演讲稿吗？这将覆盖当前的内容。')) {
             return;
@@ -116,13 +199,28 @@ export const InterpretationPage: React.FC = () => {
         
         try {
             setRegenerating(true);
-            const res = await testsApi.generateInterpretation(parseInt(id), true);
-            setInterpretation(res.data);
             setError('');
+            const res = await testsApi.generateInterpretation(parseInt(id), true);
+            
+            if (res.data.status === 'completed' && res.data.pages) {
+                // 直接返回了结果（已缓存）
+                setInterpretation({
+                    pages: res.data.pages,
+                    full_script: res.data.full_script || ''
+                });
+                setRegenerating(false);
+            } else if (res.data.status === 'generating') {
+                // 开始异步生成，启动轮询
+                setGenerating(true);
+                pollCountRef.current = 0;
+                pollTimerRef.current = setTimeout(pollStatus, POLL_INTERVAL);
+            } else if (res.data.status === 'failed') {
+                setError(res.data.message || '生成失败');
+                setRegenerating(false);
+            }
         } catch (err: any) {
             console.error('Failed to regenerate interpretation:', err);
-            alert(err.response?.data?.detail || '重新生成失败');
-        } finally {
+            setError(err.response?.data?.detail || '重新生成失败');
             setRegenerating(false);
         }
     };
@@ -155,6 +253,29 @@ export const InterpretationPage: React.FC = () => {
                 <div className="flex flex-col items-center justify-center py-20">
                     <Loader2 className="animate-spin text-primary mb-4" size={40} />
                     <p className="text-text-sub">加载中...</p>
+                </div>
+            </DashboardLayout>
+        );
+    }
+
+    // 正在生成中
+    if (generating && !interpretation) {
+        return (
+            <DashboardLayout>
+                <div className="flex items-center gap-4 mb-8">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="p-2 -ml-2 text-text-sub hover:bg-slate-100 rounded-full transition-colors"
+                    >
+                        <ArrowLeft size={24} />
+                    </button>
+                    <h1 className="text-2xl font-bold text-text-main">班主任演讲稿</h1>
+                </div>
+                <div className="text-center py-16 bg-blue-50 text-blue-700 rounded-xl border border-blue-100">
+                    <Loader2 className="mx-auto mb-4 animate-spin" size={48} />
+                    <p className="text-lg font-medium">AI 正在生成演讲稿...</p>
+                    <p className="text-sm text-blue-500 mt-2">预计需要 30-60 秒，请耐心等待</p>
+                    <p className="text-xs text-blue-400 mt-4">轮询次数: {pollCountRef.current} / {MAX_POLL_ATTEMPTS}</p>
                 </div>
             </DashboardLayout>
         );
@@ -219,14 +340,14 @@ export const InterpretationPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                     <button
                         onClick={handleRegenerate}
-                        disabled={regenerating}
+                        disabled={regenerating || generating}
                         className="px-4 py-2 border border-orange-200 bg-orange-50 text-orange-700 rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-orange-100 transition-colors disabled:opacity-50"
                         title="修改报告内容后可重新生成"
                     >
-                        {regenerating ? (
+                        {(regenerating || generating) ? (
                             <>
                                 <Loader2 size={16} className="animate-spin" />
-                                生成中...
+                                {generating ? 'AI 生成中...' : '提交中...'}
                             </>
                         ) : (
                             <>

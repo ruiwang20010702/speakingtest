@@ -1260,6 +1260,14 @@ class InterpretationResponse(BaseModel):
     full_script: str       # 完整演讲稿（约1500字，10分钟）
 
 
+class InterpretationStatusResponse(BaseModel):
+    """Response for interpretation generation status."""
+    status: str  # pending/generating/completed/failed
+    message: Optional[str] = None
+    pages: Optional[Dict[str, str]] = None
+    full_script: Optional[str] = None
+
+
 @router.get(
     "/tests/{test_id}/interpretation",
     response_model=InterpretationResponse,
@@ -1319,9 +1327,9 @@ async def get_test_interpretation(
 
 @router.post(
     "/tests/{test_id}/interpretation",
-    response_model=InterpretationResponse,
-    summary="生成报告解读",
-    description="生成 AI 报告解读并存储到数据库（按6页组织：cover/radar/vocab/dialogue/roadmap/badge）。使用 force=true 可强制重新生成。"
+    response_model=InterpretationStatusResponse,
+    summary="生成报告解读（异步）",
+    description="异步生成 AI 报告解读。立即返回状态，使用 GET 接口轮询结果。使用 force=true 可强制重新生成。"
 )
 async def generate_test_interpretation(
     test_id: int,
@@ -1331,20 +1339,19 @@ async def generate_test_interpretation(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Generate and store AI speech script for a test.
+    异步生成报告解读（班主任演讲稿）。
     
-    生成班主任演讲稿（约10分钟，1500字），按6页组织：
-    - cover（封面）：开场问候，介绍总分和星级
-    - radar（能力图谱）：五维能力分析，融合亮点/问题/建议
-    - vocab（词汇掌握）：单词掌握情况分析
-    - dialogue（对话表现）：问答环节分析
-    - roadmap（成长计划）：综合分析和练习建议
-    - badge（徽章）：祝贺和结束语
-    - full_script（完整演讲稿）：可直接复制使用
+    返回状态:
+    - generating: 正在生成中，请轮询 GET 接口
+    - completed: 已完成，包含 pages 和 full_script
+    - failed: 生成失败，可重试
     
     Query Parameters:
-    - force: 是否强制重新生成（即使已存在解读）。修改报告内容后需要使用此参数重新生成。
+    - force: 是否强制重新生成（即使已存在解读）
     """
+    import uuid
+    from src.infrastructure.queue_service import InterpretationTask, enqueue_interpretation_task
+    
     # Get test with items
     stmt = select(TestModel).options(
         selectinload(TestModel.items)
@@ -1379,17 +1386,35 @@ async def generate_test_interpretation(
             detail="只有已完成的测评才能生成解读"
         )
     
-    # Check if already generated (以 interpretation_pages 非空为准，return existing)
-    # 如果 force=True，则跳过此检查，强制重新生成
-    if test.interpretation_pages and not force:
-        pages_data = test.interpretation_pages if isinstance(test.interpretation_pages, dict) else {}
-        return InterpretationResponse(
-            pages=pages_data,
-            full_script=test.interpretation_parent_script or ""  # full_script 存储在 parent_script 字段
+    # Check current interpretation status
+    if test.interpretation_status == "generating":
+        return InterpretationStatusResponse(
+            status="generating",
+            message="报告解读正在生成中，请稍候..."
         )
+    
+    # If already completed and not forcing, return the result
+    if test.interpretation_status == "completed" and test.interpretation_pages and not force:
+        pages_data = test.interpretation_pages if isinstance(test.interpretation_pages, dict) else {}
+        return InterpretationStatusResponse(
+            status="completed",
+            pages=pages_data,
+            full_script=test.interpretation_parent_script or ""
+        )
+    
+    # If failed, allow retry (will re-enqueue)
+    if test.interpretation_status == "failed" and not force:
+        # Check retry count
+        if (test.interpretation_retry_count or 0) >= 3:
+            return InterpretationStatusResponse(
+                status="failed",
+                message="生成失败次数过多，请联系管理员"
+            )
     
     if force:
         logger.info(f"强制重新生成报告解读: test_id={test_id}")
+        # Reset retry count on force
+        test.interpretation_retry_count = 0
     
     # Get student name
     stmt = select(StudentProfileModel).where(StudentProfileModel.user_id == test.student_id)
@@ -1412,7 +1437,6 @@ async def generate_test_interpretation(
     part1_details = test.part1_raw_result or {}
     override_part1_words = override.get("part1_words")
     if override_part1_words:
-        # 使用修改后的单词列表
         part1_details = {"words": override_part1_words}
     
     # Part 2 问答项覆盖
@@ -1428,11 +1452,11 @@ async def generate_test_interpretation(
             for item in test.items
         ]
     else:
-        final_part2_items = None
+        final_part2_items = []
     
     # 雷达图数据覆盖
     override_radar = override.get("radar")
-    radar_data = None
+    radar_data = []
     if override_radar:
         radar_data = [
             {"name": "流利度", "value": override_radar.get("fluency", 0)},
@@ -1442,74 +1466,117 @@ async def generate_test_interpretation(
             {"name": "整句输出", "value": override_radar.get("sentence", 0)},
         ]
     
-    logger.info(f"生成报告解读，使用{'修改后' if override else '原始'}数据: student={final_student_name}, total_score={final_total_score}, star_level={final_star_level}")
+    logger.info(f"入队报告解读任务: test_id={test_id}, student={final_student_name}")
     
-    # Generate interpretation
-    from src.adapters.gateways.qwen_client import QwenOmniGateway
-    qwen_gateway = QwenOmniGateway()
-    service = ReportInterpretationService(qwen_gateway)
-    
-    interpretation = await service.generate(
+    # Create and enqueue task
+    task = InterpretationTask(
+        task_id=str(uuid.uuid4()),
+        test_id=test_id,
         student_name=final_student_name,
         level=final_level,
         total_score=final_total_score,
         part1_score=final_part1_score,
-        part2_score=final_part2_score,
+        part2_score=final_part2_score if final_part2_score is not None else 0,
         star_level=final_star_level,
         part1_details=part1_details,
         part2_items=final_part2_items,
         radar_data=radar_data,
     )
     
-    # 记录 qwen-plus 调用费用
-    if interpretation.usage:
-        usage = interpretation.usage
-        prompt_tokens = usage.get("prompt_tokens", 0)
-        completion_tokens = usage.get("completion_tokens", 0)
-        
-        # qwen-plus 定价: 输入 ¥0.0008/千tokens, 输出 ¥0.002/千tokens
-        cost = (
-            (prompt_tokens * 0.0008 / 1000) +
-            (completion_tokens * 0.002 / 1000)
-        )
-        
-        # 累加到总 cost
-        test.cost = float(test.cost or 0) + cost
-        
-        # 更新 tokens_used
-        current_usage = dict(test.tokens_used or {})
-        if not isinstance(current_usage, dict):
-            current_usage = {}
-        
-        # 记录报告解读的 token 使用
-        current_usage["interpretation"] = {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": usage.get("total_tokens", 0),
-            "cost": float(f"{cost:.6f}"),
-            "model": "qwen-plus"
-        }
-        
-        # 重新计算总 cost
-        total_cost = (
-            sum(h.get("cost", 0) for h in current_usage.get("part1_history", [])) +
-            sum(h.get("cost", 0) for h in current_usage.get("part2_history", [])) +
-            current_usage.get("interpretation", {}).get("cost", 0)
-        )
-        current_usage["total_cost"] = float(f"{total_cost:.6f}")
-        
-        test.tokens_used = current_usage
-        
-        logger.info(f"报告解读 Cost: {cost:.4f} RMB, tokens: {usage}")
-    
-    # Store interpretation to database (演讲稿格式)
-    test.interpretation_pages = interpretation.pages_to_json()  # 存储 pages dict（每页一段字符串）
-    test.interpretation_parent_script = interpretation.full_script  # full_script 存储在 parent_script 字段
-    test.interpretation_generated_at = china_now()
-    
+    # Update status to generating
+    test.interpretation_status = "generating"
     await db.commit()
     
-    return InterpretationResponse(
-        pages=interpretation.pages,
-        full_script=interpretation.full_script
+    # Enqueue the task
+    try:
+        await enqueue_interpretation_task(task)
+    except Exception as e:
+        logger.error(f"入队报告解读任务失败: {e}")
+        # Revert status
+        test.interpretation_status = "failed"
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="任务入队失败，请稍后重试"
+        )
+    
+    return InterpretationStatusResponse(
+        status="generating",
+        message="报告解读已开始生成，请稍候轮询结果..."
     )
+
+
+@router.get(
+    "/tests/{test_id}/interpretation/status",
+    response_model=InterpretationStatusResponse,
+    summary="查询报告解读状态",
+    description="查询报告解读的生成状态，用于前端轮询。"
+)
+async def get_interpretation_status(
+    test_id: int,
+    user_id: int = Depends(get_current_user_id),
+    role: str = Depends(get_current_user_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    查询报告解读生成状态。
+    
+    返回状态:
+    - generating: 正在生成中
+    - completed: 已完成，包含 pages 和 full_script
+    - failed: 生成失败
+    - null/pending: 尚未开始
+    """
+    stmt = select(TestModel).where(TestModel.id == test_id)
+    result = await db.execute(stmt)
+    test = result.scalar_one_or_none()
+    
+    if not test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test not found"
+        )
+    
+    # RBAC check
+    if role != "admin":
+        stmt = select(StudentProfileModel).where(
+            StudentProfileModel.user_id == test.student_id,
+            StudentProfileModel.teacher_id == user_id
+        )
+        result = await db.execute(stmt)
+        if not result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized"
+            )
+    
+    status_value = test.interpretation_status or "pending"
+    
+    if status_value == "completed" and test.interpretation_pages:
+        pages_data = test.interpretation_pages if isinstance(test.interpretation_pages, dict) else {}
+        return InterpretationStatusResponse(
+            status="completed",
+            pages=pages_data,
+            full_script=test.interpretation_parent_script or ""
+        )
+    elif status_value == "failed":
+        retry_count = test.interpretation_retry_count or 0
+        if retry_count >= 3:
+            return InterpretationStatusResponse(
+                status="failed",
+                message="生成失败次数过多，请联系管理员"
+            )
+        return InterpretationStatusResponse(
+            status="failed",
+            message="生成失败，请重试"
+        )
+    elif status_value == "generating":
+        return InterpretationStatusResponse(
+            status="generating",
+            message="报告解读正在生成中..."
+        )
+    else:
+        return InterpretationStatusResponse(
+            status="pending",
+            message="尚未开始生成"
+        )

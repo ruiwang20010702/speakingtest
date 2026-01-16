@@ -1,4 +1,4 @@
-# PRD v1.1 Production｜口语测评系统
+# PRD v1.6 Production｜口语测评系统
 
 > **学生端测评 + 老师端报告/解读 + 家长端查看**
 
@@ -41,7 +41,7 @@
 | **高并发 (Concurrency)** | 系统吞吐量 (QPS) | 支持 **1000+ QPS** (峰值)；支持 **5000+** 学生同时在线作答 |
 | **高可用 (Availability)** | 服务可用性 (SLA) | **99.9%** (月度不可用时间 < 43分钟) |
 | **低延迟 (Latency)** | 接口响应时间 (P95) | 核心接口 < 200ms；Part 1 评测 < 500ms (流式) |
-| **技术栈 (Tech Stack)** | 后端/前端 | **Python (FastAPI)** / **React + Vite** |
+| **技术栈 (Tech Stack)** | 后端/前端 | **Python (FastAPI + SQLAlchemy Async + PostgreSQL + RabbitMQ)** / **React + Vite + TypeScript** |
 | **数据安全 (Security)** | 数据持久化 | RPO < 1分钟 (数据库主从 + 每日全量备份 + Binlog 实时备份) |
 | **可观测性 (Observability)** | 监控覆盖率 | 核心链路 100% 覆盖 (Trace/Log/Metric)；报警响应 < 5分钟 |
 
@@ -149,9 +149,10 @@ graph TD
     end
 
     subgraph Storage_Layer [存储层]
-        DB[(MySQL/PostgreSQL)]
+        DB[(PostgreSQL)]
         Cache[(Redis)]
         OSS[阿里云 OSS]
+        MQ[RabbitMQ]
     end
 
     subgraph External_Services [外部服务]
@@ -193,9 +194,9 @@ graph TD
 | **计算资源 (ECS)** | **Worker 节点** | **2 台** | 4C8G | **异步消费者**。处理 Part 2 耗时任务（上传/Qwen调用）。建议与 API 分离，防止阻塞。 |
 | **网络资源** | **SLB (负载均衡)** | **1 个** | 性能保障型 | 分发流量至 API 节点，健康检查自动剔除故障节点。 |
 | **网络资源** | **CDN** | - | 按量付费 | **前端托管**。H5 静态资源 (HTML/JS/CSS) 部署于 OSS + CDN，不占用 ECS 资源。 |
-| **PaaS 服务** | **RDS MySQL** | **1 套** | 高可用版 (HA) | **主备架构**。支持自动故障切换，保障数据 RPO/RTO。 |
+| **PaaS 服务** | **RDS PostgreSQL** | **1 套** | 高可用版 (HA) | **主备架构**。支持自动故障切换，保障数据 RPO/RTO。 |
 | **PaaS 服务** | **Redis** | **1 套** | 标准版/集群版 | 缓存 Token、热点数据、接口限流计数。 |
-| **PaaS 服务** | **RocketMQ** | **1 套** | 标准版 | 削峰填谷，承载 Part 2 异步任务队列。 |
+| **PaaS 服务** | **RabbitMQ** | **1 套** | 标准版 | 削峰填谷，承载 Part 1/Part 2 评测及报告解读异步任务队列。 |
 | **PaaS 服务** | **OSS** | - | 按量付费 | 存储音频文件、前端静态资源。 |
 
 #### 3.2.2 部署拓扑图
@@ -217,7 +218,7 @@ graph TD
     end
     
     subgraph PaaS_Layer [云托管中间件]
-        API1 & API2 & Worker1 & Worker2 --> RDS[(RDS MySQL)]
+        API1 & API2 & Worker1 & Worker2 --> RDS[(RDS PostgreSQL)]
         API1 & API2 & Worker1 & Worker2 --> Redis[(Redis)]
         API1 & API2 & Worker1 & Worker2 --> OSS[OSS 对象存储]
     end
@@ -266,6 +267,11 @@ graph TD
 #### 老师端（解读版）
 
 - **生成方式**：**qwen-plus 模型 + 结构化输出**（确保输出格式稳定可靠），引用学生转写作为证据点
+- **处理模式**：**异步队列处理**（避免网关超时）
+  - 用户请求立即返回 `{status: "generating"}`
+  - 后台 Worker 调用 AI 生成解读
+  - 前端轮询检查生成状态（每 2 秒轮询一次，最多 60 次）
+  - 超时或失败后支持重试（最多 3 次）
 - **目标用户**：班主任（用于向家长解读报告）
 - **输出内容**：
   - 亮点 (highlights): 1-2 条最突出的优点
@@ -306,11 +312,11 @@ graph TD
    - **Part1**：一次作答覆盖全部词汇；**Qwen-Omni 评测**（音频同步上传 OSS）
    - **Part2**：**整段录音一次上传**（12 题连续作答，不逐题分割）
 4. 提交
-5. 后端并行触发评测：
-   - **Part1**：调用 Qwen-Omni 评测（发音/流利/完整度等维度）
-   - **Part2**：调用 Qwen-Omni 评测（整段音频一次评：转写 + 12 题逐题 0/1/2 + 评语/建议）
+5. 后端**异步队列**处理评测：
+   - **Part1**：任务入队 → Worker 调用 Qwen-Omni 评测（发音/流利/完整度等维度）
+   - **Part2**：任务入队 → Worker 调用 Qwen-Omni 评测（整段音频一次评：转写 + 逐题 0/1/2 + 评语/建议）
 6. **展示简要结果**：
-   - 显示 Part1 得分（如 18/20）
+   - 轮询等待 Part1 完成后显示得分
    - 提示联系老师获取完整报告
 
 ### 5.2 老师端流程
@@ -345,25 +351,26 @@ sequenceDiagram
     participant S as 学生 (H5)
     participant B as 后端服务
     participant OSS as 阿里云 OSS
-    participant XF as 讯飞语音评测
+    participant MQ as RabbitMQ
+    participant W as Worker
     participant QW as Qwen-Omni
 
     S->>B: 1. 扫码进入 (Token 校验)
     B-->>S: 返回测试题目 & OSS 签名
     S->>S: 2. 录音 (Part 1 & 2)
     S->>OSS: 3. 上传原始录音
-    S->>B: 4. 提交测试 (test_id)
+    S->>B: 4. 提交 Part 1 (oss_key)
+    B->>MQ: 5. 任务入队 (Part1Queue)
+    B-->>S: 返回 {status: "processing"}
     
-    par 并行评测
-        B->>XF: 5a. Part 1 流式评测 (WebSocket)
-        XF-->>B: 返回发音得分/维度
-    and 并行评测
-        B->>QW: 5b. Part 2 语义评测 (Audio+Prompt)
-        QW-->>B: 返回转写+逐题分+建议
-    end
-
-    B->>B: 6. 汇总得分 & 生成报告
-    B-->>S: 7. 返回 Part1 分数 + 找老师引导
+    W->>MQ: 6. 拉取任务
+    W->>OSS: 获取音频
+    W->>QW: 7. Part 1 评测 (Audio+Prompt)
+    QW-->>W: 返回发音得分/维度
+    W->>B: 8. 更新 part1_score
+    
+    S->>B: 轮询状态
+    B-->>S: 9. 返回 Part1 分数 + 找老师引导
 ```
 
 #### 5.4.2 老师分享与家长查看流
@@ -846,98 +853,150 @@ CREATE TABLE tests (
     id BIGINT PRIMARY KEY,
     student_id BIGINT NOT NULL,
     level VARCHAR(20) NOT NULL,
-    unit VARCHAR(20) NOT NULL,
-    status VARCHAR(20) NOT NULL, -- pending, processing, completed, failed
-    total_score DECIMAL(5,2), -- Part1 + Part2
+    unit VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL, -- pending, part1_completed, processing, completed, failed
+    total_score DECIMAL(5,2), -- Part1 + Part2 平均分
     part1_score DECIMAL(5,2),
     part2_score DECIMAL(5,2),
-    star_level TINYINT, -- 1-5
+    star_level SMALLINT, -- 1-5
+    
+    -- Part 1 详情
+    part1_audio_url VARCHAR(500),
+    part1_status VARCHAR(20), -- pending, completed, failed
+    part1_raw_result JSONB,
+    part1_retry_count SMALLINT DEFAULT 0,
+    part1_failure_reason VARCHAR(500),
+    
+    -- Part 2 详情
+    part2_audio_url VARCHAR(500),
+    part2_status VARCHAR(20), -- pending, completed, failed
+    part2_raw_result JSONB,
     part2_transcript TEXT, -- Qwen 转写结果
-    part1_audio_url VARCHAR(500), -- Part 1 音频 URL (New)
-    part2_audio_url VARCHAR(500), -- Part 2 音频 URL (New)
-    part1_raw_result JSONB, -- Part 1 原始结果 (New)
-    part2_raw_result JSONB, -- Part 2 原始结果 (New)
-    failure_reason VARCHAR(255),
-    retry_count SMALLINT DEFAULT 0, -- 重试次数 (New)
-    cost DECIMAL(10, 6), -- 费用 (New)
-    tokens_used JSONB DEFAULT '{}', -- Token 用量 (New)
-    -- Interpretation (报告解读，存储后避免重复生成)
-    interpretation_highlights TEXT, -- 亮点 (JSON)
-    interpretation_weaknesses TEXT, -- 短板 (JSON)
-    interpretation_evidence TEXT, -- 证据 (JSON)
-    interpretation_suggestions TEXT, -- 建议 (JSON)
-    interpretation_parent_script TEXT, -- 家长话术
-    interpretation_generated_at TIMESTAMP, -- 生成时间
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMP, -- 完成时间 (New)
+    part2_retry_count SMALLINT DEFAULT 0,
+    part2_failure_reason VARCHAR(500),
+    
+    -- Summary (测评汇总分析，给家长看)
+    summary_analysis JSONB, -- {highlights, weaknesses, weekly_plan}
+    summary_generated_at TIMESTAMPTZ,
+    
+    -- Interpretation (报告解读，给班主任用，异步生成)
+    interpretation_pages JSONB, -- 按6页组织的解读内容
+    interpretation_parent_script TEXT, -- 家长沟通话术
+    interpretation_generated_at TIMESTAMPTZ,
+    interpretation_status VARCHAR(20), -- pending/generating/completed/failed (异步状态)
+    interpretation_retry_count SMALLINT DEFAULT 0, -- 生成重试次数 (最多3次)
+    
+    -- 费用追踪
+    cost DECIMAL(10, 6),
+    tokens_used JSONB DEFAULT '{}',
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
     INDEX idx_student_id (student_id),
     INDEX idx_status (status)
 );
 ```
 
-#### 4. TestItem (Part2 题目明细)
+#### 4. Question (题库表) - 新增
+- **Indexes**: `uk_level_unit_part_no`
+
+```sql
+CREATE TABLE questions (
+    id BIGSERIAL PRIMARY KEY,
+    level VARCHAR(20) NOT NULL, -- 教材级别: L0, L1, L2
+    unit VARCHAR(50) NOT NULL, -- 单元: Unit 1-4, Unit 5-8
+    part INT NOT NULL DEFAULT 2, -- 1=Word Reading, 2=Q&A
+    type VARCHAR(20) NOT NULL DEFAULT 'question_answer', -- word_reading, question_answer
+    question_no INT NOT NULL, -- 题目序号，从 1 开始
+    question TEXT NOT NULL, -- 题目内容 (单词/问句)
+    translation VARCHAR(100), -- 中文翻译 (Part 1 单词用)
+    image_url VARCHAR(500), -- 图片 URL (OSS)
+    reference_answer TEXT, -- 参考答案 (Part 2 用)
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (level, unit, part, question_no)
+);
+```
+
+#### 5. TestItem (Part2 题目明细)
 - **Indexes**: `idx_test_id`
 
 ```sql
 CREATE TABLE test_items (
     id BIGINT PRIMARY KEY,
     test_id BIGINT NOT NULL,
-    question_no INT NOT NULL, -- 1-12
-    score TINYINT NOT NULL, -- 0, 1, 2
+    question_no INT NOT NULL, -- 题目序号
+    score SMALLINT NOT NULL, -- 0, 1, 2
     feedback TEXT, -- 单题评语
     transcript_segment TEXT, -- 该题对应的转写片段
-    UNIQUE KEY uk_test_question (test_id, question_no)
+    UNIQUE (test_id, question_no)
 );
 ```
 
-#### 5. StudentEntryToken (入口令牌)
+#### 6. StudentEntryToken (入口令牌)
 - **Indexes**: `uk_token`, `idx_student_id`
 
 ```sql
 CREATE TABLE student_entry_tokens (
-    id BIGINT PRIMARY KEY,
-    token VARCHAR(64) NOT NULL,
+    id BIGSERIAL PRIMARY KEY,
+    token VARCHAR(64) NOT NULL UNIQUE,
     student_id BIGINT NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
-    is_used TINYINT DEFAULT 0,
-    used_at TIMESTAMP,
+    level VARCHAR(20),
+    unit VARCHAR(50),
+    expires_at TIMESTAMPTZ NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    used_at TIMESTAMPTZ,
     created_by BIGINT, -- 老师 ID
-    UNIQUE KEY uk_token (token),
-    INDEX idx_student_id (student_id)
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
-#### 6. ReportShareToken (报告分享令牌 - 新增)
+#### 7. ReportShareToken (报告分享令牌)
 - **用途**：生成家长专属的查看链接，支持设置有效期。
 - **Indexes**: `uk_token`, `idx_test_id`
 
 ```sql
 CREATE TABLE report_share_tokens (
-    id BIGINT PRIMARY KEY,
-    token VARCHAR(64) NOT NULL,
+    id BIGSERIAL PRIMARY KEY,
+    token VARCHAR(64) NOT NULL UNIQUE,
     test_id BIGINT NOT NULL,
-    expires_at TIMESTAMP, -- 可选，NULL 表示永久有效
-    is_revoked TINYINT DEFAULT 0, -- 老师可手动撤回
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_token (token),
-    INDEX idx_test_id (test_id)
+    student_id BIGINT,
+    expires_at TIMESTAMPTZ, -- 可选，NULL 表示永久有效
+    is_revoked BOOLEAN DEFAULT FALSE, -- 老师可手动撤回
+    view_count INT DEFAULT 0, -- 查看次数统计
+    last_viewed_at TIMESTAMPTZ,
+    created_by BIGINT, -- 创建人 (老师)
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
-#### 7. AuditLog (审计日志 - 新增)
+#### 8. VerificationCode (验证码表)
+- **用途**：存储邮箱验证码
+
+```sql
+CREATE TABLE verification_codes (
+    id BIGSERIAL PRIMARY KEY,
+    email VARCHAR(100) NOT NULL,
+    code VARCHAR(10) NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+#### 9. AuditLog (审计日志)
 - **用途**：记录敏感操作（如生成 Token、查看报告、重置任务）
 
 ```sql
 CREATE TABLE audit_logs (
-    id BIGINT PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     operator_id BIGINT NOT NULL, -- 操作人
     action VARCHAR(50) NOT NULL, -- e.g., GENERATE_TOKEN, VIEW_REPORT
     target_id BIGINT, -- 被操作对象 ID (如 student_id, test_id)
     client_ip VARCHAR(45),
-    details JSON, -- 变更详情
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_operator (operator_id),
-    INDEX idx_action (action)
+    details JSONB, -- 变更详情
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
@@ -970,18 +1029,34 @@ CREATE TABLE audit_logs (
 
 ### 目录规范
 
+#### 学生录音文件
+
 ```
-speakingtest/
-└── {env}/                    # prod / staging / dev
-    └── {studentId}/
-        └── {testId}/
-            ├── part1/
-            │   ├── raw.webm
-            │   └── audio.mp3
-            └── part2/
-                ├── raw.webm
-                └── audio.mp3
+audio/{year}/{month}/{day}/{test_id}_{part}_{unique_id}.{ext}
 ```
+
+示例：`audio/2026/01/16/12345_part1_abc123.mp3`
+
+- `year/month/day`: 按日期组织，便于生命周期管理
+- `test_id`: 测试 ID
+- `part`: `part1` 或 `part2`
+- `unique_id`: UUID 保证唯一性
+- `ext`: 文件扩展名（mp3, wav 等）
+
+#### 题库图片文件
+
+```
+questions/{level}/{unit}/{question_no}_{question}.{ext}
+```
+
+示例：`questions/L0/unit_1-4/1_apple.png`
+
+- `level`: 教材级别（L0, L1, L2）
+- `unit`: 单元名称，空格转下划线并小写（如 `unit_1-4`）
+- `question_no`: 题目序号
+- `question`: 题目内容（英文单词/词组），空格转下划线并小写
+- `ext`: 文件扩展名（png, jpg 等）
+- **覆盖策略**：同一题目重新上传会覆盖原文件（无需删除权限）
 
 ### 保留策略
 
@@ -1029,34 +1104,69 @@ speakingtest/
 
 ### 内部流程（后端评测）
 
-#### Part1 流程（讯飞语音评测（流式版））
+#### Part1 流程（Qwen-Omni 异步队列）
 
 ```
 POST /tests/{id}/submit-part1
     ↓
-1. 从 OSS 获取原始录音（webm/wav）或 mp3，并**转为评测所需的 PCM**（如 16k/16bit/mono，按讯飞文档为准）
-2. 建立 WebSocket 连接到讯飞语音评测（流式版）
-   wss://ise-api.xfyun.cn/v2/open-ise
-3. **按帧/分片流式发送音频**（base64；首/中/末帧 status=0/1/2 等协议字段按讯飞文档），接收评测结果
-4. 使用讯飞返回的维度分（发音/流利/完整度）
-5. 映射为 0-20 分
-6. 存储结果到数据库
+1. 接收音频 OSS Key，更新 test 状态为 processing
+2. 将任务放入 RabbitMQ 队列 (Part1Queue)
+3. 立即返回前端 {status: "processing"}
+
+Worker 异步处理：
+1. 从 OSS 获取 mp3 音频
+2. 转换为 base64 + data URL 格式
+3. 调用 Qwen-Omni API（流式）评测单词发音
+4. 返回：逐词得分、总分、改进建议
+5. 更新数据库 part1_score、part1_status
+6. 失败时增加 retry_count（最多 5 次）
 ```
 
-#### Part2 流程（Qwen-Omni）✅ 推荐
+#### Part2 流程（Qwen-Omni 异步队列）
 
 ```
 POST /tests/{id}/submit-part2
     ↓
+1. 接收音频 OSS Key，更新 test 状态为 processing
+2. 将任务放入 RabbitMQ 队列 (Part2Queue)
+3. 立即返回前端 {status: "processing"}
+
+Worker 异步处理：
 1. 从 OSS 获取 mp3 音频
 2. 转换为 base64 + data URL 格式
 3. 调用 Qwen-Omni API（流式）
    POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
 4. 传入：音频 + 题目 + 参考答案 + 评测 prompt
-5. 接收：转写文本 + 多维度评分 + 改进建议
-6. 映射 1-10 分为 0/1/2 分
-7. 存储结果到数据库
-8. 返回给前端
+5. 接收：转写文本 + 逐题 0/1/2 分 + 评语 + 改进建议
+6. 更新数据库 part2_score、part2_status、part2_transcript
+7. 计算总分，更新 test.status = completed
+8. 失败时增加 retry_count（最多 5 次）
+```
+
+#### 报告解读流程（Qwen-Plus 异步队列）
+
+```
+POST /tests/{id}/interpretation
+    ↓
+1. 检查当前 interpretation_status
+   - 若 "generating"：返回 {status: "generating", message: "正在生成中"}
+   - 若 "completed" 且非强制重新生成：返回 {status: "completed", pages, full_script}
+   - 若 "failed" 且重试次数 >= 3：返回 {status: "failed", message: "已达最大重试次数"}
+2. 设置 interpretation_status = "generating"
+3. 将任务放入 RabbitMQ 队列 (InterpretationQueue)
+4. 立即返回 {status: "generating", message: "已开始生成，请轮询结果"}
+
+GET /tests/{id}/interpretation/status（前端每 2 秒轮询）
+    ↓
+1. 返回当前 interpretation_status 及已生成的内容（如有）
+
+Worker 异步处理：
+1. 调用 Qwen-Plus API（结构化输出 JSON Schema）
+2. 传入：学生信息 + 评分数据 + Part2 转写
+3. 接收：6 页解读内容 + 家长沟通话术
+4. 更新数据库 interpretation_pages、interpretation_parent_script、interpretation_status = completed
+5. 失败时：interpretation_status = failed，增加 interpretation_retry_count（最多 3 次）
+6. 超时检测：90 秒无响应视为失败
 ```
 
 ### Teacher
@@ -1068,9 +1178,17 @@ POST /tests/{id}/submit-part2
 | POST | `/api/v1/students/{id}/tests` | 获取该学生测评历史 |
 | POST | `/api/v1/students/{id}/entry-token` | 生成/重置该学生入口 token（返回链接 + 二维码内容） |
 | GET | `/api/v1/tests/{id}` | 完整报告 |
-| POST | `/api/v1/tests/{id}/interpretation` | **生成**解读版（触发 AI 生成并存储） |
-| GET | `/api/v1/tests/{id}/interpretation` | **获取**解读版（需先生成） |
+| POST | `/api/v1/tests/{id}/interpretation` | **生成**解读版（异步队列处理，立即返回状态） |
+| GET | `/api/v1/tests/{id}/interpretation/status` | **轮询**解读版生成状态（前端每 2 秒调用） |
+| GET | `/api/v1/tests/{id}/interpretation` | **获取**解读版（需先生成完成） |
 | POST | `/api/v1/tests/{id}/share` | 生成家长分享链接 |
+
+### Health Check (健康检查)
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/health` | 基础健康检查（返回 {"status": "healthy"}） |
+| GET | `/health/detailed` | 详细健康检查（数据库、RabbitMQ、OSS 配置状态） |
 
 ### Parent
 
@@ -1109,7 +1227,23 @@ POST /tests/{id}/submit-part2
 
 ## 13. 风险与约束
 
-### 家长链接安全
+### 13.1 安全配置（环境变量）✅ 必须落地
+
+> 以下安全相关配置必须通过环境变量管理，禁止硬编码。
+
+| 变量名 | 说明 | 示例值 |
+|--------|------|--------|
+| `JWT_SECRET_KEY` | JWT 签名密钥（生产环境必须修改） | 32 字符以上随机字符串 |
+| `ADMIN_EMAILS` | 管理员邮箱列表（逗号分隔） | `admin1@51talk.com,admin2@51talk.com` |
+| `CORS_ORIGINS` | 允许的跨域来源（逗号分隔） | `https://teacher.example.com` |
+| `TEST_EMAIL_WHITELIST` | 测试环境邮箱白名单（仅 DEBUG 模式） | `test@example.com` |
+| `FRONTEND_TEACHER_URL` | 老师端前端地址 | `http://localhost:5173` |
+
+**安全检查**：
+- 生产环境启动时自动检测 `JWT_SECRET_KEY` 是否为默认值，若是则拒绝启动
+- CORS 配置在非 DEBUG 模式下必须显式指定，禁止 `*`
+
+### 13.2 家长链接安全
 
 - ⚠️ 链接永久有效，但仍建议：
   - token 足够长且不可枚举（建议 32 字符以上）
@@ -1122,12 +1256,12 @@ POST /tests/{id}/submit-part2
   - **影响**：若 1000 人同时考试，最后一名学生可能需等待 20 分钟。
   - **对策**：实施 **Waiting Room 排队机制** (见 13.3)；长期需购买企业级并发包扩容。
 
-### RBAC（权限与越权控制）✅ 必须落地
+### 13.4 RBAC（权限与越权控制）✅ 必须落地
 
 - **角色**
   - `student`：仅能访问自己的学生会话内资源
   - `teacher`：仅能访问“归属到自己名下”的学生/测试资源（以 CRM/国内 SS 为准）
-  - `admin`：全量访问（运营/排障）；所有重置操作需审计
+  - `admin`：全量访问（运营/排障）；所有重置操作需审计；**通过 `ADMIN_EMAILS` 环境变量配置管理员邮箱列表**
   - `parent`：仅能通过 `/p/{shareToken}` 访问对应 `test_id` 的裁剪版报告
 - **接口裁剪**
   - 老师端：可见完整报告、评分维度、逐题、转写；默认不可见学生敏感字段（手机号等）
@@ -1139,14 +1273,14 @@ POST /tests/{id}/submit-part2
 - **审计**
   - 记录关键行为：生成/重置入口码、生成/重置家长链接、任务重置、查看报告（含 IP/UA/时间）
 
-### 学生入口码安全（1 人 1 码）
+### 13.5 学生入口码安全（1 人 1 码）
 
 - 入口 token 建议：**默认一次性**（used_at 后失效）+ **短有效期**（如 1-7 天；按运营节奏定）
 - 支持老师端「作废/重置」入口 token（防止二维码被转发长期可用）
 - 入口 token 仅用于识别 `student_id` 并建立会话，不应直接暴露学生敏感信息
 - 建议记录 access 日志（IP/UA/时间），并对异常访问做限流
 
-### 单次测评约束（按任务 level+unit）✅ 必须落地
+### 13.6 单次测评约束（按任务 level+unit）✅ 必须落地
 
 - **目标口径**：同一学生对同一任务（`level + unit`）**默认仅允许 1 次有效测评**
 - **约束维度**：以 `StudentTaskQuota(student_id, level, unit)` 为准，而不是“入口码 token 是否使用过”
@@ -1160,26 +1294,26 @@ POST /tests/{id}/submit-part2
     - 行为：将 quota 回退为 `not_started`（或清空 `latest_test_id`），并记录 `last_reset_at/last_reset_by`
     - 频控：默认最多 1 次重置（可配置）；所有重置必须审计
 
-### 录音过期与回放降级（6 个月）✅ 必须落地
+### 13.7 录音过期与回放降级（6 个月）✅ 必须落地
 
 - 录音对象按 OSS lifecycle 规则 6 个月删除
 - 报告页获取音频：
   - 后端统一签名：`GET /tests/{id}` 返回 **短时签名 URL**（如 10-30 分钟）
   - 若对象已不存在：后端返回 `audioExpired=true`，前端隐藏播放并提示「录音已过期，仍可查看评分与转写」
 
-### Part2 逐题评分
+### 13.8 Part2 逐题评分
 
 - **方案口径（已定）**：Part2 使用 **Qwen-Omni** 对**整段音频一次评测**，由模型输出「逐字转写 + 12 题逐题 0/1/2 + 评语/建议」。
 - ⚠️ **风险**：逐题评分为模型基于整段内容的结构化输出，需要通过 prompt 约束与样本回归测试保障稳定性（尤其是跑题/漏题/题号错位）。
 - ✅ **缓解**：后端做结构校验（必须含 1-12 题；缺失则重试/降级为整体分），并保留 raw 结果用于追溯质检。
 
-### Qwen-Omni 接口依赖
+### 13.9 Qwen-Omni 接口依赖
 
 - ✅ 已确认使用 Qwen-Omni 流式接口
 - 音频需转换为 base64 格式发送
 - **限流风险**：Qwen-Omni 限流 **60 RPM**。需严格执行并发控制（Waiting Room / 队列）。
 
-### 学生名单外部依赖（CRM/国内 SS 学生列表接口）
+### 13.10 学生名单外部依赖（CRM/国内 SS 学生列表接口）
 
 - ⚠️ 老师端学生列表依赖外部接口可用性与鉴权（需明确 token/header/白名单/网关策略）
 - ✅ 缓解：后端做缓存（TTL）、失败降级（使用缓存兜底 + 提示“可手动刷新”）、记录拉取错误日志用于排障
@@ -1204,8 +1338,8 @@ POST /tests/{id}/submit-part2
 
 | 场景 | 触发条件 | 降级动作 | 恢复策略 |
 |------|----------|----------|----------|
-| **讯飞服务不可用** | WebSocket 连接失败 > 3次 或 响应超时 | **Part 1 自动跳过**，仅记录录音；前端提示“评分服务繁忙，稍后查看”；后端标记 `status=pending_retry` | 定时任务 (Cron) 每 5 分钟重试 `pending_retry` 任务 |
-| **Qwen 服务不可用** | API 5xx 错误 或 超时 > 30s | **Part 2 转异步**；前端提示“AI 正在深度思考，请稍后查看报告”；后端放入死信队列 (DLQ) | 指数退避重试 (Exponential Backoff)；若持续失败 > 24h，报警人工介入 |
+| **Part 1/2 评测失败** | Qwen API 5xx 或 超时 | **AI 正在深度分析**；前端提示“评分服务繁忙，稍后查看”；后端标记 `status=failed` | 队列 Worker 最多重试 **5 次**，超限标记为 `failed` |
+| **报告解读生成失败** | Qwen API 5xx 或 超时 > 90s | 标记 `interpretation_status=failed`；前端提示“AI 正在深度思考，请稍后查看报告”；前端提示"生成失败，请重试" | 用户可手动触发重新生成，最多重试 **3 次** |
 | **CRM 接口异常** | 接口超时/5xx | **使用本地缓存**；若无缓存，允许老师手动输入学生姓名（标记为 `unverified`） | 接口恢复后自动同步清洗数据 |
 
 ### 15.2 并发控制 (Concurrency Control)
@@ -1302,8 +1436,8 @@ POST /tests/{id}/submit-part2
 
 ---
 
-*文档版本：v1.5*  
-*最后更新：2026-01-14*
+*文档版本：v1.6*  
+*最后更新：2026-01-16*
 
 ---
 
@@ -1319,4 +1453,5 @@ POST /tests/{id}/submit-part2
 | v1.3 | 2026-01-12 | **动态题目数量支持**：Part 1/2 题目数量不再固定，支持后台动态配置；评分改为 0-100 分制（Part 1 + Part 2 平均分）；星级规则同步更新为基于 0-100 总分。 |
 | v1.4 | 2026-01-13 | **报告解读功能落地**：实现基于 Qwen-Omni 的 AI 报告解读生成（亮点/短板/证据/建议/话术）；数据库 tests 表新增 interpretation 相关字段；新增生成解读 API。 |
 | v1.5 | 2026-01-14 | **qwen-plus 结构化输出**：测评汇总分析（给家长看）和报告解读（给班主任用）改用 `qwen-plus` 模型 + JSON Schema 结构化输出，确保输出格式稳定；新增 7.8 章节详述 qwen-plus 用法；更新引擎分工表（7.7）区分音频评测与文本分析场景。 |
+| v1.6 | 2026-01-16 | **生产级优化**：(1) 报告解读改为**异步队列处理**（避免 60s 网关超时），前端轮询状态，最多重试 3 次；(2) 新增题库表 `questions`；(3) 更新 OSS 目录规范（音频含日期、题库图片按 level/unit/question 组织）；(4) 新增安全配置章节（环境变量管理 JWT 密钥、管理员邮箱、CORS 等）；(5) 队列任务最大重试 5 次；(6) 新增健康检查接口 `/health/detailed`；(7) 技术栈确认 PostgreSQL + RabbitMQ；(8) 数据库 schema 同步（`interpretation_status`、`interpretation_retry_count` 等字段）。 |
 

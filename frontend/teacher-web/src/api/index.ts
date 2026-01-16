@@ -62,8 +62,13 @@ export const testsApi = {
   getInterpretation: (testId: number) =>
     api.get<Interpretation>(`/tests/${testId}/interpretation`),
 
+  // 异步生成报告解读
   generateInterpretation: (testId: number, force: boolean = false) =>
-    api.post<Interpretation>(`/tests/${testId}/interpretation${force ? '?force=true' : ''}`),
+    api.post<InterpretationStatus>(`/tests/${testId}/interpretation${force ? '?force=true' : ''}`),
+
+  // 查询报告解读生成状态
+  getInterpretationStatus: (testId: number) =>
+    api.get<InterpretationStatus>(`/tests/${testId}/interpretation/status`),
 
   generateShareLink: (testId: number) =>
     api.post<{ token: string; share_url: string; message: string }>(`/tests/${testId}/share`),
@@ -296,6 +301,14 @@ export interface Interpretation {
     badge: string;    // 徽章页演讲话术
   };
   full_script: string;  // 完整演讲稿（约10分钟）
+}
+
+// 报告解读生成状态
+export interface InterpretationStatus {
+  status: 'pending' | 'generating' | 'completed' | 'failed';
+  message?: string;
+  pages?: Interpretation['pages'];
+  full_script?: string;
 }
 
 // Report Override Types (Full Edit)
