@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     # Database (PostgreSQL)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/speakingtest"
+    DB_POOL_SIZE: int = 30  # 基础连接池大小（匹配数据库支持 100 并发）
+    DB_MAX_OVERFLOW: int = 70  # 最大溢出连接数（总计最多 100 个连接）
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"

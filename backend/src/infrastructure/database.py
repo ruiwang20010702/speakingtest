@@ -14,8 +14,11 @@ settings = get_settings()
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
-    pool_size=10,
-    max_overflow=20,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    # 连接池超时设置（秒）
+    pool_pre_ping=True,  # 连接前先 ping，自动重连断开的连接
+    pool_recycle=3600,   # 连接回收时间（1小时），避免长时间连接超时
 )
 
 # Async session factory
