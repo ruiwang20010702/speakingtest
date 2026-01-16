@@ -284,10 +284,12 @@ class ProcessPart2TaskUseCase:
                     "cost": float(f"{cost:.6f}")
                 }
                 
-                # 计算总 cost
+                # 计算总 cost（遍历所有历史记录）
                 total_cost = (
-                    current_usage.get("part1", {}).get("cost", 0) +
-                    sum(h.get("cost", 0) for h in current_usage.get("part2_history", []))
+                    sum(h.get("cost", 0) for h in current_usage.get("part1_history", [])) +
+                    sum(h.get("cost", 0) for h in current_usage.get("part2_history", [])) +
+                    sum(h.get("cost", 0) for h in current_usage.get("summary_analysis_history", [])) +
+                    sum(h.get("cost", 0) for h in current_usage.get("interpretation_history", []))
                 )
                 current_usage["total_cost"] = float(f"{total_cost:.6f}")
                 
@@ -392,10 +394,13 @@ class ProcessPart2TaskUseCase:
         生成测评汇总分析 (给家长端 H5 用)
         
         在 Part 2 评测完成后自动调用，不阻塞主流程
+        支持最多 3 次重试，失败后使用规则生成 fallback
         """
         import json
         from src.adapters.repositories.models import StudentProfileModel
         from sqlalchemy import select
+        
+        MAX_SUMMARY_RETRIES = 3
         
         try:
             # 获取学生名称
@@ -441,64 +446,36 @@ class ProcessPart2TaskUseCase:
                         "feedback": item.get("feedback", "")  # 模型对该题的反馈
                     })
             
-            # 调用 qwen-plus 生成汇总分析
-            summary_result = await self.qwen.generate_summary_analysis(
-                student_name=student_name,
-                level=test.level,
-                total_score=float(test.total_score or 0),
-                star_level=test.star_level or 1,
-                radar_scores=radar_scores,
-                part1_score=float(test.part1_score or 0),
-                part2_score=float(test.part2_score or 0),
-                part1_words=part1_words,
-                part2_items=part2_items,
-                part1_suggestion=part1_raw.get("part1_overall_suggestion", []),
-                part2_suggestion=part2_raw.get("part2_overall_suggestion", [])
-            )
-            
-            # 记录 qwen-plus 调用费用 (无论成功或失败)
-            if summary_result.usage:
-                usage = summary_result.usage
-                prompt_tokens = usage.get("prompt_tokens", 0)
-                completion_tokens = usage.get("completion_tokens", 0)
-                
-                # qwen-plus 定价: 输入 ¥0.0008/千tokens, 输出 ¥0.002/千tokens
-                cost = (
-                    (prompt_tokens * 0.0008 / 1000) +
-                    (completion_tokens * 0.002 / 1000)
+            # 协程内循环重试（最多 3 次）
+            summary_result = None
+            for attempt in range(1, MAX_SUMMARY_RETRIES + 1):
+                # 调用 qwen-plus 生成汇总分析
+                summary_result = await self.qwen.generate_summary_analysis(
+                    student_name=student_name,
+                    level=test.level,
+                    total_score=float(test.total_score or 0),
+                    star_level=test.star_level or 1,
+                    radar_scores=radar_scores,
+                    part1_score=float(test.part1_score or 0),
+                    part2_score=float(test.part2_score or 0),
+                    part1_words=part1_words,
+                    part2_items=part2_items,
+                    part1_suggestion=part1_raw.get("part1_overall_suggestion", []),
+                    part2_suggestion=part2_raw.get("part2_overall_suggestion", [])
                 )
                 
-                # 累加到总 cost
-                test.cost = float(test.cost or 0) + cost
+                # 记录本次调用费用（无论成功或失败，只要有 usage）
+                if summary_result.usage:
+                    self._record_summary_analysis_cost(test, summary_result, attempt)
                 
-                # 更新 tokens_used
-                current_usage = dict(test.tokens_used or {})
-                if not isinstance(current_usage, dict):
-                    current_usage = {}
+                # 成功则退出循环
+                if summary_result.success:
+                    break
                 
-                current_usage["summary_analysis"] = {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": usage.get("total_tokens", 0),
-                    "cost": float(f"{cost:.6f}"),
-                    "model": "qwen-plus",
-                    "success": summary_result.success
-                }
-                
-                # 重新计算总 cost
-                total_cost = (
-                    sum(h.get("cost", 0) for h in current_usage.get("part1_history", [])) +
-                    sum(h.get("cost", 0) for h in current_usage.get("part2_history", [])) +
-                    current_usage.get("summary_analysis", {}).get("cost", 0)
-                )
-                current_usage["total_cost"] = float(f"{total_cost:.6f}")
-                
-                test.tokens_used = current_usage
-                
-                logger.info(f"测评汇总分析 Cost: {cost:.4f} RMB, success={summary_result.success}")
+                logger.warning(f"测评汇总分析第 {attempt} 次失败: {summary_result.error}")
             
             # 存储结果
-            if summary_result.success:
+            if summary_result and summary_result.success:
                 test.summary_highlights = json.dumps(summary_result.highlights, ensure_ascii=False)
                 test.summary_weaknesses = json.dumps(summary_result.weaknesses, ensure_ascii=False)
                 test.summary_weekly_plan = json.dumps(summary_result.weekly_plan, ensure_ascii=False)
@@ -510,32 +487,92 @@ class ProcessPart2TaskUseCase:
                 await self.db.commit()
                 logger.info(f"测评汇总分析生成成功: test_id={test.id}, has_dimension_feedback={summary_result.dimension_feedback is not None}")
             else:
-                logger.warning(f"测评汇总分析生成失败: {summary_result.error}，将使用规则生成")
+                logger.warning(f"测评汇总分析重试 {MAX_SUMMARY_RETRIES} 次均失败，使用规则生成 fallback")
                 # 失败时使用规则生成默认建议
-                default_highlights = []
-                default_weaknesses = []
-                
-                # 新阈值：≥90 杰出, 70-89 优秀, 60-69 良好, <60 待提升
-                for dim_name, score in radar_scores.items():
-                    dim_cn = {"fluency": "流利度", "pronunciation": "发音", "confidence": "自信度", 
-                              "vocabulary": "词汇", "sentence": "整句输出"}.get(dim_name, dim_name)
-                    if score >= 70:
-                        default_highlights.append(f"{dim_cn}表现优秀")
-                    elif score < 60:
-                        default_weaknesses.append(f"{dim_cn}有提升空间")
-                
-                test.summary_highlights = json.dumps(default_highlights or ["本次测评表现稳定"], ensure_ascii=False)
-                test.summary_weaknesses = json.dumps(default_weaknesses or ["暂无明显短板"], ensure_ascii=False)
-                test.summary_weekly_plan = json.dumps([
-                    "每天跟读 10 分钟标准音频",
-                    "多用完整句子回答问题",
-                    "保持自信，大声开口练习"
-                ], ensure_ascii=False)
-                # 失败时不设置 dimension_feedback，将使用规则模板
-                test.summary_generated_at = china_now()
-                
+                self._generate_fallback_summary(test, radar_scores)
                 await self.db.commit()
                 
         except Exception as e:
             logger.exception(f"生成测评汇总分析时出错: {e}")
             # 不影响主流程，即使失败也不抛出异常
+    
+    def _record_summary_analysis_cost(self, test, summary_result, attempt: int) -> None:
+        """记录测评汇总分析的费用到历史记录"""
+        usage = summary_result.usage
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+        
+        # qwen-plus 定价: 输入 ¥0.0008/千tokens, 输出 ¥0.002/千tokens
+        cost = (
+            (prompt_tokens * 0.0008 / 1000) +
+            (completion_tokens * 0.002 / 1000)
+        )
+        
+        # 累加到总 cost
+        test.cost = float(test.cost or 0) + cost
+        
+        # 更新 tokens_used
+        current_usage = dict(test.tokens_used or {})
+        if not isinstance(current_usage, dict):
+            current_usage = {}
+        
+        # 追加到 summary_analysis_history 列表
+        if "summary_analysis_history" not in current_usage:
+            current_usage["summary_analysis_history"] = []
+        
+        attempt_record = {
+            "attempt": attempt,
+            "success": summary_result.success,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": usage.get("total_tokens", 0),
+            "cost": float(f"{cost:.6f}"),
+            "model": "qwen-plus",
+            "timestamp": china_now().isoformat()
+        }
+        if not summary_result.success and summary_result.error:
+            attempt_record["error"] = str(summary_result.error)[:200]
+        
+        current_usage["summary_analysis_history"].append(attempt_record)
+        
+        # 重新计算总 cost（遍历所有历史记录）
+        total_cost = (
+            sum(h.get("cost", 0) for h in current_usage.get("part1_history", [])) +
+            sum(h.get("cost", 0) for h in current_usage.get("part2_history", [])) +
+            sum(h.get("cost", 0) for h in current_usage.get("summary_analysis_history", [])) +
+            sum(h.get("cost", 0) for h in current_usage.get("interpretation_history", []))
+        )
+        current_usage["total_cost"] = float(f"{total_cost:.6f}")
+        
+        test.tokens_used = current_usage
+        
+        logger.info(
+            f"测评汇总分析 API 调用: attempt={attempt}, success={summary_result.success}, "
+            f"cost={cost:.4f} RMB"
+        )
+    
+    def _generate_fallback_summary(self, test, radar_scores: dict) -> None:
+        """使用规则生成默认的测评汇总分析（fallback）"""
+        import json
+        
+        default_highlights = []
+        default_weaknesses = []
+        
+        # 新阈值：≥90 杰出, 70-89 优秀, 60-69 良好, <60 待提升
+        for dim_name, score in radar_scores.items():
+            dim_cn = {"fluency": "流利度", "pronunciation": "发音", "confidence": "自信度", 
+                      "vocabulary": "词汇", "sentence": "整句输出"}.get(dim_name, dim_name)
+            if score >= 70:
+                default_highlights.append(f"{dim_cn}表现优秀")
+            elif score < 60:
+                default_weaknesses.append(f"{dim_cn}有提升空间")
+        
+        test.summary_highlights = json.dumps(default_highlights or ["本次测评表现稳定"], ensure_ascii=False)
+        test.summary_weaknesses = json.dumps(default_weaknesses or ["暂无明显短板"], ensure_ascii=False)
+        test.summary_weekly_plan = json.dumps([
+            "每天跟读 10 分钟标准音频",
+            "多用完整句子回答问题",
+            "保持自信，大声开口练习"
+        ], ensure_ascii=False)
+        # 失败时不设置 dimension_feedback，将使用规则模板
+        test.summary_generated_at = china_now()

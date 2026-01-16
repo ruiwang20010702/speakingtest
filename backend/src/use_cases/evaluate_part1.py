@@ -184,10 +184,12 @@ class EvaluatePart1UseCase:
                 "cost": float(f"{cost:.6f}")
             }
             
-            # 计算总 cost (part1 所有尝试 + part2 所有尝试)
+            # 计算总 cost（遍历所有历史记录）
             total_cost = (
                 sum(h.get("cost", 0) for h in current_usage.get("part1_history", [])) +
-                sum(h.get("cost", 0) for h in current_usage.get("part2_history", []))
+                sum(h.get("cost", 0) for h in current_usage.get("part2_history", [])) +
+                sum(h.get("cost", 0) for h in current_usage.get("summary_analysis_history", [])) +
+                sum(h.get("cost", 0) for h in current_usage.get("interpretation_history", []))
             )
             current_usage["total_cost"] = float(f"{total_cost:.6f}")
             

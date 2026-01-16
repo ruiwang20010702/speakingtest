@@ -17,6 +17,72 @@ from src.adapters.gateways.qwen_client import QwenOmniGateway
 MAX_RETRIES = 3
 
 
+def _record_interpretation_cost(test, interpretation, attempt: int) -> None:
+    """
+    记录报告解读的费用到历史记录
+    
+    Args:
+        test: TestModel 对象
+        interpretation: API 返回结果
+        attempt: 当前尝试次数
+    """
+    if not interpretation.usage:
+        return
+    
+    usage = interpretation.usage
+    prompt_tokens = usage.get("prompt_tokens", 0)
+    completion_tokens = usage.get("completion_tokens", 0)
+    
+    # qwen-plus 定价: 输入 ¥0.0008/千tokens, 输出 ¥0.002/千tokens
+    cost = (
+        (prompt_tokens * 0.0008 / 1000) +
+        (completion_tokens * 0.002 / 1000)
+    )
+    
+    # 累加到总 cost
+    test.cost = float(test.cost or 0) + cost
+    
+    # 更新 tokens_used
+    current_usage = dict(test.tokens_used or {})
+    if not isinstance(current_usage, dict):
+        current_usage = {}
+    
+    # 追加到 interpretation_history 列表
+    if "interpretation_history" not in current_usage:
+        current_usage["interpretation_history"] = []
+    
+    attempt_record = {
+        "attempt": attempt,
+        "success": interpretation.success,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": usage.get("total_tokens", 0),
+        "cost": float(f"{cost:.6f}"),
+        "model": "qwen-plus",
+        "timestamp": china_now().isoformat()
+    }
+    if not interpretation.success and interpretation.error:
+        attempt_record["error"] = str(interpretation.error)[:200]
+    
+    current_usage["interpretation_history"].append(attempt_record)
+    
+    # 重新计算总 cost（遍历所有历史记录）
+    total_cost = (
+        sum(h.get("cost", 0) for h in current_usage.get("part1_history", [])) +
+        sum(h.get("cost", 0) for h in current_usage.get("part2_history", [])) +
+        sum(h.get("cost", 0) for h in current_usage.get("summary_analysis_history", [])) +
+        sum(h.get("cost", 0) for h in current_usage.get("interpretation_history", []))
+    )
+    current_usage["total_cost"] = float(f"{total_cost:.6f}")
+    
+    test.tokens_used = current_usage
+    
+    logger.info(
+        f"报告解读 API 调用: attempt={attempt}, success={interpretation.success}, "
+        f"cost={cost:.4f} RMB"
+    )
+
+
 async def process_interpretation_task(task: InterpretationTask) -> bool:
     """
     处理报告解读任务
@@ -65,44 +131,25 @@ async def process_interpretation_task(task: InterpretationTask) -> bool:
                 radar_data=task.radar_data if task.radar_data else None,
             )
             
-            # 记录费用
-            if interpretation.usage:
-                usage = interpretation.usage
-                prompt_tokens = usage.get("prompt_tokens", 0)
-                completion_tokens = usage.get("completion_tokens", 0)
-                
-                # qwen-plus 定价
-                cost = (
-                    (prompt_tokens * 0.0008 / 1000) +
-                    (completion_tokens * 0.002 / 1000)
-                )
-                
-                test.cost = float(test.cost or 0) + cost
-                
-                # 更新 tokens_used
-                current_usage = dict(test.tokens_used or {})
-                if not isinstance(current_usage, dict):
-                    current_usage = {}
-                
-                current_usage["interpretation"] = {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": usage.get("total_tokens", 0),
-                    "cost": float(f"{cost:.6f}"),
-                    "model": "qwen-plus"
-                }
-                
-                total_cost = (
-                    sum(h.get("cost", 0) for h in current_usage.get("part1_history", [])) +
-                    sum(h.get("cost", 0) for h in current_usage.get("part2_history", [])) +
-                    current_usage.get("interpretation", {}).get("cost", 0)
-                )
-                current_usage["total_cost"] = float(f"{total_cost:.6f}")
-                test.tokens_used = current_usage
-                
-                logger.info(f"报告解读 Cost: {cost:.4f} RMB, tokens: {usage}")
+            # 计算当前尝试次数（retry_count + 1）
+            current_attempt = retry_count + 1
             
-            # 保存结果
+            # 记录费用到历史记录（无论成功或失败，只要有 usage）
+            _record_interpretation_cost(test, interpretation, current_attempt)
+            
+            # 检查是否成功
+            if not interpretation.success:
+                logger.warning(f"报告解读生成失败: test_id={task.test_id}, error={interpretation.error}")
+                test.interpretation_retry_count = current_attempt
+                if current_attempt >= MAX_RETRIES:
+                    test.interpretation_status = "failed"
+                    logger.warning(f"报告解读达到最大重试次数: test_id={task.test_id}")
+                    await db.commit()
+                    return True  # 不再重试
+                await db.commit()
+                raise Exception(f"报告解读生成失败: {interpretation.error}")  # 触发 NACK 重试
+            
+            # 成功：保存结果
             test.interpretation_pages = interpretation.pages_to_json()
             test.interpretation_parent_script = interpretation.full_script
             test.interpretation_generated_at = china_now()
@@ -114,16 +161,19 @@ async def process_interpretation_task(task: InterpretationTask) -> bool:
             return True
             
         except Exception as e:
-            logger.exception(f"报告解读生成失败: test_id={task.test_id}, error={e}")
+            logger.exception(f"报告解读处理异常: test_id={task.test_id}, error={e}")
             
-            # 更新重试次数
+            # 更新重试次数（针对未预期的异常）
             try:
                 stmt = select(TestModel).where(TestModel.id == task.test_id)
                 result = await db.execute(stmt)
                 test = result.scalar_one_or_none()
                 
                 if test:
-                    test.interpretation_retry_count = (test.interpretation_retry_count or 0) + 1
+                    # 只有在异常处理时才增加重试次数（正常失败已在上面处理）
+                    current_retry = test.interpretation_retry_count or 0
+                    if current_retry < MAX_RETRIES:
+                        test.interpretation_retry_count = current_retry + 1
                     if test.interpretation_retry_count >= MAX_RETRIES:
                         test.interpretation_status = "failed"
                         logger.warning(f"报告解读达到最大重试次数: test_id={task.test_id}")
