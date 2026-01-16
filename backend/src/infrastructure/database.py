@@ -30,6 +30,9 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
+# Alias for backward compatibility
+async_session_factory = AsyncSessionLocal
+
 # Base class for ORM models
 Base = declarative_base()
 
