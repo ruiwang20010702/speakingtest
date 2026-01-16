@@ -1,73 +1,66 @@
-# React + TypeScript + Vite
+# Teacher Web (教师端)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+PC 端管理后台，供教师和管理员使用。提供班级管理、测评监控、报告审核与手动修正功能。
 
-Currently, two official plugins are available:
+## 🌟 核心功能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **班级看板**：查看班级整体测评进度与平均分分布。
+- **学生列表**：管理学生信息，生成测评二维码/链接。
+- **报告审核**：
+  - 查看 AI 生成的详细评分数据。
+  - **人工修正**：支持教师手动修改 AI 评分（如流利度、发音分）。
+  - **评语编辑**：支持编辑或重写 AI 生成的综合评语。
+- **报告分享**：一键生成家长端分享链接。
 
-## React Compiler
+## 🛠️ 技术栈
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Framework**: React 18
+- **UI Component**: Ant Design (或类似 Admin 组件库)
+- **State Management**: Zustand / Context
+- **Network**: Axios
+- **Build Tool**: Vite
 
-## Expanding the ESLint configuration
+## 🚀 快速启动
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 1. 安装依赖
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd frontend/teacher-web
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### 2. 启动开发服务器
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev
 ```
+
+访问地址: `http://localhost:5173` (默认端口)
+
+### 3. 构建生产版本
+
+```bash
+npm run build
+```
+
+## 📂 项目结构
+
+```
+teacher-web/
+├── src/
+│   ├── api/             # 后端 API 接口封装
+│   ├── components/      # 通用组件 (Header, Sidebar, etc.)
+│   ├── pages/           # 页面组件
+│   │   ├── Dashboard/   # 仪表盘
+│   │   ├── Class/       # 班级管理
+│   │   ├── Report/      # 报告详情与编辑
+│   │   └── Login/       # 登录页
+│   ├── utils/           # 工具函数
+│   └── App.tsx          # 路由入口
+└── vite.config.ts       # Vite 配置
+```
+
+## 🔐 权限说明
+
+- **Admin**: 拥有所有权限，可管理教师账号。
+- **Teacher**: 仅可管理自己班级的学生和报告。

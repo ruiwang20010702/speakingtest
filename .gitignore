@@ -2,39 +2,40 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
 venv/
-.venv/
-backend/.env
-backend/uvicorn.log
+env/
+ENV/
+*.db
+*.sqlite
+*.log
 
-# Node
+# Node.js
 node_modules/
 dist/
-frontend/teacher-web/node_modules/
-frontend/teacher-web/dist/
+dist-ssr/
+*.local
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# IDE
-.idea/
-
-# Project specific temp files
-.agent/
-*.m4a
-*.mp3
-stream_result.json
-stream_result_raw.xml
-backend/tests/test_results/
-
-# Database files (SQLite)
-*.db
-*.sqlite
-*.sqlite3
-
-# Legacy/Old
-server/
-client/
-_legacy_mvp/
+# Project specific
 word/
+_legacy_mvp/
+.agent/
+backend/speakingtest.db
+backend/uvicorn.log

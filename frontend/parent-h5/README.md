@@ -1,119 +1,68 @@
 # Parent H5 (家长端)
 
-微信 H5 应用，家长通过老师分享的链接查看孩子的测评报告。
+微信 H5 应用，家长通过老师分享的链接查看孩子的 AI 口语测评报告。
 
-## 技术栈
+## 🌟 核心功能
 
-- **Framework**: React 19
+- **多维雷达图**：展示流利度、发音、自信度、词汇、整句输出五维能力。
+- **Part 1 详情**：单词发音红绿灯展示（Perfect/Unclear/Failed）。
+- **Part 2 复盘**：查看最佳回答与待提升回答，试听录音回放。
+- **AI 建议**：基于 Qwen-Plus 生成的个性化学习建议与练习计划。
+- **IP 互动**：贯穿全程的可爱猴子 IP 动画与引导。
+
+## 🛠️ 技术栈
+
+- **Framework**: React 18
 - **UI Library**: Tailwind CSS
 - **Animation**: Framer Motion
+- **Charts**: Recharts (雷达图)
 - **Icons**: Lucide React
-- **Charts**: Recharts
 - **Build Tool**: Vite
-- **Language**: TypeScript
 
-## 项目结构
+## 🚀 快速启动
 
-```
-parent-h5/
-├── src/
-│   ├── components/          # 可复用组件
-│   │   ├── layout.tsx       # 页面布局容器
-│   │   ├── monkey.tsx       # 猴子 IP 形象组件
-│   │   ├── advice-card.tsx  # 建议卡片
-│   │   ├── audio-waveform.tsx
-│   │   ├── chat-bubble.tsx
-│   │   ├── detail-panel.tsx
-│   │   ├── dialogue-card.tsx
-│   │   ├── info-card.tsx
-│   │   └── waveform-bubble.tsx
-│   ├── pages/               # 页面组件
-│   │   ├── cover.tsx        # 封面页
-│   │   ├── radar.tsx        # 雷达图页
-│   │   ├── vocab.tsx        # 词汇能量站页
-│   │   ├── dialogue.tsx     # 对话能力表现页
-│   │   ├── roadmap.tsx      # 课程配比建议页
-│   │   └── badge.tsx        # 徽章页
-│   ├── types.ts             # TypeScript 类型定义
-│   ├── App.tsx              # 主应用组件
-│   ├── main.tsx             # 应用入口
-│   └── index.css            # 全局样式
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
-└── README.md
-```
-
-## 页面列表
-
-1. **封面页 (Cover)** - 报告封面，显示学生信息和总体评分
-2. **雷达图页 (Radar)** - 多维度能力雷达图展示
-3. **词汇能量站 (Vocab)** - 词汇掌握情况可视化展示
-4. **对话能力表现 (Dialogue)** - 最佳/待提升样本对比分析
-5. **课程配比建议 (Roadmap)** - 学习计划和课程建议
-6. **徽章页 (Badge)** - 成就展示和分享
-
-## 功能特性
-
-- ✨ 流畅的页面切换动画（支持滑动手势）
-- 🎨 Klein Blue + Baby Yellow 配色方案
-- 📱 移动端优先的响应式设计
-- 🐵 可爱的猴子 IP 形象贯穿全程
-- 📊 丰富的数据可视化展示
-- 🎭 精美的动画效果和交互体验
-
-## 启动项目
-
-### 安装依赖
+### 1. 安装依赖
 
 ```bash
+cd frontend/parent-h5
 npm install
 ```
 
-### 开发模式
+### 2. 启动开发服务器
 
 ```bash
 npm run dev
 ```
 
-访问 http://localhost:3000
+访问地址: `http://localhost:3000`
 
-### 构建生产版本
+### 3. 构建
 
 ```bash
 npm run build
 ```
 
-### 预览生产构建
+## 📂 项目结构
 
-```bash
-npm run preview
+```
+parent-h5/
+├── src/
+│   ├── components/      # 业务组件 (RadarChart, AudioPlayer, etc.)
+│   ├── pages/           # 页面 (Cover, Radar, Dialogue, Roadmap)
+│   ├── assets/          # 图片与静态资源
+│   └── types.ts         # 报告数据类型定义
+├── vite.config.ts       # Vite 配置
+└── tailwind.config.js   # 样式配置
 ```
 
-## 设计规范
+## 🎨 设计规范
 
-### 颜色变量
+- **主色调 (Klein Blue)**: `#002FA7` (用于强调、按钮、标题)
+- **辅助色 (Baby Yellow)**: `#FFF59D` (用于背景、高亮)
+- **字体**: 系统默认无衬线字体，强调清晰易读。
 
-- `--color-klein`: #002FA7 (Klein Blue)
-- `--color-baby`: #FFF59D (Baby Yellow)
-- `--color-baby-dark`: #FBC02D (Baby Yellow Dark)
+## 🔗 API 交互
 
-### CSS 工具类
-
-- `.bg-klein` / `.text-klein` - Klein Blue 背景/文字
-- `.bg-baby` / `.text-baby` - Baby Yellow 背景/文字
-- `.bg-babyDark` / `.text-babyDark` - Baby Yellow Dark 背景/文字
-
-## 注意事项
-
-- 页面为只读，无需登录
-- 需要处理 Token 过期/撤回的错误提示
-- 所有组件使用 kebab-case 命名规范
-- 路径别名 `@/` 指向 `src/` 目录
-
-## 开发规范
-
-- 组件文件使用 kebab-case 命名（如 `audio-waveform.tsx`）
-- 组件名使用 PascalCase（如 `AudioWaveform`）
-- 使用 TypeScript 进行类型检查
-- 遵循 React Hooks 最佳实践
+家长端主要是一个只读应用，核心接口为：
+`GET /api/v1/reports/shared/{token}`
+通过 Token 获取完整的 JSON 报告数据进行渲染。
