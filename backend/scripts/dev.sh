@@ -13,6 +13,7 @@ export PATH="/opt/homebrew/opt/erlang/bin:$PATH"
 # 存储子进程 PID
 WORKER1_PID=""
 WORKER2_PID=""
+WORKER3_PID=""
 
 # RabbitMQ 控制函数
 start_rabbitmq() {
@@ -51,6 +52,11 @@ start_workers() {
     python scripts/part2_worker.py &
     WORKER2_PID=$!
     echo "   ✅ Part 2 Worker PID: $WORKER2_PID"
+    
+    echo "👷 启动 Interpretation Worker..."
+    python scripts/interpretation_worker.py &
+    WORKER3_PID=$!
+    echo "   ✅ Interpretation Worker PID: $WORKER3_PID"
 }
 
 stop_workers() {
@@ -61,6 +67,10 @@ stop_workers() {
     if [ -n "$WORKER2_PID" ]; then
         echo "👷 关闭 Part 2 Worker..."
         kill $WORKER2_PID 2>/dev/null || true
+    fi
+    if [ -n "$WORKER3_PID" ]; then
+        echo "👷 关闭 Interpretation Worker..."
+        kill $WORKER3_PID 2>/dev/null || true
     fi
     echo "   ✅ Workers 已关闭"
 }

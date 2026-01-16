@@ -1,9 +1,19 @@
+#!/usr/bin/env python3
 """
 批量更新 Part 1 单词的中文翻译
+
+注意：此脚本已归档，翻译数据已导入数据库。
+如需再次运行，请确保 DATABASE_URL 环境变量已设置。
 """
 import asyncio
+import sys
+from pathlib import Path
+
+# Add backend directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from src.infrastructure.database import engine
 
 # 单词翻译映射表
 TRANSLATIONS = {
@@ -226,10 +236,7 @@ TRANSLATIONS = {
 
 
 async def main():
-    engine = create_async_engine(
-        'postgresql+asyncpg://root:dJ70A8s5vV6ZktrIhm129c3bFeTQfN4C@sha1.clusters.zeabur.com:30530/zeabur'
-    )
-    
+    """批量更新翻译"""
     async with engine.begin() as conn:
         updated = 0
         for word, translation in TRANSLATIONS.items():
