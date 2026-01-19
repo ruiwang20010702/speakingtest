@@ -4,6 +4,7 @@ Handles question bank CRUD operations for different levels and units.
 """
 from typing import List, Optional
 import asyncio
+import time
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
@@ -189,8 +190,10 @@ async def create_question(
     question = QuestionModel(
         level=request.level,
         unit=request.unit,
+        part=request.part,
         question_no=request.question_no,
         question=request.question,
+        translation=request.translation,
         reference_answer=request.reference_answer
     )
     db.add(question)
@@ -222,6 +225,8 @@ async def create_question(
         question_no=question.question_no,
         part=question.part,
         question=question.question,
+        translation=question.translation,
+        image_url=question.image_url,
         reference_answer=question.reference_answer,
         is_active=question.is_active
     )
@@ -322,6 +327,10 @@ async def update_question(
     
     if request.question is not None:
         question.question = request.question
+    if request.translation is not None:
+        question.translation = request.translation
+    if request.image_url is not None:
+        question.image_url = request.image_url
     if request.reference_answer is not None:
         question.reference_answer = request.reference_answer
     if request.is_active is not None:
@@ -347,6 +356,8 @@ async def update_question(
         question_no=question.question_no,
         part=question.part,
         question=question.question,
+        translation=question.translation,
+        image_url=question.image_url,
         reference_answer=question.reference_answer,
         is_active=question.is_active
     )
@@ -472,8 +483,9 @@ async def upload_question_image(
                 detail="Failed to upload image to OSS"
             )
         
-        # Generate URL
-        image_url = f"https://{oss_client.bucket_name}.{oss_client.endpoint.replace('https://', '')}/{oss_key}"
+        # Generate URL with timestamp to avoid browser cache
+        timestamp = int(time.time())
+        image_url = f"https://{oss_client.bucket_name}.{oss_client.endpoint.replace('https://', '')}/{oss_key}?v={timestamp}"
         
         # Update database
         question.image_url = image_url
