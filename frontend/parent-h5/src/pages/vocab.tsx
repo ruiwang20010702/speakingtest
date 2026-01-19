@@ -429,7 +429,7 @@ export const VocabPage: React.FC = () => {
           transition={{ delay: 0.5 }}
           className="relative flex-shrink-0"
         >
-          <Monkey variant="glasses" layoutId="monkey" className="w-16 h-16 drop-shadow-2xl" />
+          <Monkey variant="glasses" layoutId="monkey" className="w-16 h-16 drop-shadow-2xl" imageSrc="/3.gif" />
         </motion.div>
       </div>
 

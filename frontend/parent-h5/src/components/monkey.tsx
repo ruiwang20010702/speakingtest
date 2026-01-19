@@ -5,10 +5,20 @@ interface MonkeyProps {
   variant: 'default' | 'glasses' | 'winner';
   className?: string;
   layoutId?: string;
+  imageSrc?: string; // 可选的图片路径，如果提供则使用图片而不是 SVG
 }
 
-export const Monkey: React.FC<MonkeyProps> = ({ variant, className, layoutId = "monkey" }) => {
-  const MonkeyContent = (
+export const Monkey: React.FC<MonkeyProps> = ({ variant, className, layoutId = "monkey", imageSrc }) => {
+  // 如果提供了图片路径，使用图片
+  const MonkeyContent = imageSrc ? (
+    <div className={`relative ${className || 'w-48 h-48'}`}>
+      <img 
+        src={imageSrc} 
+        alt="Monkey" 
+        className="w-full h-full object-contain drop-shadow-lg"
+      />
+    </div>
+  ) : (
     <div className={`relative w-48 h-48 ${className}`}>
       <svg viewBox="0 0 200 200" className="w-full h-full drop-shadow-lg">
         {/* Head */}

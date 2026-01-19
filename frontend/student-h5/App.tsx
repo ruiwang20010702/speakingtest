@@ -8,9 +8,25 @@ import { Level, TestResult } from './types';
 
 // Wrapper for TestPage to handle props from localStorage/API
 const TestContainer: React.FC = () => {
+  // 如果没有用户信息，设置默认值
+  if (!localStorage.getItem('studentName')) {
+    localStorage.setItem('studentName', 'Student');
+  }
+  if (!localStorage.getItem('level')) {
+    localStorage.setItem('level', 'L0');
+  }
+  if (!localStorage.getItem('unit')) {
+    localStorage.setItem('unit', 'Full Level');
+  }
+  if (!localStorage.getItem('testId')) {
+    const tempTestId = Date.now();
+    localStorage.setItem('testId', tempTestId.toString());
+    console.log('开发模式：使用临时 testId:', tempTestId);
+  }
+  
   const studentName = localStorage.getItem('studentName') || 'Student';
-  const level = (localStorage.getItem('level') as Level) || 'L0'; // Default to L0 for testing
-  const unit = localStorage.getItem('unit') || 'All'; // Default to All for L0
+  const level = (localStorage.getItem('level') as Level) || 'L0';
+  const unit = localStorage.getItem('unit') || 'Full Level';
   const [submitting, setSubmitting] = React.useState(false);
 
   // 存储 Part 1 评分 Promise，以便在 Part 2 完成后 await
@@ -96,10 +112,10 @@ const TestContainer: React.FC = () => {
 
   if (submitting) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-white p-6">
-        <div className="w-16 h-16 border-4 border-[#1CB0F6] border-t-transparent rounded-full animate-spin mb-6"></div>
-        <p className="text-[#1E293B] font-black text-xl mb-2">正在生成报告...</p>
-        <p className="text-[#1E293B]/60 font-bold text-sm text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#002FA7] p-6">
+        <div className="w-16 h-16 border-4 border-[#FFF59D] border-t-transparent rounded-full animate-spin mb-6"></div>
+        <p className="text-white font-black text-xl mb-2">正在生成报告...</p>
+        <p className="text-white/80 font-bold text-sm text-center">
           AI 正在分析你的发音和回答<br />
           请稍等片刻 ✨
         </p>
@@ -133,8 +149,8 @@ const App: React.FC = () => {
           {/* Result Route */}
           <Route path="/result" element={<ResultPage onRestart={() => window.location.href = '/'} part1Score={20} />} />
 
-          {/* Fallback for dev/demo */}
-          <Route path="/" element={<HomePage onStart={() => { }} />} />
+          {/* Fallback for dev/demo - 直接跳转到测试页面 */}
+          <Route path="/" element={<Navigate to="/test" replace />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

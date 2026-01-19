@@ -42,8 +42,8 @@ const SpeechBubble = ({ text, onPlayAudio, isRecording, isAudioPlaying, onAudioS
             onClick={handlePlay}
             disabled={isAudioPlaying || isRecording}
             className={`w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95 flex-shrink-0 ${isAudioPlaying || isRecording
-              ? 'bg-[#46DDF0]/30 cursor-not-allowed'
-              : 'bg-gradient-to-r from-[#46DDF0] to-[#1CB0F6] hover:from-[#46DDF0]/90 hover:to-[#1CB0F6]/90 shadow-md'
+              ? 'bg-[#FFF59D]/30 cursor-not-allowed'
+              : 'bg-gradient-to-r from-[#FFF59D] to-[#FBC02D] hover:from-[#FFF59D]/90 hover:to-[#FBC02D]/90 shadow-md'
               }`}
             title={isRecording ? "录音中，无法播放" : "再听一次"}
           >
@@ -69,7 +69,7 @@ const CircularRecordButton = ({
   isRecording?: boolean
 }) => {
   const styles = {
-    blue: "bg-[#1CB0F6] border-[#1899D6] text-white",
+    blue: "bg-[#FFF59D] border-[#FBC02D] text-[#002FA7]",
     red: "bg-[#FF4B4B] border-[#D32F2F] text-white",
     green: "bg-[#58CC02] border-[#419D01] text-white",
     yellow: "bg-[#FFD200] border-[#E5A000] text-white"
@@ -91,8 +91,8 @@ const CircularRecordButton = ({
 
 const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, onComplete, onPart1Complete }) => {
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [currentPart, setCurrentPart] = useState(1);
+  const [currentIndex, setCurrentIndex] = useState(0); // 从 Part 1 开始
+  const [currentPart, setCurrentPart] = useState(1); // 从 Part 1 开始
   const [audios, setAudios] = useState<Blob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showTransition, setShowTransition] = useState(false);
@@ -117,7 +117,15 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
       setQuestions(q);
       } catch (error: any) {
         console.error('Failed to load questions:', error);
-        setLoadError(error.response?.data?.detail || '加载题目失败，请检查网络连接');
+        // 如果 getQuestions 已经自动切换到模拟数据，这里不应该有错误
+        // 但如果还是失败了，显示错误信息
+        if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+          setLoadError('后端服务未启动。提示：已在控制台自动切换到模拟数据模式，刷新页面即可使用');
+        } else if (error.response?.status === 500) {
+          setLoadError('后端服务错误。提示：已在控制台自动切换到模拟数据模式，刷新页面即可使用');
+        } else {
+          setLoadError(error.response?.data?.detail || '加载题目失败，请检查网络连接');
+        }
       } finally {
       setIsLoading(false);
       }
@@ -274,26 +282,34 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
     }
   }, [currentIndex, currentPart, questions.length, isLoading]);
 
-  if (isLoading) return <div className="h-screen flex items-center justify-center font-black text-[#1CB0F6]">加载中...</div>;
+  if (isLoading) return <div className="h-screen flex items-center justify-center font-black text-[#FFF59D] bg-[#002FA7]">加载中...</div>;
 
   if (loadError) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-red-500 text-xl font-bold mb-4">😞 加载失败</div>
-        <div className="text-gray-600 mb-6">{loadError}</div>
-        <button
-          onClick={() => window.location.href = '/'}
-          className="px-6 py-3 bg-[#1CB0F6] text-white rounded-xl font-bold"
-        >
-          返回首页
-        </button>
+      <div className="h-screen flex flex-col items-center justify-center p-6 text-center bg-[#002FA7]">
+        <div className="text-red-400 text-xl font-bold mb-4">😞 加载失败</div>
+        <div className="text-white/80 mb-6 max-w-md">{loadError}</div>
+        <div className="flex gap-3">
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-[#FFF59D] text-[#002FA7] rounded-xl font-bold"
+          >
+            重试
+          </button>
+          <button
+            onClick={() => window.location.href = '/'}
+            className="px-6 py-3 bg-white/20 text-white rounded-xl font-bold border border-white/30"
+          >
+            返回首页
+          </button>
+        </div>
       </div>
     );
   }
 
   if (showTransition) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-between p-10 pt-12 animate-in fade-in duration-700 overflow-hidden relative bg-white">
+      <div className="h-screen w-full flex flex-col items-center justify-between p-10 pt-12 animate-in fade-in duration-700 overflow-hidden relative bg-[#002FA7]">
 
         <div className="flex-1 flex flex-col items-center justify-center space-y-10 text-center z-10 w-full max-sm:max-w-sm">
           <div className="relative w-full h-64 flex items-center justify-center mb-6">
@@ -306,7 +322,7 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
 
           <div className="space-y-6">
             <div className="space-y-3">
-              <h1 className="text-5xl font-black tracking-tight text-[#1E293B] drop-shadow-sm">第一部分完成!</h1>
+              <h1 className="text-5xl font-black tracking-tight text-white drop-shadow-sm">第一部分完成!</h1>
               <div className="flex justify-center gap-2">
                 {[...Array(3)].map((_, i) => <Star key={i} className="w-8 h-8 text-[#FFD200] fill-current animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />)}
               </div>
@@ -314,8 +330,8 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
 
             <div className="space-y-3 px-4">
               <p className="text-3xl font-black text-[#58CC02]">宝贝，你真棒！</p>
-              <p className="text-[#1E293B]/60 font-black text-lg leading-relaxed">
-                准备好开始<span className="text-[#1CB0F6]">对话环节</span>了吗？
+              <p className="text-white/80 font-black text-lg leading-relaxed">
+                准备好开始<span className="text-[#FFF59D]">对话环节</span>了吗？
               </p>
             </div>
           </div>
@@ -328,7 +344,7 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
             setCurrentIndex(20);
             setShowPart2Guide(true); // 重置指引显示
           }}
-          className="w-full max-w-sm py-6 bg-[#1CB0F6] text-white font-black text-2xl rounded-[35px] border-b-8 border-[#1899D6] active:translate-y-2 active:border-b-0 transition-all uppercase shadow-[0_20px_40px_rgba(28,176,246,0.3)] z-10 mb-10 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-3 group"
+          className="w-full max-w-sm py-6 bg-[#FFF59D] text-[#002FA7] font-black text-2xl rounded-[35px] border-b-8 border-[#FBC02D] active:translate-y-2 active:border-b-0 transition-all uppercase shadow-[0_20px_40px_rgba(255,245,157,0.3)] z-10 mb-10 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-3 group"
         >
           开始对话环节 <ChevronRight className="w-8 h-8 group-hover:translate-x-1 transition-transform" strokeWidth={3} />
         </button>
@@ -353,7 +369,7 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center p-4 sm:p-6 pt-6 sm:pt-10 bg-white">
+    <div className="min-h-screen w-full flex flex-col items-center p-4 sm:p-6 pt-6 sm:pt-10 bg-[#002FA7]">
       <div className="w-full max-w-md mb-8 sm:mb-12 flex items-center gap-3 sm:gap-4">
         <button
           onClick={handleExitClick}
@@ -479,6 +495,14 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
                   isAudioPlaying={isAudioPlaying}
                   onAudioStateChange={(playing) => setIsAudioPlaying(playing)}
                 />
+                {/* 对话环节下方的猴子 */}
+                <div className="mt-4 flex items-center justify-center">
+                  <img 
+                    src="/Dynamic materials/3.gif" 
+                    alt="Monkey" 
+                    className="w-64 h-64 sm:w-80 sm:h-80 object-contain drop-shadow-lg"
+                  />
+                </div>
               </div>
             </div>
           ) : (

@@ -6,7 +6,7 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
-    <div className="relative w-full h-screen bg-klein overflow-hidden text-white selection:bg-baby selection:text-klein touch-none">
+    <div className="relative w-full h-screen bg-klein overflow-hidden text-white selection:bg-baby selection:text-klein">
       {/* Noise Texture Overlay */}
       <div className="bg-noise absolute inset-0 z-50 pointer-events-none" />
 

@@ -13,14 +13,17 @@ import { ReportProvider } from '@/context/ReportContext';
 const TOTAL_PAGES = 6;
 
 // Calculate swipe power to determine if a swipe occurred
-const swipeConfidenceThreshold = 10000;
+const swipeConfidenceThreshold = 5000;
 const swipePower = (offset: number, velocity: number) => {
-  return Math.abs(offset) * velocity;
+  // 保持方向信息：offset 和 velocity 的符号决定滑动方向
+  return offset * Math.abs(velocity);
 };
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<PageState>(PageState.Cover);
   const [direction, setDirection] = useState(0);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
   const handleNext = () => {
     if (currentPage < TOTAL_PAGES - 1) {
@@ -33,6 +36,33 @@ const App: React.FC = () => {
     if (currentPage > 0) {
       setDirection(-1);
       setCurrentPage((prev) => prev - 1);
+    }
+  };
+
+  // 触摸事件处理（备用方案）
+  const minSwipeDistance = 50;
+  
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    if (isLeftSwipe) {
+      handleNext();
+    }
+    if (isRightSwipe) {
+      handlePrev();
     }
   };
 
@@ -89,19 +119,29 @@ const App: React.FC = () => {
               opacity: { duration: 0.2 }
             }}
             className="absolute w-full h-full cursor-grab active:cursor-grabbing bg-klein"
-            // Enable Dragging for Swipe
+            // Enable Dragging for Swipe (鼠标拖拽)
             drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={1}
+            dragConstraints={{ left: -200, right: 200 }}
+            dragElastic={0.1}
+            dragMomentum={false}
             onDragEnd={(e, { offset, velocity }) => {
-              const swipe = swipePower(offset.x, velocity.x);
-
-              if (swipe < -swipeConfidenceThreshold) {
+              // 简化判断逻辑：主要看拖拽距离和速度
+              const dragDistance = Math.abs(offset.x);
+              const dragVelocity = Math.abs(velocity.x);
+              
+              // 向左滑动（offset.x < 0）：下一页
+              if (offset.x < -80 || (offset.x < -50 && dragVelocity > 0.5)) {
                 handleNext();
-              } else if (swipe > swipeConfidenceThreshold) {
+              } 
+              // 向右滑动（offset.x > 0）：上一页
+              else if (offset.x > 80 || (offset.x > 50 && dragVelocity > 0.5)) {
                 handlePrev();
               }
             }}
+            // 触摸事件处理（移动端备用方案）
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
           >
             {renderPage()}
           </motion.div>

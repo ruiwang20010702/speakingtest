@@ -7,20 +7,11 @@ interface ProgressBarProps {
 }
 
 const MonkeyCharacter = () => (
-  <svg width="32" height="32" viewBox="0 0 100 100" className="drop-shadow-sm">
-    <circle cx="50" cy="50" r="45" fill="#8B4513" />
-    <circle cx="50" cy="55" r="35" fill="#FFE4B5" />
-    <circle cx="15" cy="45" r="12" fill="#8B4513" />
-    <circle cx="85" cy="45" r="12" fill="#8B4513" />
-    <circle cx="15" cy="45" r="7" fill="#FFE4B5" />
-    <circle cx="85" cy="45" r="7" fill="#FFE4B5" />
-    <circle cx="38" cy="45" r="4" fill="#000" />
-    <circle cx="62" cy="45" r="4" fill="#000" />
-    <path d="M 35 65 Q 50 75 65 65" stroke="#000" strokeWidth="2" fill="none" strokeLinecap="round" />
-    <path d="M 15 45 Q 15 10 50 10 Q 85 10 85 45" stroke="#1CB0F6" strokeWidth="8" fill="none" />
-    <rect x="5" y="40" width="15" height="20" rx="5" fill="#FFD200" />
-    <rect x="80" y="40" width="15" height="20" rx="5" fill="#FFD200" />
-  </svg>
+  <img 
+    src="/Dynamic materials/progress bar.gif" 
+    alt="Monkey" 
+    className="w-20 h-20 object-contain drop-shadow-sm"
+  />
 );
 
 const ProgressBar: React.FC<ProgressBarProps> = ({ current, total }) => {

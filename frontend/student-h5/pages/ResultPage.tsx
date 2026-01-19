@@ -35,18 +35,18 @@ const ResultPage: React.FC<ResultPageProps> = ({ onRestart }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <Loader2 className="w-10 h-10 text-[#1CB0F6] animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-[#002FA7]">
+        <Loader2 className="w-10 h-10 text-[#FFF59D] animate-spin" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-white p-6 text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#002FA7] p-6 text-center">
         <AlertCircle className="w-16 h-16 text-red-400 mb-4" />
-        <p className="text-[#1E293B] mb-6">{error}</p>
-        <button onClick={onRestart} className="px-6 py-2 bg-[#1CB0F6] text-white rounded-lg font-bold">
+        <p className="text-white mb-6">{error}</p>
+        <button onClick={onRestart} className="px-6 py-2 bg-[#FFF59D] text-[#002FA7] rounded-lg font-bold">
           返回首页
         </button>
       </div>
@@ -54,7 +54,7 @@ const ResultPage: React.FC<ResultPageProps> = ({ onRestart }) => {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-6 overflow-hidden bg-white">
+    <div className="min-h-screen w-full flex items-center justify-center p-6 overflow-hidden bg-[#002FA7]">
       <div className="w-full max-w-md flex flex-col items-center relative py-8">
 
         {/* Success Icon */}
@@ -63,11 +63,11 @@ const ResultPage: React.FC<ResultPageProps> = ({ onRestart }) => {
         </div>
 
         {/* Title */}
-        <h1 className="text-3xl font-black text-[#1E293B] mb-3 tracking-tight animate-pop delay-1">
+        <h1 className="text-3xl font-black text-white mb-3 tracking-tight animate-pop delay-1">
           测评完成！
         </h1>
 
-        <p className="text-[#1E293B]/60 font-bold text-base mb-10 animate-pop delay-1">
+        <p className="text-white/80 font-bold text-base mb-10 animate-pop delay-1">
           你真棒，已完成本次口语测评
         </p>
 
@@ -76,10 +76,10 @@ const ResultPage: React.FC<ResultPageProps> = ({ onRestart }) => {
           <div className="w-full bg-gradient-to-br from-[#FFD200]/10 to-[#FFD200]/5 rounded-[24px] p-6 mb-4 border-2 border-[#FFD200]/30 animate-pop delay-2">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-bold text-[#1E293B]/60 mb-1">词汇朗读得分</p>
+                <p className="text-sm font-bold text-white/80 mb-1">词汇朗读得分</p>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-5xl font-black text-[#1E293B]">{report.part1_score}</span>
-                  <span className="text-2xl font-black text-[#1E293B]/40">/100</span>
+                  <span className="text-5xl font-black text-white">{report.part1_score}</span>
+                  <span className="text-2xl font-black text-white/60">/100</span>
                 </div>
               </div>
               <div className="w-16 h-16 bg-[#FFD200] rounded-full flex items-center justify-center shadow-lg">
@@ -91,17 +91,17 @@ const ResultPage: React.FC<ResultPageProps> = ({ onRestart }) => {
 
         {/* AI Suggestion Card (Part 2) */}
         {report?.part2_suggestions && report.part2_suggestions.length > 0 && (
-          <div className="w-full bg-indigo-50 rounded-[24px] p-6 mb-8 border-2 border-indigo-100 animate-pop delay-3">
+          <div className="w-full bg-[#FFF59D]/10 rounded-[24px] p-6 mb-8 border-2 border-[#FFF59D]/30 animate-pop delay-3">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center">
-                <Star className="w-4 h-4 text-white fill-current" />
+              <div className="w-8 h-8 bg-[#FFF59D] rounded-full flex items-center justify-center">
+                <Star className="w-4 h-4 text-[#002FA7] fill-current" />
               </div>
-              <h3 className="font-black text-[#1E293B]">AI 学习建议</h3>
+              <h3 className="font-black text-white">AI 学习建议</h3>
             </div>
             <ul className="space-y-2">
               {report.part2_suggestions.map((suggestion, index) => (
-                <li key={index} className="text-sm text-[#1E293B]/80 leading-relaxed flex items-start gap-2">
-                  <span className="text-indigo-500 font-bold">•</span>
+                <li key={index} className="text-sm text-white/90 leading-relaxed flex items-start gap-2">
+                  <span className="text-[#FFF59D] font-bold">•</span>
                   {suggestion}
                 </li>
               ))}
@@ -110,16 +110,16 @@ const ResultPage: React.FC<ResultPageProps> = ({ onRestart }) => {
         )}
 
         {/* Guidance Card */}
-        <div className="w-full bg-[#1CB0F6]/5 rounded-[24px] p-6 mb-10 border-2 border-[#1CB0F6]/20 animate-pop delay-3">
+        <div className="w-full bg-[#FFF59D]/10 rounded-[24px] p-6 mb-10 border-2 border-[#FFF59D]/30 animate-pop delay-3">
           <div className="flex items-start gap-4">
-            <div className="w-12 h-12 bg-[#1CB0F6] rounded-full flex items-center justify-center flex-shrink-0">
-              <MessageCircle className="w-6 h-6 text-white" />
+            <div className="w-12 h-12 bg-[#FFF59D] rounded-full flex items-center justify-center flex-shrink-0">
+              <MessageCircle className="w-6 h-6 text-[#002FA7]" />
             </div>
             <div>
-              <p className="font-black text-[#1E293B] text-base mb-2">完整报告已生成</p>
-              <p className="text-sm text-[#1E293B]/60 leading-relaxed">
+              <p className="font-black text-white text-base mb-2">完整报告已生成</p>
+              <p className="text-sm text-white/80 leading-relaxed">
                 包含总分、星级评定与学习建议。<br />
-                请联系<span className="font-bold text-[#1CB0F6]">班主任老师</span>获取详细报告。
+                请联系<span className="font-bold text-[#FFF59D]">班主任老师</span>获取详细报告。
               </p>
             </div>
           </div>
@@ -128,7 +128,7 @@ const ResultPage: React.FC<ResultPageProps> = ({ onRestart }) => {
         {/* Action Button */}
         <button
           onClick={onRestart}
-          className="w-full py-5 bg-[#1CB0F6] text-white font-black text-xl rounded-[20px] active:scale-95 transition-all shadow-[0_6px_0_#1899D6] active:shadow-none active:translate-y-[6px] animate-pop delay-4"
+          className="w-full py-5 bg-[#FFF59D] text-[#002FA7] font-black text-xl rounded-[20px] active:scale-95 transition-all shadow-[0_6px_0_#FBC02D] active:shadow-none active:translate-y-[6px] animate-pop delay-4"
         >
           完成
         </button>
