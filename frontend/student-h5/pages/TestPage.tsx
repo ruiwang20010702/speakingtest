@@ -99,6 +99,7 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
   const [isRecording, setIsRecording] = useState(false);
   const [showPart2Guide, setShowPart2Guide] = useState(true);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [showStartGuide, setShowStartGuide] = useState(true); // 开始前的引导页
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -284,6 +285,113 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
 
   if (isLoading) return <div className="h-screen flex items-center justify-center font-black text-[#FFF59D] bg-[#002FA7]">加载中...</div>;
 
+  // 测试开始前的引导页面
+  if (showStartGuide) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-between p-6 pt-12 pb-10 bg-[#002FA7] animate-in fade-in duration-500">
+        {/* 顶部标题 */}
+        <div className="text-center space-y-3">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Sparkles className="w-6 h-6 text-[#FFF59D]" />
+            <span className="text-[#FFF59D] font-black text-sm uppercase tracking-widest">Speaking Test</span>
+            <Sparkles className="w-6 h-6 text-[#FFF59D]" />
+          </div>
+          <h1 className="text-3xl font-black text-white">
+            Hi，<span className="text-[#FFF59D]">{studentName}</span>！
+          </h1>
+          <p className="text-white/70 font-bold text-sm">准备好开始口语测评了吗？</p>
+        </div>
+
+        {/* 中间引导卡片 */}
+        <div className="w-full max-w-sm space-y-4 my-6 overflow-y-auto max-h-[60vh]">
+          {/* Part 1 操作说明 */}
+          <div className="bg-gradient-to-br from-[#FFD200]/20 to-[#FFD200]/5 backdrop-blur-sm rounded-[24px] p-4 border border-[#FFD200]/30">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-[#FFD200] rounded-full flex items-center justify-center">
+                <span className="text-xl">📖</span>
+              </div>
+              <div>
+                <h3 className="font-black text-white text-base">Part 1 · 核心词汇</h3>
+                <p className="text-white/60 text-xs font-bold">看图朗读单词</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 bg-white/10 rounded-[12px] p-3">
+                <div className="w-6 h-6 bg-[#FFD200] rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-[#002FA7] font-black text-xs">1</span>
+                </div>
+                <p className="text-white text-sm font-bold">点击<span className="text-[#FFD200]">黄色麦克风</span>开始录音</p>
+              </div>
+              <div className="flex items-center gap-3 bg-white/10 rounded-[12px] p-3">
+                <div className="w-6 h-6 bg-[#FFD200] rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-[#002FA7] font-black text-xs">2</span>
+                </div>
+                <p className="text-white text-sm font-bold">看图片，<span className="text-[#FFD200]">大声朗读</span>单词</p>
+              </div>
+              <div className="flex items-center gap-3 bg-white/10 rounded-[12px] p-3">
+                <div className="w-6 h-6 bg-[#FFD200] rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-[#002FA7] font-black text-xs">3</span>
+                </div>
+                <p className="text-white text-sm font-bold"><span className="text-[#FFD200]">左右滑动</span>查看下一个单词</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Part 2 操作说明 */}
+          <div className="bg-gradient-to-br from-[#1CB0F6]/20 to-[#1CB0F6]/5 backdrop-blur-sm rounded-[24px] p-4 border border-[#1CB0F6]/30">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-[#1CB0F6] rounded-full flex items-center justify-center">
+                <span className="text-xl">💬</span>
+              </div>
+              <div>
+                <h3 className="font-black text-white text-base">Part 2 · 对话问答</h3>
+                <p className="text-white/60 text-xs font-bold">听问题，用英语回答</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 bg-white/10 rounded-[12px] p-3">
+                <div className="w-6 h-6 bg-[#1CB0F6] rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-black text-xs">1</span>
+                </div>
+                <p className="text-white text-sm font-bold">问题<span className="text-[#1CB0F6]">自动播放</span>，仔细听</p>
+              </div>
+              <div className="flex items-center gap-3 bg-white/10 rounded-[12px] p-3">
+                <div className="w-6 h-6 bg-[#1CB0F6] rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-black text-xs">2</span>
+                </div>
+                <p className="text-white text-sm font-bold">点击<span className="text-[#1CB0F6]">蓝色麦克风</span>开始录音</p>
+              </div>
+              <div className="flex items-center gap-3 bg-white/10 rounded-[12px] p-3">
+                <div className="w-6 h-6 bg-[#1CB0F6] rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-black text-xs">3</span>
+                </div>
+                <p className="text-white text-sm font-bold"><span className="text-[#1CB0F6]">用英语回答</span>老师的问题</p>
+              </div>
+            </div>
+          </div>
+
+          {/* 提示 */}
+          <div className="bg-white/5 rounded-[16px] p-3 border border-white/10">
+            <p className="text-xs font-bold text-white/70 text-center">
+              💡 提示：建议使用耳机，避免录制到播放的声音
+            </p>
+          </div>
+        </div>
+
+        {/* 底部按钮 */}
+        <button
+          onClick={() => setShowStartGuide(false)}
+          className="w-full max-w-sm py-5 bg-[#FFF59D] text-[#002FA7] font-black text-xl rounded-[28px] border-b-[6px] border-[#FBC02D] active:translate-y-[6px] active:border-b-0 transition-all shadow-xl flex items-center justify-center gap-2"
+        >
+          <CheckCircle2 className="w-6 h-6" />
+          我知道了，开始答题
+        </button>
+      </div>
+    );
+  }
+
   if (loadError) {
     return (
       <div className="h-screen flex flex-col items-center justify-center p-6 text-center bg-[#002FA7]">
@@ -419,69 +527,22 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
           {/* 对话环节现在也有左右翻页箭头 */}
           {isPartDialogue ? (
             <div className="flex flex-col items-center w-full relative">
-              {/* Part 2 指引提示 */}
-              {showPart2Guide && currentIndex === startIdx && (
-                <div className="mb-6 p-5 bg-gradient-to-r from-[#1CB0F6]/10 to-[#58CC02]/10 rounded-[24px] border-2 border-[#1CB0F6]/40 max-w-sm animate-in fade-in slide-in-from-top-4 shadow-lg">
-                  <div className="flex flex-col gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-[#1CB0F6] rounded-full flex items-center justify-center flex-shrink-0">
-                        <Info className="w-6 h-6 text-white" />
-                      </div>
-                      <h4 className="font-black text-[#1E293B] text-base">📚 操作步骤</h4>
+                      {/* Part 2 简短提示 - 自动消失 */}
+                      {showPart2Guide && currentIndex === startIdx && (
+                <div className="mb-4 p-3 bg-[#1CB0F6]/20 rounded-[16px] border border-[#1CB0F6]/40 max-w-sm animate-in fade-in slide-in-from-top-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-[#1CB0F6] rounded-full flex items-center justify-center flex-shrink-0">
+                      <Play className="w-4 h-4 text-white" fill="currentColor" />
                     </div>
-
-                    <div className="space-y-3">
-                      <div className="flex items-start gap-3 bg-white/60 rounded-[16px] p-3 border border-[#1CB0F6]/20">
-                        <div className="w-6 h-6 bg-[#1CB0F6] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-white font-black text-xs">1</span>
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Play className="w-4 h-4 text-[#1CB0F6]" fill="currentColor" />
-                            <span className="font-black text-[#1E293B] text-sm">问题会自动播放</span>
-                          </div>
-                          <p className="text-xs font-bold text-[#1E293B]/60">仔细听清楚老师问什么</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start gap-3 bg-white/60 rounded-[16px] p-3 border border-[#1CB0F6]/20">
-                        <div className="w-6 h-6 bg-[#1CB0F6] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-white font-black text-xs">2</span>
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Mic className="w-4 h-4 text-[#1CB0F6]" />
-                            <span className="font-black text-[#1E293B] text-sm">点击蓝色麦克风</span>
-                          </div>
-                          <p className="text-xs font-bold text-[#1E293B]/60">开始录音，用英语回答</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start gap-3 bg-white/60 rounded-[16px] p-3 border border-[#1CB0F6]/20">
-                        <div className="w-6 h-6 bg-[#1CB0F6] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-white font-black text-xs">3</span>
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <ChevronRight className="w-4 h-4 text-[#1CB0F6]" />
-                            <span className="font-black text-[#1E293B] text-sm">左右滑动屏幕</span>
-                          </div>
-                          <p className="text-xs font-bold text-[#1E293B]/60">查看下一个问题（会自动播放）</p>
-                        </div>
-                      </div>
+                    <div className="flex-1">
+                      <p className="font-black text-[#1E293B] text-sm">问题即将自动播放</p>
+                      <p className="text-xs font-bold text-[#1E293B]/60">听完后点击麦克风开始回答</p>
                     </div>
-
-                    <div className="bg-[#FFD200]/20 rounded-[12px] p-3 border border-[#FFD200]/30">
-                      <p className="text-xs font-bold text-[#1E293B]/70 text-center">
-                        💡 提示：建议使用耳机，避免录制到播放的声音
-                      </p>
-                    </div>
-
                     <button
                       onClick={() => setShowPart2Guide(false)}
-                      className="w-full py-2.5 bg-[#1CB0F6] text-white font-black text-sm rounded-[16px] active:scale-95 transition-transform shadow-md"
+                      className="text-[#1CB0F6] font-black text-xs px-2 py-1 rounded hover:bg-[#1CB0F6]/10"
                     >
-                      ✓ 我知道了，开始答题
+                      知道了
                     </button>
                   </div>
                 </div>
