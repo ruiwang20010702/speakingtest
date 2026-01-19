@@ -457,14 +457,13 @@ async def get_report_override(
             "evidence": evidence
         })
     
-    # Extract suggestion from interpretation
+    # Extract suggestion from summary analysis (generated after test completion)
     original_suggestion = None
-    if test.interpretation_generated_at:
+    if test.summary_generated_at:
         original_suggestion = {
-            "highlights": json.loads(test.interpretation_highlights) if test.interpretation_highlights else [],
-            "weaknesses": json.loads(test.interpretation_weaknesses) if test.interpretation_weaknesses else [],
-            "suggestions": json.loads(test.interpretation_suggestions) if test.interpretation_suggestions else [],
-            "parent_script": test.interpretation_parent_script or ""
+            "highlights": json.loads(test.summary_highlights) if test.summary_highlights else [],
+            "weaknesses": json.loads(test.summary_weaknesses) if test.summary_weaknesses else [],
+            "suggestions": json.loads(test.summary_weekly_plan) if test.summary_weekly_plan else [],
         }
     
     original = OriginalReportData(

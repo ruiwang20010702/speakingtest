@@ -337,7 +337,6 @@ export interface SuggestionOverride {
   highlights?: string[];    // 亮点
   weaknesses?: string[];    // 短板
   suggestions?: string[];   // 建议
-  parent_script?: string;   // 家长话术
 }
 
 export interface ReportOverrideRequest {

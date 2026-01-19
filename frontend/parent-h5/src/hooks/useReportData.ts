@@ -90,12 +90,14 @@ export function useReportData(): UseReportDataResult {
     try {
       console.log('[useReportData] Fetching report for token:', token);
       const reportData = await fetchParentReport(token);
+      console.log('[useReportData] Report data fetched successfully:', reportData);
       setData(reportData);
     } catch (err) {
       console.error('[useReportData] Error fetching report:', err);
-      setError(err instanceof Error ? err.message : '加载失败');
-      // Fallback to mock data on error for better UX
-      setData(MOCK_DATA);
+      const errorMessage = err instanceof Error ? err.message : '加载失败';
+      setError(errorMessage);
+      // 不 fallback 到 mock 数据，让用户知道真实错误
+      setData(null);
     } finally {
       setIsLoading(false);
     }

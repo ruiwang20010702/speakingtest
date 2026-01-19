@@ -82,11 +82,11 @@ function getMockKey(level: Level, unit: string): string {
   return `${level}-${unit}`;
 }
 
-// 检查是否应该使用模拟数据（开发模式）
+// 检查是否应该使用模拟数据
+// 只有显式设置 USE_MOCK_DATA=true 时才使用 mock 数据
+// 开发模式下默认使用后端（通过 vite proxy 转发）
 export function shouldUseMockData(): boolean {
-  // 检查环境变量或 localStorage 标志
-  return localStorage.getItem('USE_MOCK_DATA') === 'true' || 
-         import.meta.env.DEV && !import.meta.env.VITE_API_URL;
+  return localStorage.getItem('USE_MOCK_DATA') === 'true';
 }
 
 // 获取模拟题目

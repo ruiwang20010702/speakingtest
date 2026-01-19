@@ -17,14 +17,16 @@ from src.adapters.gateways.qwen_client import QwenOmniGateway
 MAX_RETRIES = 3
 
 
-def _record_interpretation_cost(test, interpretation, attempt: int) -> None:
+def _record_interpretation_cost(test, interpretation, attempt: int, success: bool = True, error: str = None) -> None:
     """
     记录报告解读的费用到历史记录
     
     Args:
         test: TestModel 对象
-        interpretation: API 返回结果
+        interpretation: ReportInterpretation 对象
         attempt: 当前尝试次数
+        success: 是否成功
+        error: 错误信息（如果失败）
     """
     if not interpretation.usage:
         return
@@ -53,7 +55,7 @@ def _record_interpretation_cost(test, interpretation, attempt: int) -> None:
     
     attempt_record = {
         "attempt": attempt,
-        "success": interpretation.success,
+        "success": success,
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "total_tokens": usage.get("total_tokens", 0),
@@ -61,8 +63,8 @@ def _record_interpretation_cost(test, interpretation, attempt: int) -> None:
         "model": "qwen-plus",
         "timestamp": china_now().isoformat()
     }
-    if not interpretation.success and interpretation.error:
-        attempt_record["error"] = str(interpretation.error)[:200]
+    if not success and error:
+        attempt_record["error"] = str(error)[:200]
     
     current_usage["interpretation_history"].append(attempt_record)
     
@@ -78,7 +80,7 @@ def _record_interpretation_cost(test, interpretation, attempt: int) -> None:
     test.tokens_used = current_usage
     
     logger.info(
-        f"报告解读 API 调用: attempt={attempt}, success={interpretation.success}, "
+        f"报告解读 API 调用: attempt={attempt}, success={success}, "
         f"cost={cost:.4f} RMB"
     )
 
@@ -134,20 +136,10 @@ async def process_interpretation_task(task: InterpretationTask) -> bool:
             # 计算当前尝试次数（retry_count + 1）
             current_attempt = retry_count + 1
             
-            # 记录费用到历史记录（无论成功或失败，只要有 usage）
-            _record_interpretation_cost(test, interpretation, current_attempt)
-            
-            # 检查是否成功
-            if not interpretation.success:
-                logger.warning(f"报告解读生成失败: test_id={task.test_id}, error={interpretation.error}")
-                test.interpretation_retry_count = current_attempt
-                if current_attempt >= MAX_RETRIES:
-                    test.interpretation_status = "failed"
-                    logger.warning(f"报告解读达到最大重试次数: test_id={task.test_id}")
-                    await db.commit()
-                    return True  # 不再重试
-                await db.commit()
-                raise Exception(f"报告解读生成失败: {interpretation.error}")  # 触发 NACK 重试
+            # 记录费用到历史记录
+            # ReportInterpretationService.generate() 成功返回表示生成成功
+            # （内部已处理了 LLM 失败时的 fallback）
+            _record_interpretation_cost(test, interpretation, current_attempt, success=True)
             
             # 成功：保存结果
             test.interpretation_pages = interpretation.pages_to_json()

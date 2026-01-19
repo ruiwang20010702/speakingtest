@@ -39,28 +39,34 @@ const CustomTick = ({ payload, x: rawX = 0, y: rawY = 0, cx: rawCx = 0, cy: rawC
   const score = item ? Math.round(item.score) : 0;
   const isWeak = item && item.score < 60;
 
-  // Adjust position slightly to not overlap the grid
-  const yOffset = y > cy ? 25 : -25;
-  const xOffset = x > cx ? 25 : x < cx ? -25 : 0;
+  // Adjust position slightly to not overlap the grid - 减小偏移量
+  const yOffset = y > cy ? 18 : -18;
+  const xOffset = x > cx ? 18 : x < cx ? -18 : 0;
+
+  // 处理点击事件 - 移动端使用 onPointerDown
+  const handleClick = (e: React.MouseEvent | React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onClick(item || null);
+  };
 
   return (
-    <g transform={`translate(${x + xOffset},${y + yOffset})`} onClick={() => onClick(item || null)} style={{ cursor: 'pointer' }}>
-      <foreignObject x="-50" y="-35" width="100" height="70">
-        <motion.div 
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.95 }}
+    <g 
+      transform={`translate(${x + xOffset},${y + yOffset})`} 
+      onPointerDown={handleClick}
+      style={{ cursor: 'pointer', touchAction: 'manipulation' }}
+    >
+      <foreignObject x="-40" y="-30" width="80" height="60">
+        <div 
           className="flex flex-col items-center justify-center w-full h-full group"
+          style={{ touchAction: 'manipulation' }}
         >
           {/* The Badge */}
-          <div className={`flex items-center space-x-1 shadow-lg rounded-full px-2.5 py-1 border-2 transition-colors ${isWeak ? 'bg-orange-100 border-orange-500' : 'bg-white border-baby group-hover:border-white'}`}>
+          <div className={`flex items-center space-x-1 shadow-lg rounded-full px-2 py-0.5 border-2 transition-colors active:scale-95 ${isWeak ? 'bg-orange-100 border-orange-500' : 'bg-white border-baby'}`}>
             <span className={`${isWeak ? 'text-orange-600' : 'text-klein'}`}>{icon}</span>
-            <span className={`text-sm font-black ${isWeak ? 'text-orange-600' : 'text-klein'}`}>{score}</span>
+            <span className={`text-xs font-black ${isWeak ? 'text-orange-600' : 'text-klein'}`}>{score}</span>
           </div>
-          {/* The Label */}
-          <span className="text-[10px] font-bold text-white mt-1.5 drop-shadow-md whitespace-nowrap bg-klein/30 px-2 py-0.5 rounded backdrop-blur-sm group-hover:bg-baby group-hover:text-klein transition-colors">
-            {payload?.value} &gt;
-          </span>
-        </motion.div>
+        </div>
       </foreignObject>
     </g>
   );
@@ -234,7 +240,7 @@ export const RadarPage: React.FC = () => {
 
             <ResponsiveContainer width="100%" height="100%">
               {/* Domain set to 0-100 for percentage scale */}
-              <RadarChart cx="50%" cy="50%" outerRadius="65%" data={chartData} margin={{ top: 30, right: 30, bottom: 30, left: 30 }}>
+              <RadarChart cx="50%" cy="50%" outerRadius="55%" data={chartData} margin={{ top: 50, right: 50, bottom: 50, left: 50 }}>
                 <PolarGrid stroke="rgba(255,255,255,0.3)" strokeDasharray="4 4" />
                 <PolarAngleAxis 
                   dataKey="subject" 
@@ -256,25 +262,29 @@ export const RadarPage: React.FC = () => {
          </motion.div>
       </div>
 
-      {/* 4. The Monkey */}
-      <motion.div 
-        className="absolute bottom-0 right-0 z-20 flex flex-col items-end pointer-events-none"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }} 
-        transition={{ delay: 0.5 }}
+      {/* 4. The Monkey - 固定在右下角 */}
+      <div 
+        className="absolute z-20 pointer-events-none"
+        style={{ bottom: 0, right: 0, position: 'absolute' }}
       >
          <div className="relative pointer-events-auto">
             <motion.div
-              initial={{ scale: 0, opacity: 0, x: 20 }}
-              animate={{ scale: 1, opacity: 1, x: 0 }}
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 1.5, type: "spring" }}
-              className="absolute top-[10%] left-[-110px] sm:left-[-140px] bg-white text-klein px-4 py-2 rounded-2xl rounded-br-none shadow-lg border-2 border-baby whitespace-nowrap z-30"
+              className="absolute -top-2 -left-24 bg-white text-klein px-3 py-1.5 rounded-2xl rounded-br-none shadow-lg border-2 border-baby whitespace-nowrap z-30"
             >
-               <span className="text-xs sm:text-sm font-black">Analysis Complete!</span>
+               <span className="text-[10px] font-black">分析完成!</span>
             </motion.div>
-            <Monkey variant="glasses" layoutId="monkey" className="h-[35vh] w-auto max-h-[350px] drop-shadow-2xl" imageSrc="/2.gif" />
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }} 
+              transition={{ delay: 0.5 }}
+            >
+              <Monkey variant="glasses" layoutId="monkey" className="h-[25vh] w-auto max-h-[220px] drop-shadow-2xl" imageSrc="/2.gif" />
+            </motion.div>
          </div>
-      </motion.div>
+      </div>
 
       {/* 5. Detail Modal Overlay */}
       <AnimatePresence>

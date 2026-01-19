@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, Loader2, Share2, Edit3 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
-import { testsApi, type TestReport, type Interpretation } from '../../api';
+import { testsApi, type TestReport } from '../../api';
 import { LinkGeneratedModal } from '../Assessment/components/LinkGeneratedModal';
 import { PhoneMockup } from '../../components/PhoneMockup';
 import { EditReportModal } from './components/EditReportModal';
@@ -13,7 +13,6 @@ export const ReportPage: React.FC = () => {
     const iframeKey = useRef(0);
 
     const [report, setReport] = useState<TestReport | null>(null);
-    const [interpretation, setInterpretation] = useState<Interpretation | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [shareUrl, setShareUrl] = useState('');
@@ -34,18 +33,14 @@ export const ReportPage: React.FC = () => {
             setLoading(true);
             setPreviewLoading(true);
             
-            // Load report info, interpretation, and generate share link in parallel
-            const [reportRes, shareRes, interpRes] = await Promise.all([
+            // Load report info and generate share link in parallel
+            const [reportRes, shareRes] = await Promise.all([
                 testsApi.getReport(parseInt(id)),
                 testsApi.generateShareLink(parseInt(id)),
-                testsApi.getInterpretation(parseInt(id)).catch(() => null)
             ]);
             
             setReport(reportRes.data);
             setShareUrl(shareRes.data.share_url);
-            if (interpRes) {
-                setInterpretation(interpRes.data);
-            }
         } catch (err: any) {
             console.error('Failed to load report:', err);
             setError(err.response?.data?.detail || '加载报告失败');
@@ -165,7 +160,6 @@ export const ReportPage: React.FC = () => {
                     onClose={() => setIsEditModalOpen(false)}
                     testId={parseInt(id!)}
                     report={report}
-                    interpretation={interpretation}
                     onSaved={handleEditSaved}
                 />
             )}

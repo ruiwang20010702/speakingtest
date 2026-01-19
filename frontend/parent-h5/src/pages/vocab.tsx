@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Monkey } from '@/components/monkey';
 import { WordStatus as WordStatusType } from '@/types';
@@ -95,17 +95,33 @@ const WordBubbles: React.FC<{ index: number }> = ({ index }) => {
 type CardSize = 'small' | 'medium' | 'large';
 
 interface CardPosition {
-  left: string;
-  top: string;
+  left: number;   // 像素值
+  top: number;    // 像素值
   rotate: number;
   scale: number;
   size: CardSize;
-  width: string;
-  height: string;
+  width: number;
+  height: number;
 }
 
-// 生成卡片位置，支持 perfect 卡片部分重叠增加层次感
-const generateCardPositions = (total: number, words: ExtendedVocabWord[]): CardPosition[] => {
+// 计算单词卡片宽度：高度固定50px，最小宽度150px（3:1），单词长可以更宽
+const calculateCardWidth = (wordText: string): number => {
+  const minWidth = 150;
+  const charWidth = 12;
+  const padding = 40;
+  const calculatedWidth = wordText.length * charWidth + padding;
+  return Math.max(minWidth, calculatedWidth);
+};
+
+// 生成卡片位置 - 使用像素坐标
+const generateCardPositions = (
+  total: number, 
+  words: ExtendedVocabWord[],
+  containerWidth: number,
+  containerHeight: number
+): CardPosition[] => {
+  if (containerWidth === 0 || containerHeight === 0) return [];
+  
   const positions: CardPosition[] = [];
   const usedAreas: Array<{ x: number; y: number; width: number; height: number; status: string }> = [];
   
@@ -115,14 +131,14 @@ const generateCardPositions = (total: number, words: ExtendedVocabWord[]): CardP
     return x - Math.floor(x);
   };
   
-  // 检查重叠，perfect 卡片允许与其他 perfect 卡片部分重叠
+  const cardHeight = 50;
+  
+  // 检查重叠（像素）
   const checkOverlap = (x: number, y: number, width: number, height: number, status: string): boolean => {
-    // perfect 卡片允许更小的间距（可以部分重叠）
-    const padding = status === 'perfect' ? -2 : 1.5;
+    const padding = status === 'perfect' ? -5 : 8;
     
     for (const area of usedAreas) {
-      // 如果当前卡片和已有卡片都是 perfect，允许更多重叠
-      const effectivePadding = (status === 'perfect' && area.status === 'perfect') ? -3 : padding;
+      const effectivePadding = (status === 'perfect' && area.status === 'perfect') ? -10 : padding;
       
       if (
         x < area.x + area.width + effectivePadding &&
@@ -141,44 +157,52 @@ const generateCardPositions = (total: number, words: ExtendedVocabWord[]): CardP
     const sizeType: CardSize = 'medium';
     const scale = 1.0;
     
-    // 根据单词长度动态调整卡片宽度
-    const wordLength = word?.text?.length || 4;
-    // 短单词(1-4字符): 18%, 中等(5-7字符): 22%, 长单词(8+字符): 26%
-    const baseWidth = wordLength <= 4 ? 18 : wordLength <= 7 ? 22 : 26;
-    const baseHeight = 9;
+    // 卡片实际像素尺寸
+    const cardWidthPx = calculateCardWidth(word?.text || '');
+    const halfCardWidth = cardWidthPx / 2;
+    const halfCardHeight = cardHeight / 2;
     
     const col = i % 3;
     const row = Math.floor(i / 3);
     const totalRows = Math.ceil(total / 3);
     
-    // 确保卡片在边界内：考虑卡片宽高的一半（因为使用 transform: translate(-50%, -50%)）
-    const halfWidth = baseWidth / 2;
-    const halfHeight = baseHeight / 2;
+    // 安全边界（像素）：卡片中心点的允许范围
+    // 增加边距确保卡片完全可见（包括阴影）
+    const safeMargin = 10;
+    const minX = halfCardWidth + safeMargin;                    // 左边界
+    const maxX = containerWidth - halfCardWidth - safeMargin;   // 右边界
+    const minY = halfCardHeight + safeMargin;                   // 上边界
+    const maxY = containerHeight - halfCardHeight - safeMargin; // 下边界
     
-    // 边界留出足够空间
-    const leftMargin = halfWidth + 2;
-    const rightMargin = halfWidth + 2;
-    const topMargin = halfHeight + 2;
-    const bottomMargin = halfHeight + 2;
+    // 调试：打印容器尺寸
+    if (i === 0) {
+      console.log('[VocabCloud] Container:', containerWidth, 'x', containerHeight);
+      console.log('[VocabCloud] Card width:', cardWidthPx, 'Safe X range:', minX, '-', maxX);
+    }
     
-    const availableWidth = 100 - leftMargin - rightMargin;
-    const availableHeight = 100 - topMargin - bottomMargin;
+    const availableWidth = maxX - minX;
+    const availableHeight = maxY - minY;
     
-    const colOffset = (random(i, 500) - 0.5) * 8;
-    let baseX = leftMargin + (col + 0.5) * (availableWidth / 3) + colOffset;
-    const rowSpacing = availableHeight / totalRows;
-    let baseY = topMargin + row * rowSpacing + rowSpacing * 0.5;
+    // 3 列均匀分布
+    const colWidth = availableWidth / 3;
+    // 限制偏移量，避免超出边界
+    const maxColOffset = Math.min(colWidth * 0.2, 15);
+    const colOffset = (random(i, 500) - 0.5) * maxColOffset;
+    let baseX = minX + (col + 0.5) * colWidth + colOffset;
+    
+    const rowSpacing = availableHeight / Math.max(totalRows, 1);
+    let baseY = minY + row * rowSpacing + rowSpacing * 0.5;
     
     let finalX = baseX;
     let finalY = baseY;
     let attempts = 0;
     const maxAttempts = 80;
-    
     let foundPosition = false;
     
     while (attempts < maxAttempts && !foundPosition) {
-      const offsetRangeX = 15;
-      const offsetRangeY = 12;
+      // 限制随机偏移范围
+      const offsetRangeX = Math.min(colWidth * 0.25, 20);
+      const offsetRangeY = Math.min(rowSpacing * 0.25, 15);
       
       const offsetX = (random(i, attempts * 2) - 0.5) * offsetRangeX;
       const offsetY = (random(i, attempts * 2 + 1) - 0.5) * offsetRangeY;
@@ -186,19 +210,11 @@ const generateCardPositions = (total: number, words: ExtendedVocabWord[]): CardP
       const testX = baseX + offsetX;
       const testY = baseY + offsetY;
       
-      const cardLeft = testX - halfWidth;
-      const cardTop = testY - halfHeight;
-      const cardRight = testX + halfWidth;
-      const cardBottom = testY + halfHeight;
-      
-      // 确保卡片完全在边界内
-      if (
-        cardLeft >= 0 &&
-        cardRight <= 100 &&
-        cardTop >= 0 &&
-        cardBottom <= 100
-      ) {
-        if (!checkOverlap(cardLeft, cardTop, baseWidth, baseHeight, word?.status || 'perfect')) {
+      // 确保卡片中心在安全区域内
+      if (testX >= minX && testX <= maxX && testY >= minY && testY <= maxY) {
+        const cardLeft = testX - halfCardWidth;
+        const cardTop = testY - halfCardHeight;
+        if (!checkOverlap(cardLeft, cardTop, cardWidthPx, cardHeight, word?.status || 'perfect')) {
           finalX = testX;
           finalY = testY;
           foundPosition = true;
@@ -207,31 +223,29 @@ const generateCardPositions = (total: number, words: ExtendedVocabWord[]): CardP
       attempts++;
     }
     
-    // 如果没找到合适位置，确保在边界内
-    if (!foundPosition) {
-      finalX = Math.max(halfWidth, Math.min(100 - halfWidth, baseX));
-      finalY = Math.max(halfHeight, Math.min(100 - halfHeight, baseY));
-    }
+    // 强制在安全区域内（无论是否找到位置）
+    finalX = Math.max(minX, Math.min(maxX, finalX));
+    finalY = Math.max(minY, Math.min(maxY, finalY));
     
     const rotationRange = 18;
     const rotation = (random(i, 100) - 0.5) * rotationRange;
     
     usedAreas.push({
-      x: finalX - halfWidth,
-      y: finalY - halfHeight,
-      width: baseWidth,
-      height: baseHeight,
+      x: finalX - halfCardWidth,
+      y: finalY - halfCardHeight,
+      width: cardWidthPx,
+      height: cardHeight,
       status: word?.status || 'perfect',
     });
     
     positions.push({
-      left: `${finalX}%`,
-      top: `${finalY}%`,
+      left: finalX,
+      top: finalY,
       rotate: rotation,
       scale: scale,
       size: sizeType,
-      width: `${baseWidth}%`,
-      height: `${baseHeight}%`,
+      width: cardWidthPx,
+      height: cardHeight,
     });
   }
   
@@ -291,31 +305,31 @@ const WordCard: React.FC<WordCardProps> = ({
       whileDrag={{ scale: position.scale * 1.15, cursor: 'grabbing' }}
       className={`absolute cursor-grab active:cursor-grabbing ${word.status === 'failed' ? 'opacity-60' : 'opacity-100'}`}
       style={{
-        left: position.left,
-        top: position.top,
+        left: `${position.left}px`,
+        top: `${position.top}px`,
         transform: 'translate(-50%, -50%)',
-        width: position.width,
-        height: position.height,
+        width: `${position.width}px`,
+        height: `${position.height}px`,
         zIndex: zIndex,
       }}
     >
       <WordBubbles index={index} />
       
       <div 
-        className="border-[1.5px] border-black rounded-lg shadow-[3px_3px_0px_rgba(0,0,0,1)] flex flex-col items-center justify-center h-full relative overflow-hidden px-1 group transition-shadow hover:shadow-[4px_4px_0px_rgba(0,0,0,1)]"
+        className="border-[1.5px] border-black rounded-xl shadow-[3px_3px_0px_rgba(0,0,0,1)] flex items-center justify-center h-full relative overflow-hidden px-4 group transition-shadow hover:shadow-[4px_4px_0px_rgba(0,0,0,1)]"
         style={{ backgroundColor: cardBg }}
       >
         <div 
-          className="absolute top-0 right-0 px-0.5 py-0.25 rounded-bl-sm border-l border-b border-black/10 z-10"
+          className="absolute top-0 right-0 px-1.5 py-0.5 rounded-bl-md border-l border-b border-black/10 z-10"
           style={{ backgroundColor: statusBadgeBg }}
         >
-          <span className="text-[5px] font-black text-white leading-none whitespace-nowrap">
+          <span className="text-[8px] font-black text-white leading-none whitespace-nowrap">
             {word.statusText}
           </span>
         </div>
         <span 
-          className="text-klein font-black italic tracking-tighter leading-tight text-center whitespace-nowrap mt-1 pr-2 select-none"
-          style={{ fontSize: word.text.length > 7 ? '11px' : '13px' }}
+          className="text-klein font-black italic tracking-tight text-center whitespace-nowrap select-none"
+          style={{ fontSize: word.text.length > 8 ? '14px' : '16px' }}
         >
           {word.text}
         </span>
@@ -329,6 +343,31 @@ export const VocabPage: React.FC = () => {
   
   // 拖拽边界引用
   const dragConstraintsRef = useRef<HTMLDivElement>(null);
+  
+  // 容器尺寸
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  
+  // 监听容器尺寸变化
+  useEffect(() => {
+    const container = dragConstraintsRef.current;
+    if (!container) return;
+    
+    const updateSize = () => {
+      setContainerSize({
+        width: container.clientWidth,
+        height: container.clientHeight,
+      });
+    };
+    
+    // 初始化尺寸
+    updateSize();
+    
+    // 使用 ResizeObserver 监听尺寸变化
+    const resizeObserver = new ResizeObserver(updateSize);
+    resizeObserver.observe(container);
+    
+    return () => resizeObserver.disconnect();
+  }, []);
   
   // 追踪当前激活的卡片（最后被拖动的）
   const [activeCardIndex, setActiveCardIndex] = useState<number | null>(null);
@@ -345,8 +384,11 @@ export const VocabPage: React.FC = () => {
     }));
   }, [data?.part1?.words]);
   
-  // Generate positions based on actual word count，传入 words 以支持 perfect 卡片重叠
-  const cardPositions = useMemo(() => generateCardPositions(words.length, words), [words]);
+  // Generate positions based on actual word count and container size
+  const cardPositions = useMemo(() => 
+    generateCardPositions(words.length, words, containerSize.width, containerSize.height), 
+    [words, containerSize.width, containerSize.height]
+  );
   
   // Calculate stats
   const stats = useMemo(() => {

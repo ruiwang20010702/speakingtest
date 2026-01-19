@@ -3,7 +3,6 @@ import { X, Loader2, Star, Plus, Trash2, Save, RotateCcw, AlertCircle } from 'lu
 import { 
   testsApi, 
   type TestReport, 
-  type Interpretation, 
   type ReportOverrideRequest,
   type RadarScoreOverride,
   type Part1WordOverride,
@@ -16,7 +15,6 @@ interface EditReportModalProps {
   onClose: () => void;
   testId: number;
   report: TestReport;
-  interpretation: Interpretation | null;
   onSaved: () => void;
 }
 
@@ -35,7 +33,6 @@ export const EditReportModal: React.FC<EditReportModalProps> = ({
   onClose,
   testId,
   report,
-  interpretation,
   onSaved,
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('basic');
@@ -74,7 +71,6 @@ export const EditReportModal: React.FC<EditReportModalProps> = ({
     highlights: [],
     weaknesses: [],
     suggestions: [],
-    parent_script: '',
   });
 
   // Load existing override data
@@ -136,12 +132,11 @@ export const EditReportModal: React.FC<EditReportModalProps> = ({
         setPart2Items([]);
       }
 
-      // Suggestion - use override > original > interpretation
+      // Suggestion - use override > original
       setSuggestion({
-        highlights: override.suggestion?.highlights || original?.suggestion?.highlights || interpretation?.highlights || [],
-        weaknesses: override.suggestion?.weaknesses || original?.suggestion?.weaknesses || interpretation?.weaknesses || [],
-        suggestions: override.suggestion?.suggestions || original?.suggestion?.suggestions || interpretation?.suggestions || [],
-        parent_script: override.suggestion?.parent_script || original?.suggestion?.parent_script || interpretation?.parent_script || '',
+        highlights: override.suggestion?.highlights || original?.suggestion?.highlights || [],
+        weaknesses: override.suggestion?.weaknesses || original?.suggestion?.weaknesses || [],
+        suggestions: override.suggestion?.suggestions || original?.suggestion?.suggestions || [],
       });
 
     } catch (err) {
@@ -177,7 +172,6 @@ export const EditReportModal: React.FC<EditReportModalProps> = ({
           highlights: suggestion.highlights,
           weaknesses: suggestion.weaknesses,
           suggestions: suggestion.suggestions,
-          parent_script: suggestion.parent_script,
         },
       };
 
@@ -731,17 +725,6 @@ export const EditReportModal: React.FC<EditReportModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Parent Script */}
-                  <div>
-                    <label className="block text-sm font-medium text-text-main mb-2">💬 家长沟通话术</label>
-                    <textarea
-                      value={suggestion.parent_script || ''}
-                      onChange={e => setSuggestion(prev => ({ ...prev, parent_script: e.target.value }))}
-                      placeholder="输入与家长沟通时使用的话术..."
-                      rows={6}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none"
-                    />
-                  </div>
                 </div>
               )}
             </>
