@@ -102,11 +102,15 @@ class TestQwenOmniGatewayStructured:
                     "choices": [{
                         "message": {
                             "content": json.dumps({
-                                "highlights": ["表现不错"],
-                                "weaknesses": ["需加强词汇"],
-                                "evidence": ["Evidence..."],
-                                "suggestions": ["建议1", "建议2", "建议3"],
-                                "parent_script": "Hi Parent..."
+                                "pages": {
+                                    "cover": "Cover content",
+                                    "radar": "Radar content",
+                                    "vocab": "Vocab content",
+                                    "dialogue": "Dialogue content",
+                                    "roadmap": "Roadmap content",
+                                    "badge": "Badge content"
+                                },
+                                "full_script": "Hi Parent, this is the full script..."
                             })
                         }
                     }],
@@ -125,6 +129,6 @@ class TestQwenOmniGatewayStructured:
             )
             
             assert result.success is True
-            assert result.parent_script == "Hi Parent..."
-            assert result.highlights == ["表现不错"]
-            assert len(result.suggestions) == 3
+            assert result.full_script == "Hi Parent, this is the full script..."
+            assert result.pages["cover"] == "Cover content"
+            assert len(result.pages) == 6

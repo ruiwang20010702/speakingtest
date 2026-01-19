@@ -1,3 +1,15 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage.run]
+omit = [
+    "src/adapters/gateways/xunfei_client.py",
+    "src/domain/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]

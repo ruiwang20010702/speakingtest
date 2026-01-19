@@ -90,50 +90,48 @@ async def client(test_db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 # ============================================
 
 @pytest.fixture
-async def teacher_user(test_db: AsyncSession):
+async def user_factory(test_db: AsyncSession):
+    """Factory fixture for creating users with custom attributes.
+    
+    Usage:
+        user = await user_factory(role="teacher", email="custom@test.com")
+    """
+    from src.adapters.repositories.models import UserModel
+    
+    async def _create_user(
+        role: str = "student",
+        email: str | None = None,
+        status: int = 1
+    ) -> UserModel:
+        user = UserModel(
+            email=email,
+            role=role,
+            status=status
+        )
+        test_db.add(user)
+        await test_db.commit()
+        await test_db.refresh(user)
+        return user
+    
+    return _create_user
+
+
+@pytest.fixture
+async def teacher_user(user_factory):
     """Create a teacher user for testing."""
-    from src.adapters.repositories.models import UserModel
-    
-    user = UserModel(
-        email="teacher@51talk.com",
-        role="teacher",
-        status=1
-    )
-    test_db.add(user)
-    await test_db.commit()
-    await test_db.refresh(user)
-    return user
+    return await user_factory(role="teacher", email="teacher@51talk.com")
 
 
 @pytest.fixture
-async def admin_user(test_db: AsyncSession):
+async def admin_user(user_factory):
     """Create an admin user for testing."""
-    from src.adapters.repositories.models import UserModel
-    
-    user = UserModel(
-        email="admin@51talk.com",
-        role="admin",
-        status=1
-    )
-    test_db.add(user)
-    await test_db.commit()
-    await test_db.refresh(user)
-    return user
+    return await user_factory(role="admin", email="admin@51talk.com")
 
 
 @pytest.fixture
-async def student_user(test_db: AsyncSession):
+async def student_user(user_factory):
     """Create a student user for testing."""
-    from src.adapters.repositories.models import UserModel
-    
-    user = UserModel(
-        role="student",
-        status=1
-    )
-    test_db.add(user)
-    await test_db.commit()
-    await test_db.refresh(user)
-    return user
+    return await user_factory(role="student")
 
 
 @pytest.fixture
@@ -182,26 +180,38 @@ def invalid_csv_content() -> str:
 def auth_teacher(teacher_user):
     """Override auth dependencies for teacher."""
     from src.infrastructure.main import app
-    from src.infrastructure.auth import get_current_user_id, get_current_user_role
+    from src.infrastructure.auth import get_current_user_id, get_current_user_role, oauth2_scheme, TokenData
     
-    app.dependency_overrides[get_current_user_id] = lambda: teacher_user.id
-    app.dependency_overrides[get_current_user_role] = lambda: "teacher"
-    yield
-    app.dependency_overrides.pop(get_current_user_id, None)
-    app.dependency_overrides.pop(get_current_user_role, None)
+    # Mock decode_token for controllers that use it directly
+    with patch("src.adapters.controllers.admin_controller.decode_token") as mock_decode:
+        mock_decode.return_value = TokenData(user_id=teacher_user.id, role="teacher")
+        
+        app.dependency_overrides[get_current_user_id] = lambda: teacher_user.id
+        app.dependency_overrides[get_current_user_role] = lambda: "teacher"
+        app.dependency_overrides[oauth2_scheme] = lambda: "test-token"
+        yield
+        app.dependency_overrides.pop(get_current_user_id, None)
+        app.dependency_overrides.pop(get_current_user_role, None)
+        app.dependency_overrides.pop(oauth2_scheme, None)
 
 
 @pytest.fixture
 def auth_admin(admin_user):
     """Override auth dependencies for admin."""
     from src.infrastructure.main import app
-    from src.infrastructure.auth import get_current_user_id, get_current_user_role, require_admin
+    from src.infrastructure.auth import get_current_user_id, get_current_user_role, require_admin, oauth2_scheme, TokenData
     
-    app.dependency_overrides[get_current_user_id] = lambda: admin_user.id
-    app.dependency_overrides[get_current_user_role] = lambda: "admin"
-    app.dependency_overrides[require_admin] = lambda: admin_user.id
-    yield
-    app.dependency_overrides.pop(get_current_user_id, None)
-    app.dependency_overrides.pop(get_current_user_role, None)
-    app.dependency_overrides.pop(require_admin, None)
+    # Mock decode_token for controllers that use it directly
+    with patch("src.adapters.controllers.admin_controller.decode_token") as mock_decode:
+        mock_decode.return_value = TokenData(user_id=admin_user.id, role="admin")
+        
+        app.dependency_overrides[get_current_user_id] = lambda: admin_user.id
+        app.dependency_overrides[get_current_user_role] = lambda: "admin"
+        app.dependency_overrides[require_admin] = lambda: admin_user.id
+        app.dependency_overrides[oauth2_scheme] = lambda: "test-token"
+        yield
+        app.dependency_overrides.pop(get_current_user_id, None)
+        app.dependency_overrides.pop(get_current_user_role, None)
+        app.dependency_overrides.pop(require_admin, None)
+        app.dependency_overrides.pop(oauth2_scheme, None)
 

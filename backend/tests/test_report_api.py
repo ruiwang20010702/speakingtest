@@ -53,10 +53,13 @@ class TestParentView:
     """Tests for parent report viewing endpoint."""
 
     @pytest.mark.asyncio
-    async def test_view_report_invalid_token(self, client, test_db):
-        """Test viewing report with invalid token."""
-        response = await client.get("/api/v1/reports/invalid-token-xyz")
-        assert response.status_code == 404
+    @pytest.mark.parametrize("token,expected_status", [
+        pytest.param("invalid-token-xyz", 404, id="invalid_token"),
+    ])
+    async def test_view_report_error_cases(self, client, test_db, token, expected_status):
+        """Test viewing report with invalid or missing tokens."""
+        response = await client.get(f"/api/v1/reports/{token}")
+        assert response.status_code == expected_status
 
     @pytest.mark.asyncio
     async def test_view_report_valid_token(self, client, test_db, teacher_user, student_profile):
@@ -128,40 +131,29 @@ class TestInterpretation:
     @pytest.mark.asyncio
     async def test_get_interpretation(self, client, test_db, teacher_user, student_profile, auth_teacher):
         """Test getting report interpretation."""
-        from unittest.mock import patch, AsyncMock
-        from src.adapters.gateways.qwen_client import ReportInterpretationResult
-
-        # Create test
+        # Create test with interpretation data
         test = TestModel(
             student_id=student_profile.user_id,
             level="L1",
             unit="Unit 1",
             status="completed",
             total_score=40.0,
-            star_level=4
+            star_level=4,
+            interpretation_pages={
+                "cover": "Cover page content",
+                "radar": "Radar page content"
+            },
+            interpretation_parent_script="Full script content",
+            interpretation_status="completed"
         )
         test_db.add(test)
         await test_db.commit()
         await test_db.refresh(test)
         
-        # Mock Qwen response
-        mock_result = ReportInterpretationResult(
-            success=True,
-            highlights=["Highlight 1"],
-            weaknesses=["Weakness 1"],
-            evidence=["Evidence 1"],
-            suggestions=["Suggestion 1"],
-            parent_script="Parent Script"
-        )
+        response = await client.get(f"/api/v1/tests/{test.id}/interpretation")
         
-        # Patch the method on the class that is instantiated in the controller
-        with patch("src.adapters.gateways.qwen_client.QwenOmniGateway.generate_report_interpretation", new_callable=AsyncMock) as mock_generate:
-            mock_generate.return_value = mock_result
-            
-            response = await client.get(f"/api/v1/tests/{test.id}/interpretation")
-            
-            assert response.status_code == 200
-            data = response.json()
-            assert data["highlights"] == ["Highlight 1"]
-            assert data["parent_script"] == "Parent Script"
+        assert response.status_code == 200
+        data = response.json()
+        assert data["pages"]["cover"] == "Cover page content"
+        assert data["full_script"] == "Full script content"
 

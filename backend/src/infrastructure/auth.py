@@ -8,7 +8,8 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from pydantic import BaseModel
 
 from src.infrastructure.config import get_settings
@@ -16,8 +17,8 @@ from src.infrastructure.timezone import now as china_now, CHINA_TZ
 
 settings = get_settings()
 
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hasher using Argon2 (Python 3.14 compatible)
+_password_hasher = PasswordHasher()
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/tokens")
@@ -44,13 +45,17 @@ class TokenData(BaseModel):
 # ============================================
 
 def hash_password(password: str) -> str:
-    """Hash a password for storage."""
-    return pwd_context.hash(password)
+    """Hash a password for storage using Argon2."""
+    return _password_hasher.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against a hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        _password_hasher.verify(hashed_password, plain_password)
+        return True
+    except VerifyMismatchError:
+        return False
 
 
 # ============================================

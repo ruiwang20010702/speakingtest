@@ -10,12 +10,26 @@ class TestBatchTokenGeneration:
     """Tests for batch token generation endpoint."""
 
     @pytest.mark.asyncio
-    async def test_batch_tokens_empty_list(self, client, test_db, teacher_user, auth_teacher):
-        """Test batch token generation with empty student list."""
+    @pytest.mark.parametrize("student_ids,expected_total,expected_success,expected_failed", [
+        pytest.param([], 0, 0, 0, id="empty_list"),
+        pytest.param([99999, 99998], 2, 0, 2, id="nonexistent_students"),
+    ])
+    async def test_batch_tokens_variations(
+        self,
+        client,
+        test_db,
+        teacher_user,
+        auth_teacher,
+        student_ids,
+        expected_total,
+        expected_success,
+        expected_failed
+    ):
+        """Test batch token generation with various inputs."""
         response = await client.post(
             "/api/v1/students/batch-tokens",
             json={
-                "student_ids": [],
+                "student_ids": student_ids,
                 "level": "L1",
                 "unit": "Unit 1"
             }
@@ -23,26 +37,10 @@ class TestBatchTokenGeneration:
         
         assert response.status_code == 200
         data = response.json()
-        assert data["total"] == 0
-        assert data["success_count"] == 0
-
-    @pytest.mark.asyncio
-    async def test_batch_tokens_nonexistent_students(self, client, test_db, teacher_user, auth_teacher):
-        """Test batch token generation with non-existent students."""
-        response = await client.post(
-            "/api/v1/students/batch-tokens",
-            json={
-                "student_ids": [99999, 99998],
-                "level": "L1",
-                "unit": "Unit 1"
-            }
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total"] == 2
-        assert data["failed_count"] == 2
-        assert data["success_count"] == 0
+        assert data["total"] == expected_total
+        assert data["success_count"] == expected_success
+        if expected_failed > 0:
+            assert data["failed_count"] == expected_failed
 
 
 class TestTokenRevocation:
