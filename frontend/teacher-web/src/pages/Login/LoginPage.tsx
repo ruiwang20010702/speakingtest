@@ -64,7 +64,8 @@ export const LoginPage: React.FC = () => {
             const response = await authApi.login(email, code);
             const { access_token, name, role } = response.data;
             login(access_token, email, name, role);
-            navigate('/dashboard');
+            // 根据角色跳转到对应的工作台
+            navigate(role === 'admin' ? '/admin/dashboard' : '/dashboard');
         } catch (err: any) {
             console.error('Login failed:', err);
             // Handle different error formats
