@@ -89,25 +89,7 @@ const ResultPage: React.FC<ResultPageProps> = ({ onRestart }) => {
           </div>
         )}
 
-        {/* AI Suggestion Card (Part 2) */}
-        {report?.part2_suggestions && report.part2_suggestions.length > 0 && (
-          <div className="w-full bg-[#FFF59D]/10 rounded-[24px] p-6 mb-8 border-2 border-[#FFF59D]/30 animate-pop delay-3">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 bg-[#FFF59D] rounded-full flex items-center justify-center">
-                <Star className="w-4 h-4 text-[#002FA7] fill-current" />
-              </div>
-              <h3 className="font-black text-white">AI 学习建议</h3>
-            </div>
-            <ul className="space-y-2">
-              {report.part2_suggestions.map((suggestion, index) => (
-                <li key={index} className="text-sm text-white/90 leading-relaxed flex items-start gap-2">
-                  <span className="text-[#FFF59D] font-bold">•</span>
-                  {suggestion}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+
 
         {/* Guidance Card */}
         <div className="w-full bg-[#FFF59D]/10 rounded-[24px] p-6 mb-10 border-2 border-[#FFF59D]/30 animate-pop delay-3">
