@@ -47,6 +47,7 @@ class TestSummary(BaseModel):
     completed_at: Optional[datetime] = None
     entry_url: Optional[str] = None
     is_interpreted: bool = False  # 是否已生成报告解读
+    interpretation_status: Optional[str] = None  # 报告解读状态: pending/generating/completed/failed
     failure_reason: Optional[str] = None  # 失败原因（当 status=failed 时）
     retry_count: int = 0  # 重试次数
 
@@ -166,6 +167,7 @@ async def get_student_tests(
             completed_at=t.completed_at,
             entry_url=f"{BASE_URL}/{token_map.get((t.level, t.unit))}" if t.status != 'completed' and (t.level, t.unit) in token_map else None,
             is_interpreted=t.interpretation_generated_at is not None,
+            interpretation_status=t.interpretation_status or "pending",
             failure_reason=t.failure_reason if t.status == 'failed' else None,
             retry_count=t.retry_count or 0
         )

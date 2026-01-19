@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, Plus, QrCode, FileText, Loader2, Sparkles, BookOpen, AlertCircle, RefreshCw } from 'lucide-react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
@@ -26,6 +26,12 @@ export const AssessmentHistoryPage: React.FC = () => {
     const [isGeneratingShareLink, setIsGeneratingShareLink] = useState(false);
     const [generatingInterpretation, setGeneratingInterpretation] = useState<string | null>(null);
     const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+    
+    // 轮询计时器和计数
+    const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pollingCountRef = useRef(0);
+    const MAX_POLLING_COUNT = 40; // 最多轮询 40 次
+    const POLLING_INTERVAL = 10000; // 每 10 秒一次（总时长约 6-7 分钟）
 
     const loadData = async () => {
         if (!id) return;
@@ -61,6 +67,7 @@ export const AssessmentHistoryPage: React.FC = () => {
                 completedAt: t.completed_at,
                 entryUrl: t.entry_url,
                 isInterpreted: t.is_interpreted ?? false,
+                interpretationStatus: t.interpretation_status ?? 'pending',
                 failureReason: t.failure_reason,
                 retryCount: t.retry_count ?? 0
             }));
@@ -91,6 +98,57 @@ export const AssessmentHistoryPage: React.FC = () => {
     useEffect(() => {
         loadData();
     }, [id]);
+
+    // 轮询：当有 "generating" 状态的解读时，每 3 秒刷新一次（最多 2 分钟）
+    useEffect(() => {
+        const hasGenerating = assessments.some(a => a.interpretationStatus === 'generating');
+        
+        if (hasGenerating) {
+            // 检查是否超过最大轮询次数
+            if (pollingCountRef.current >= MAX_POLLING_COUNT) {
+                console.warn('轮询超时，停止轮询。请手动刷新页面查看状态。');
+                if (pollingIntervalRef.current) {
+                    clearInterval(pollingIntervalRef.current);
+                    pollingIntervalRef.current = null;
+                }
+                return;
+            }
+            
+            // 启动轮询
+            if (!pollingIntervalRef.current) {
+                pollingIntervalRef.current = setInterval(() => {
+                    pollingCountRef.current += 1;
+                    console.log(`轮询中... (${pollingCountRef.current}/${MAX_POLLING_COUNT})`);
+                    
+                    if (pollingCountRef.current >= MAX_POLLING_COUNT) {
+                        console.warn('轮询达到上限，自动停止');
+                        if (pollingIntervalRef.current) {
+                            clearInterval(pollingIntervalRef.current);
+                            pollingIntervalRef.current = null;
+                        }
+                        return;
+                    }
+                    
+                    loadData();
+                }, POLLING_INTERVAL);
+            }
+        } else {
+            // 停止轮询并重置计数
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
+            }
+            pollingCountRef.current = 0; // 重置计数
+        }
+        
+        // 清理
+        return () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
+            }
+        };
+    }, [assessments]);
 
     const handleCreateAssessment = async (level: string, unit: string) => {
         if (!id) return;
@@ -311,6 +369,27 @@ export const AssessmentHistoryPage: React.FC = () => {
                                                 className="px-4 py-2 border border-primary/30 bg-primary/5 text-primary rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-primary/10 transition-colors"
                                             >
                                                 <BookOpen size={16} /> 查看解读报告
+                                            </button>
+                                        ) : assessment.interpretationStatus === 'generating' ? (
+                                            <button 
+                                                disabled
+                                                className="px-4 py-2 border border-amber-200 bg-amber-50 text-amber-700 rounded-lg font-medium text-sm flex items-center gap-2 cursor-not-allowed"
+                                            >
+                                                <Loader2 className="animate-spin" size={16} />
+                                                AI 生成中...
+                                            </button>
+                                        ) : assessment.interpretationStatus === 'failed' ? (
+                                            <button 
+                                                onClick={() => handleGenerateInterpretation(assessment.id)}
+                                                disabled={generatingInterpretation === assessment.id}
+                                                className="px-4 py-2 border border-red-200 bg-red-50 text-red-600 rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-red-100 transition-colors disabled:opacity-50"
+                                            >
+                                                {generatingInterpretation === assessment.id ? (
+                                                    <Loader2 className="animate-spin" size={16} />
+                                                ) : (
+                                                    <AlertCircle size={16} />
+                                                )}
+                                                生成失败，点击重试
                                             </button>
                                         ) : (
                                             <button 
