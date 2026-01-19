@@ -2,11 +2,12 @@
 CSV Import Use Case
 
 Handles bulk import of students from CSV file.
+Optimized to avoid N+1 queries by batch loading existing students.
 """
 import csv
 import io
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -89,35 +90,58 @@ class CSVImportUseCase:
                     errors=[f"Missing required columns: {', '.join(missing)}"]
                 )
             
-            for row_num, row in enumerate(reader, start=2):  # Start from 2 (header is 1)
+            # First pass: collect all rows and external_user_ids
+            rows_data: List[Dict] = []
+            external_ids: List[str] = []
+            
+            for row_num, row in enumerate(reader, start=2):
                 total_rows += 1
+                student_id = row.get('student_id', '').strip()
+                student_name = row.get('student_name', '').strip()
                 
+                if not student_id or not student_name:
+                    errors.append(f"Row {row_num}: Missing student_id or student_name")
+                    continue
+                
+                rows_data.append({
+                    'row_num': row_num,
+                    'student_id': student_id,
+                    'student_name': student_name,
+                    'cur_age': row.get('cur_age'),
+                    'cur_grade': row.get('cur_grade'),
+                    'cur_level_desc': row.get('cur_level_desc')
+                })
+                external_ids.append(student_id)
+            
+            # Batch query: load all existing students by external_user_id (1 query instead of N)
+            existing_students: Dict[str, StudentProfileModel] = {}
+            if external_ids:
+                stmt = select(StudentProfileModel).where(
+                    StudentProfileModel.external_user_id.in_(external_ids)
+                )
+                result = await self.db.execute(stmt)
+                for student in result.scalars().all():
+                    existing_students[student.external_user_id] = student
+            
+            # Second pass: process rows using the pre-loaded data
+            for row_data in rows_data:
                 try:
-                    student_id = row.get('student_id', '').strip()
-                    student_name = row.get('student_name', '').strip()
+                    student_id = row_data['student_id']
+                    student_name = row_data['student_name']
                     
-                    if not student_id or not student_name:
-                        errors.append(f"Row {row_num}: Missing student_id or student_name")
-                        continue
-                    
-                    # Check if student exists
-                    stmt = select(StudentProfileModel).where(
-                        StudentProfileModel.external_user_id == student_id
-                    )
-                    result = await self.db.execute(stmt)
-                    existing = result.scalar_one_or_none()
+                    existing = existing_students.get(student_id)
                     
                     if existing:
                         # Update existing student
                         existing.student_name = student_name
                         existing.teacher_id = teacher_id
                         existing.ss_email_addr = teacher_email
-                        if row.get('cur_age'):
-                            existing.cur_age = int(row['cur_age'])
-                        if row.get('cur_grade'):
-                            existing.cur_grade = row['cur_grade']
-                        if row.get('cur_level_desc'):
-                            existing.cur_level_desc = row['cur_level_desc']
+                        if row_data['cur_age']:
+                            existing.cur_age = int(row_data['cur_age'])
+                        if row_data['cur_grade']:
+                            existing.cur_grade = row_data['cur_grade']
+                        if row_data['cur_level_desc']:
+                            existing.cur_level_desc = row_data['cur_level_desc']
                         updated_count += 1
                     else:
                         # Create new user and student profile
@@ -132,15 +156,15 @@ class CSVImportUseCase:
                             external_user_id=student_id,
                             teacher_id=teacher_id,
                             ss_email_addr=teacher_email,
-                            cur_age=int(row['cur_age']) if row.get('cur_age') else None,
-                            cur_grade=row.get('cur_grade'),
-                            cur_level_desc=row.get('cur_level_desc')
+                            cur_age=int(row_data['cur_age']) if row_data['cur_age'] else None,
+                            cur_grade=row_data['cur_grade'],
+                            cur_level_desc=row_data['cur_level_desc']
                         )
                         self.db.add(student)
                         imported_count += 1
                     
                 except Exception as e:
-                    errors.append(f"Row {row_num}: {str(e)}")
+                    errors.append(f"Row {row_data['row_num']}: {str(e)}")
             
             await self.db.commit()
             

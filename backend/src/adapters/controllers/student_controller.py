@@ -397,19 +397,27 @@ async def batch_generate_tokens(
     
     - Requires teacher login
     - Only generates tokens for students belonging to the teacher
+    
+    Optimized: Uses batch query to load all students at once (1 query instead of N).
     """
     items = []
     success_count = 0
     use_case = GenerateStudentTokenUseCase(db)
     
-    for student_id in request.student_ids:
-        # Validate ownership
+    # Batch query: load all requested students belonging to the teacher (1 query instead of N)
+    student_map: dict = {}
+    if request.student_ids:
         stmt = select(StudentProfileModel).where(
-            StudentProfileModel.user_id == student_id,
+            StudentProfileModel.user_id.in_(request.student_ids),
             StudentProfileModel.teacher_id == user_id
         )
         result = await db.execute(stmt)
-        student = result.scalar_one_or_none()
+        for student in result.scalars().all():
+            student_map[student.user_id] = student
+    
+    for student_id in request.student_ids:
+        # Lookup from pre-loaded map (no additional query)
+        student = student_map.get(student_id)
         
         if not student:
             items.append(BatchTokenItem(
