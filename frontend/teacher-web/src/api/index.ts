@@ -41,8 +41,8 @@ export const authApi = {
 
 // Students API
 export const studentsApi = {
-  list: () =>
-    api.get<StudentListItem[]>('/students'),
+  list: (page: number = 1, pageSize: number = 50) =>
+    api.get<StudentListResponse>('/students', { params: { page, page_size: pageSize } }),
 
   import: (studentId: number) =>
     api.post('/students/import', { student_id: studentId }),
@@ -50,8 +50,8 @@ export const studentsApi = {
   generateToken: (studentId: number, level?: string, unit?: string) =>
     api.post(`/students/${studentId}/token`, null, { params: { level, unit } }),
 
-  getTests: (studentId: number) =>
-    api.get(`/students/${studentId}/tests`),
+  getTests: (studentId: number, page: number = 1, pageSize: number = 20) =>
+    api.get<TestListResponse>(`/students/${studentId}/tests`, { params: { page, page_size: pageSize } }),
 };
 
 // Tests API
@@ -250,6 +250,15 @@ export interface StudentListItem {
   ss_crm_name?: string;
 }
 
+// Paginated Student List Response
+export interface StudentListResponse {
+  items: StudentListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
 export interface EntryResponse {
   access_token: string;
   token_type: string;
@@ -273,6 +282,15 @@ export interface TestSummary {
   completed_at?: string;
   entry_url?: string;
   is_interpreted: boolean;  // 是否已生成报告解读
+}
+
+// Paginated Test List Response
+export interface TestListResponse {
+  items: TestSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
 }
 
 export interface TestReport {
@@ -434,9 +452,18 @@ export interface QuestionUpdate {
   is_active?: boolean;
 }
 
+// Paginated Question List Response
+export interface QuestionListResponse {
+  items: Question[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
 export const questionsApi = {
-  list: (level?: string, unit?: string) =>
-    api.get<Question[]>('/questions', { params: { level, unit } }),
+  list: (level?: string, unit?: string, page: number = 1, pageSize: number = 100) =>
+    api.get<QuestionListResponse>('/questions', { params: { level, unit, page, page_size: pageSize } }),
 
   getByLevelUnit: (level: string, unit: string) =>
     api.get<Question[]>(`/questions/${level}/${encodeURIComponent(unit)}`),

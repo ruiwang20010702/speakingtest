@@ -55,8 +55,8 @@ export const QuestionBankPage: React.FC = () => {
         setIsLoading(true);
         setError('');
         try {
-            const response = await questionsApi.list(selectedLevel, selectedUnit);
-            setQuestions(response.data);
+            const response = await questionsApi.list(selectedLevel, selectedUnit, 1, 100);
+            setQuestions(response.data.items); // 分页响应格式：items 数组
         } catch (err: any) {
             console.error('Failed to load questions:', err);
             setError(err.response?.data?.detail || '加载题目失败');

@@ -20,12 +20,12 @@ export const StudentListPage: React.FC = () => {
         const load = async () => {
             try {
                 const [studentsRes, statsRes] = await Promise.all([
-                    studentsApi.list(),
+                    studentsApi.list(1, 500), // 获取所有学生（前端搜索需要）
                     adminApi.getOverview()
                 ]);
 
-                // Map API data to UI types
-                const mappedStudents: Student[] = studentsRes.data.map(s => ({
+                // Map API data to UI types (分页响应格式：items 数组)
+                const mappedStudents: Student[] = studentsRes.data.items.map(s => ({
                     id: s.external_user_id || String(s.user_id),  // Display external ID, fallback to internal
                     internalId: String(s.user_id),                 // Internal ID for API calls
                     name: s.student_name,

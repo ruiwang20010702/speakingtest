@@ -38,11 +38,11 @@ export const AssessmentHistoryPage: React.FC = () => {
             setIsLoading(true);
         try {
             const [testsRes, listRes] = await Promise.all([
-                studentsApi.getTests(Number(id)),
-                !student ? studentsApi.list() : Promise.resolve({ data: [] })
+                studentsApi.getTests(Number(id), 1, 100), // 分页接口
+                !student ? studentsApi.list(1, 500) : Promise.resolve({ data: { items: [] } })
             ]);
 
-            // Map tests
+            // Map tests (分页响应格式：items 数组)
             // 后端状态: pending -> part1_processing -> part1_done -> processing -> completed / failed
             const mapStatus = (backendStatus: string): 'pending' | 'in_progress' | 'completed' | 'failed' => {
                 if (backendStatus === 'completed') return 'completed';
@@ -54,7 +54,7 @@ export const AssessmentHistoryPage: React.FC = () => {
                 return 'pending';
             };
 
-            const mappedAssessments: Assessment[] = testsRes.data.map((t: any) => ({
+            const mappedAssessments: Assessment[] = testsRes.data.items.map((t: any) => ({
                 id: String(t.id),
                 studentId: id,
                 title: `${t.level} - ${t.unit}`,
@@ -73,9 +73,9 @@ export const AssessmentHistoryPage: React.FC = () => {
             }));
             setAssessments(mappedAssessments);
 
-            // If we didn't have student data, find it in the list
-            if (!student && Array.isArray(listRes.data)) {
-                const found = listRes.data.find((s: any) => String(s.user_id) === id);
+            // If we didn't have student data, find it in the list (分页响应格式：items 数组)
+            if (!student && Array.isArray(listRes.data.items)) {
+                const found = listRes.data.items.find((s: any) => String(s.user_id) === id);
                 if (found) {
                     setStudent({
                         id: found.external_user_id || String(found.user_id),
