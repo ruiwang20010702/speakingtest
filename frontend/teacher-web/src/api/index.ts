@@ -91,7 +91,8 @@ export const adminApi = {
   getCost: () => api.get<CostStats>('/admin/stats/cost'),
 
   // Teacher Management
-  getTeachers: () => api.get<TeacherSummary[]>('/admin/teachers'),
+  getTeachers: (page: number = 1, limit: number = 20) => 
+    api.get<TeacherListResponse>('/admin/teachers', { params: { page, limit } }),
   getTeacherDetail: (teacherId: number) => api.get<TeacherDetail>(`/admin/teachers/${teacherId}`),
 
   // Audit Logs
@@ -153,6 +154,16 @@ export interface TeacherSummary {
   student_count: number;
   test_count: number;
   share_count: number;
+}
+
+export interface TeacherListResponse {
+  total: number;
+  page: number;
+  limit: number;
+  total_students: number;
+  total_tests: number;
+  total_shares: number;
+  items: TeacherSummary[];
 }
 
 export interface TeacherDetail {

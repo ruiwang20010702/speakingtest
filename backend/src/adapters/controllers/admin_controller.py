@@ -226,6 +226,17 @@ class TeacherSummary(BaseModel):
     share_count: int
 
 
+class TeacherListResponse(BaseModel):
+    """Paginated teacher list response."""
+    total: int
+    page: int
+    limit: int
+    total_students: int
+    total_tests: int
+    total_shares: int
+    items: List[TeacherSummary]
+
+
 class TeacherDetail(BaseModel):
     """Teacher detail with student distribution."""
     user_id: int
@@ -247,31 +258,62 @@ from src.adapters.repositories.models import UserModel
 
 @router.get(
     "/teachers",
-    response_model=List[TeacherSummary],
-    summary="获取老师列表",
-    description="获取所有老师的汇总信息。"
+    response_model=TeacherListResponse,
+    summary="获取老师列表（分页）",
+    description="获取所有老师的汇总信息，支持分页。"
 )
 async def list_teachers(
+    page: int = 1,
+    limit: int = 20,
     db: AsyncSession = Depends(get_db),
     _ = Depends(require_admin)
 ):
-    """Get list of all teachers with summary stats.
+    """Get list of all teachers with summary stats (paginated).
     
     Optimized: Uses batch queries instead of N+1 queries.
     - Before: 3 * N queries (N = number of teachers), ~8 seconds for 60 teachers
-    - After: 4 queries total, ~200ms
+    - After: 5 queries total, ~200ms
     """
-    # 1. Get all teachers (1 query)
-    stmt = select(UserModel).where(UserModel.role == 'teacher')
+    # Validate pagination params
+    if page < 1:
+        page = 1
+    if limit < 1 or limit > 100:
+        limit = 20
+    
+    offset = (page - 1) * limit
+    
+    # 1. Get total count of teachers
+    stmt_count = select(func.count(UserModel.id)).where(UserModel.role == 'teacher')
+    total = (await db.execute(stmt_count)).scalar() or 0
+    
+    if total == 0:
+        return TeacherListResponse(
+            total=0, page=page, limit=limit,
+            total_students=0, total_tests=0, total_shares=0,
+            items=[]
+        )
+    
+    # 2. Get paginated teachers
+    stmt = (
+        select(UserModel)
+        .where(UserModel.role == 'teacher')
+        .order_by(UserModel.id)
+        .offset(offset)
+        .limit(limit)
+    )
     result = await db.execute(stmt)
     teachers = result.scalars().all()
     
     if not teachers:
-        return []
+        return TeacherListResponse(
+            total=total, page=page, limit=limit,
+            total_students=0, total_tests=0, total_shares=0,
+            items=[]
+        )
     
     teacher_ids = [t.id for t in teachers]
     
-    # 2. Batch query: student count per teacher (1 query)
+    # 3. Batch query: student count per teacher (1 query)
     stmt_students = (
         select(
             StudentProfileModel.teacher_id,
@@ -283,7 +325,7 @@ async def list_teachers(
     result = await db.execute(stmt_students)
     student_counts = {row.teacher_id: row.count for row in result.all()}
     
-    # 3. Batch query: test count per teacher (1 query)
+    # 4. Batch query: test count per teacher (1 query)
     stmt_tests = (
         select(
             StudentProfileModel.teacher_id,
@@ -297,7 +339,7 @@ async def list_teachers(
     result = await db.execute(stmt_tests)
     test_counts = {row.teacher_id: row.count for row in result.all()}
     
-    # 4. Batch query: share count per teacher (1 query)
+    # 5. Batch query: share count per teacher (1 query)
     stmt_shares = (
         select(
             ReportShareTokenModel.created_by,
@@ -310,7 +352,7 @@ async def list_teachers(
     share_counts = {row.created_by: row.count for row in result.all()}
     
     # Assemble results
-    summaries = [
+    items = [
         TeacherSummary(
             user_id=teacher.id,
             email=teacher.email or "",
@@ -323,7 +365,20 @@ async def list_teachers(
         for teacher in teachers
     ]
     
-    return summaries
+    # Calculate totals for current page
+    total_students = sum(student_counts.values())
+    total_tests = sum(test_counts.values())
+    total_shares = sum(share_counts.values())
+    
+    return TeacherListResponse(
+        total=total,
+        page=page,
+        limit=limit,
+        total_students=total_students,
+        total_tests=total_tests,
+        total_shares=total_shares,
+        items=items
+    )
 
 
 @router.get(
