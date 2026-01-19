@@ -23,7 +23,7 @@ start_rabbitmq() {
     else
         /opt/homebrew/opt/rabbitmq/sbin/rabbitmq-server &
         echo "   等待 RabbitMQ 启动..."
-        sleep 3
+        sleep 10
         if lsof -i :5672 > /dev/null 2>&1; then
             echo "   ✅ RabbitMQ 启动成功"
         else

@@ -50,6 +50,25 @@ class CRMGateway:
             "ss_email_addr": ss_email
         }
         
+        # MOCK MODE: Return fake data in debug mode to avoid hitting real CRM
+        if settings.DEBUG:
+            logger.info(f"[MOCK] Returning fake CRM data for student {user_id}")
+            return CRMStudentData(
+                user_id=user_id,
+                real_name=f"Student_{user_id}",
+                cur_age=10,
+                cur_grade="L1",
+                cur_level_desc="Level 1",
+                main_last_buy_unit_name="Unit 1",
+                is_upgrade=0,
+                ss_name="Mock SS",
+                ss_sm_name="Mock SM",
+                ss_dept4_name="Mock Dept",
+                ss_group="Mock Group",
+                ss_crm_name="Mock CRM",
+                ss_email_addr=ss_email
+            )
+        
         try:
             async with httpx.AsyncClient() as client:
                 logger.info(f"Fetching CRM data for student {user_id} (SS: {ss_email})")
