@@ -9,7 +9,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from pydantic import BaseModel
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database import get_db
@@ -68,37 +68,66 @@ class QuestionBatchCreate(BaseModel):
     questions: List[dict]  # [{"question_no": 1, "question": "...", "reference_answer": "..."}]
 
 
+class QuestionListResponse(BaseModel):
+    """Paginated question list response."""
+    items: List[QuestionResponse]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+
+
 # ============================================
 # CRUD Endpoints
 # ============================================
 
 @router.get(
     "",
-    response_model=List[QuestionResponse],
+    response_model=QuestionListResponse,
     summary="获取题目列表",
-    description="按 Level 和 Unit 获取题目列表。"
+    description="按 Level 和 Unit 获取题目列表，支持分页。"
 )
 async def list_questions(
     level: Optional[str] = None,
     unit: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    List questions, optionally filtered by level and unit.
+    List questions, optionally filtered by level and unit, with pagination.
+    
+    Args:
+        level: Filter by level (e.g., "L1", "L2")
+        unit: Filter by unit (e.g., "1", "2")
+        page: Page number (1-indexed), default 1
+        page_size: Items per page, default 50, max 100
     """
-    stmt = select(QuestionModel).where(QuestionModel.is_active == True)
+    # Validate pagination params
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+    offset = (page - 1) * page_size
     
+    # Build base filter
+    base_filter = [QuestionModel.is_active == True]
     if level:
-        stmt = stmt.where(QuestionModel.level == level)
+        base_filter.append(QuestionModel.level == level)
     if unit:
-        stmt = stmt.where(QuestionModel.unit == unit)
+        base_filter.append(QuestionModel.unit == unit)
     
+    # 1. Get total count (1 query)
+    count_stmt = select(func.count(QuestionModel.id)).where(*base_filter)
+    total = (await db.execute(count_stmt)).scalar() or 0
+    
+    # 2. Get paginated questions (1 query)
+    stmt = select(QuestionModel).where(*base_filter)
     stmt = stmt.order_by(QuestionModel.level, QuestionModel.unit, QuestionModel.question_no)
+    stmt = stmt.offset(offset).limit(page_size)
     
     result = await db.execute(stmt)
     questions = result.scalars().all()
     
-    return [
+    items = [
         QuestionResponse(
             id=q.id,
             level=q.level,
@@ -113,6 +142,17 @@ async def list_questions(
         )
         for q in questions
     ]
+    
+    # Calculate total pages
+    pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+    
+    return QuestionListResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=pages
+    )
 
 
 @router.get(

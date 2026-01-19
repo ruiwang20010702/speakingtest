@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from loguru import logger
@@ -89,28 +89,49 @@ class ShareLinkResponse(BaseModel):
     message: str
 
 
+class TestListResponse(BaseModel):
+    """Paginated test list response."""
+    items: List[TestSummary]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+
+
 # ============================================
 # Student Test History
 # ============================================
 
 @router.get(
     "/students/{student_id}/tests",
-    response_model=List[TestSummary],
+    response_model=TestListResponse,
     summary="获取学生测评历史",
-    description="获取指定学生的所有测评记录列表。"
+    description="获取指定学生的所有测评记录列表，支持分页。"
 )
 async def get_student_tests(
     student_id: int,
+    page: int = 1,
+    page_size: int = 20,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get test history for a specific student.
+    Get test history for a specific student with pagination.
     
     - Teacher can only view their own students
     - Admin can view all students
+    
+    Args:
+        student_id: Student user ID
+        page: Page number (1-indexed), default 1
+        page_size: Items per page, default 20, max 100
     """
+    # Validate pagination params
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+    offset = (page - 1) * page_size
+    
     # Verify ownership (RBAC)
     if role != "admin":
         stmt = select(StudentProfileModel).where(
@@ -125,10 +146,14 @@ async def get_student_tests(
                 detail="Not authorized to view this student's tests"
             )
     
-    # Get tests
+    # 1. Get total count (1 query)
+    count_stmt = select(func.count(TestModel.id)).where(TestModel.student_id == student_id)
+    total = (await db.execute(count_stmt)).scalar() or 0
+    
+    # 2. Get paginated tests (1 query)
     stmt = select(TestModel).where(
         TestModel.student_id == student_id
-    ).order_by(TestModel.created_at.desc())
+    ).order_by(TestModel.created_at.desc()).offset(offset).limit(page_size)
     
     result = await db.execute(stmt)
     tests = result.scalars().all()
@@ -150,10 +175,10 @@ async def get_student_tests(
         if key not in token_map:
             token_map[key] = t.token
 
-    # Base URL for student H5 (TODO: Move to config)
-    BASE_URL = "http://localhost:3001/s"
+    # Use configured URL instead of hardcoded value
+    BASE_URL = settings.FRONTEND_STUDENT_URL
     
-    return [
+    items = [
         TestSummary(
             id=t.id,
             level=t.level,
@@ -173,6 +198,17 @@ async def get_student_tests(
         )
         for t in tests
     ]
+    
+    # Calculate total pages
+    pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+    
+    return TestListResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=pages
+    )
 
 
 # ============================================

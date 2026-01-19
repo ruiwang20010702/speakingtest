@@ -86,11 +86,12 @@ async def verify_entry_token(
 # ============================================
 
 from typing import List, Optional
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from src.adapters.repositories.models import StudentProfileModel, UserModel
 from src.infrastructure.auth import get_current_user_id, get_current_user_role, require_teacher
+from src.infrastructure.responses import PaginatedResponse
 
 
 class StudentResponse(BaseModel):
@@ -111,48 +112,77 @@ class StudentResponse(BaseModel):
     ss_group: Optional[str] = None      # New
     is_upgrade: int = 0                 # New
 
+
+class StudentListResponse(BaseModel):
+    """Paginated student list response."""
+    items: List[StudentResponse]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+
+
 @router.get(
     "",
-    response_model=List[StudentResponse],
+    response_model=StudentListResponse,
     summary="获取学生列表",
-    description="获取名下学生列表。Admin 可查看所有学生，老师只能查看自己名下的学生。"
+    description="获取名下学生列表。Admin 可查看所有学生，老师只能查看自己名下的学生。支持分页。"
 )
 async def list_students(
+    page: int = 1,
+    page_size: int = 50,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get student list with RBAC.
+    Get student list with RBAC and pagination.
     
     - **Admin**: Returns all students, including teacher info.
     - **Teacher**: Returns only students belonging to the current teacher.
+    
+    Args:
+        page: Page number (1-indexed), default 1
+        page_size: Items per page, default 50, max 100
     """
-    # Base query with teacher relationship loaded
+    # Validate pagination params
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+    offset = (page - 1) * page_size
+    
+    # Base filter for RBAC
+    base_filter = []
+    if role != "admin":
+        base_filter.append(StudentProfileModel.teacher_id == user_id)
+    
+    # 1. Get total count (1 query)
+    count_stmt = select(func.count(StudentProfileModel.user_id))
+    if base_filter:
+        count_stmt = count_stmt.where(*base_filter)
+    total = (await db.execute(count_stmt)).scalar() or 0
+    
+    # 2. Get paginated students (1 query)
     stmt = select(StudentProfileModel).options(
         selectinload(StudentProfileModel.user).selectinload(UserModel.student_profile)
     )
+    if base_filter:
+        stmt = stmt.where(*base_filter)
+    stmt = stmt.order_by(StudentProfileModel.user_id).offset(offset).limit(page_size)
     
-    # RBAC Filter
-    if role != "admin":
-        stmt = stmt.where(StudentProfileModel.teacher_id == user_id)
-    
-    # Execute query
     result = await db.execute(stmt)
     students = result.scalars().all()
     
     # Build response
-    response = []
+    response_items = []
     
-    # Pre-fetch teacher names if admin (optimization)
+    # Pre-fetch teacher names if admin (optimization, 1 query)
     teacher_map = {}
-    if role == "admin":
-        teacher_ids = {s.teacher_id for s in students}
+    if role == "admin" and students:
+        teacher_ids = {s.teacher_id for s in students if s.teacher_id}
         if teacher_ids:
             t_stmt = select(UserModel).where(UserModel.id.in_(teacher_ids))
             t_result = await db.execute(t_stmt)
             teachers = t_result.scalars().all()
-            # Note: UserModel doesn't have a name field yet, using email or ID
             teacher_map = {t.id: t.email for t in teachers}
 
     for s in students:
@@ -164,7 +194,7 @@ async def list_students(
             else:
                 teacher_name = teacher_map.get(s.teacher_id, f"Teacher {s.teacher_id}")
             
-        response.append(StudentResponse(
+        response_items.append(StudentResponse(
             user_id=s.user_id,
             external_user_id=s.external_user_id,
             student_name=s.student_name,
@@ -175,14 +205,23 @@ async def list_students(
             teacher_id=s.teacher_id,
             teacher_name=teacher_name,
             ss_crm_name=s.ss_crm_name,
-            ss_name=s.ss_name,              # New
-            ss_sm_name=s.ss_sm_name,        # New
-            ss_dept4_name=s.ss_dept4_name,  # New
-            ss_group=s.ss_group,            # New
-            is_upgrade=s.is_upgrade         # New
+            ss_name=s.ss_name,
+            ss_sm_name=s.ss_sm_name,
+            ss_dept4_name=s.ss_dept4_name,
+            ss_group=s.ss_group,
+            is_upgrade=s.is_upgrade
         ))
-        
-    return response
+    
+    # Calculate total pages
+    pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+    
+    return StudentListResponse(
+        items=response_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=pages
+    )
 
 
 # ============================================

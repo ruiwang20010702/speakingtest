@@ -364,8 +364,10 @@ class ProcessPart2TaskUseCase:
                 test.retry_count = (test.retry_count or 0) + 1
                 
                 # 尝试保存已计算的评分数据（如果 Qwen 返回成功但后续处理失败）
-                # 检查 qwen_result 是否存在（通过检查 locals）
-                if 'qwen_result' in dir() and qwen_result and qwen_result.success:
+                # 使用 locals() 检查变量是否已定义
+                local_vars = locals()
+                if 'qwen_result' in local_vars and local_vars['qwen_result'] and local_vars['qwen_result'].success:
+                    qwen_result = local_vars['qwen_result']
                     test.part2_score = qwen_result.total_score
                     test.part2_transcript = qwen_result.transcript
                     test.part2_raw_result = qwen_result.raw_response
