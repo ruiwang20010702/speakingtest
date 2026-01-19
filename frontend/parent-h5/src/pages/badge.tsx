@@ -35,7 +35,7 @@ export const BadgePage: React.FC = () => {
   }
 
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center p-6 relative overflow-hidden">
+    <div className="w-full h-full flex flex-col items-center justify-center p-6 relative overflow-hidden pointer-events-auto">
       
       {/* Background Burst */}
       <motion.div 
@@ -87,9 +87,8 @@ export const BadgePage: React.FC = () => {
         <div className="relative">
           {/* Badge Shape */}
           <div className="w-64 h-64 bg-baby rounded-full border-4 border-white flex items-center justify-center shadow-[0px_0px_40px_rgba(255,245,157,0.4)]">
-             <div className="w-56 h-56 bg-white rounded-full flex items-center justify-center border-2 border-klein overflow-hidden">
-                <div className="absolute top-0 w-full h-full bg-blue-50/50" />
-                <Monkey variant="winner" layoutId="monkey" className="w-48 h-48 mt-8" />
+             <div className="w-56 h-56 rounded-full flex items-center justify-center overflow-hidden">
+                <Monkey variant="winner" layoutId="monkey" className="w-48 h-48 mt-8" imageSrc="/5.gif" />
              </div>
           </div>
           
@@ -109,6 +108,8 @@ export const BadgePage: React.FC = () => {
           whileHover={{ scale: 1.05, x: 4, y: 4 }}
           whileTap={{ scale: 0.95 }}
           className="mt-8 px-8 py-3 bg-baby text-klein font-black text-lg rounded-full border-2 border-white shadow-[4px_4px_0px_rgba(255,255,255,1)] hover:shadow-none transition-all"
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
         >
           分享荣耀
         </motion.button>

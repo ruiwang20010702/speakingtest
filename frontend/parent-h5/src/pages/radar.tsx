@@ -272,7 +272,7 @@ export const RadarPage: React.FC = () => {
             >
                <span className="text-xs sm:text-sm font-black">Analysis Complete!</span>
             </motion.div>
-            <Monkey variant="glasses" layoutId="monkey" className="h-[35vh] w-auto max-h-[350px] drop-shadow-2xl" />
+            <Monkey variant="glasses" layoutId="monkey" className="h-[35vh] w-auto max-h-[350px] drop-shadow-2xl" imageSrc="/2.gif" />
          </div>
       </motion.div>
 

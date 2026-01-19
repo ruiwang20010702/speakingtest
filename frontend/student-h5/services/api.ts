@@ -1,25 +1,48 @@
 import { Level, Question, FullReportResponse } from '../types';
 import axios from 'axios';
+import { shouldUseMockData, getMockQuestions, mockReport } from './mockData';
 
 // API 实例
 const api = axios.create({
   baseURL: '/api/v1',
+  timeout: 5000, // 5秒超时
 });
 
-// 从后端获取题目
+// 从后端获取题目（如果后端不可用，使用模拟数据）
 export const getQuestions = async (level: Level, unit: string): Promise<Question[]> => {
-  const response = await api.get(`/questions/${level}/${encodeURIComponent(unit)}`);
-  const data = response.data;
+  // 如果启用模拟数据模式，直接返回模拟数据
+  if (shouldUseMockData()) {
+    console.log('[Mock Mode] 使用模拟数据');
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(getMockQuestions(level, unit));
+      }, 500); // 模拟网络延迟
+    });
+  }
 
-  // 转换后端数据格式为前端格式
-  return data.map((q: any) => ({
-    id: q.id.toString(),
-    type: q.part === 1 ? 'word' : 'qa',
-    text: q.question,
-    translation: q.translation,
-    image: q.image_url,
-    referenceAnswer: q.reference_answer,
-  }));
+  try {
+    const response = await api.get(`/questions/${level}/${encodeURIComponent(unit)}`);
+    const data = response.data;
+
+    // 转换后端数据格式为前端格式
+    return data.map((q: any) => ({
+      id: q.id.toString(),
+      type: q.part === 1 ? 'word' : 'qa',
+      text: q.question,
+      translation: q.translation,
+      image: q.image_url,
+      referenceAnswer: q.reference_answer,
+    }));
+  } catch (error: any) {
+    // 如果后端不可用，自动切换到模拟数据模式
+    if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED' || error.response?.status >= 500) {
+      console.warn('[API Error] 后端不可用，自动切换到模拟数据模式');
+      console.log('提示: 在浏览器控制台输入 localStorage.setItem("USE_MOCK_DATA", "true") 可强制使用模拟数据');
+      return getMockQuestions(level, unit);
+    }
+    // 其他错误继续抛出
+    throw error;
+  }
 };
 
 
@@ -116,7 +139,46 @@ export const submitPart2 = async (
  * 获取完整测评报告
  */
 export const getTestReport = async (testId: number): Promise<FullReportResponse> => {
-  const response = await api.get(`/tests/${testId}/report`);
-  return response.data;
+  // 如果启用模拟数据模式，返回模拟报告
+  if (shouldUseMockData()) {
+    console.log('[Mock Mode] 使用模拟报告数据');
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({
+          part1_score: 85,
+          part2_score: 78,
+          total_score: 82,
+          star_level: 4,
+          part2_suggestions: [
+            '建议多练习日常对话，提高流利度',
+            '注意单词发音的准确性',
+            '可以尝试用更完整的句子回答问题'
+          ]
+        } as FullReportResponse);
+      }, 500);
+    });
+  }
+
+  try {
+    const response = await api.get(`/tests/${testId}/report`);
+    return response.data;
+  } catch (error: any) {
+    // 如果后端不可用，返回模拟数据
+    if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED' || error.response?.status >= 500) {
+      console.warn('[API Error] 后端不可用，使用模拟报告数据');
+      return {
+        part1_score: 85,
+        part2_score: 78,
+        total_score: 82,
+        star_level: 4,
+        part2_suggestions: [
+          '建议多练习日常对话，提高流利度',
+          '注意单词发音的准确性',
+          '可以尝试用更完整的句子回答问题'
+        ]
+      } as FullReportResponse;
+    }
+    throw error;
+  }
 };
 

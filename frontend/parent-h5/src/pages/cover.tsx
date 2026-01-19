@@ -57,13 +57,13 @@ export const Cover: React.FC = () => {
         initial={{ scale: 0.8, opacity: 0, y: 50 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         transition={{ duration: 1, delay: 0.2, ease: "easeOut" }}
-        className="absolute top-[20%] z-10 w-full flex justify-center"
+        className="absolute top-[12%] z-10 w-full flex justify-center"
       >
         <div className="relative">
            {/* Abstract Circle Halo behind monkey */}
-           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] max-w-[400px] max-h-[400px] bg-baby rounded-full blur-[60px] opacity-20" />
+           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] max-w-[720px] max-h-[720px] bg-baby rounded-full blur-[60px] opacity-20" />
            
-           <Monkey variant="winner" layoutId="monkey" className="w-[80vw] h-[80vw] max-w-[380px] max-h-[380px] drop-shadow-2xl" />
+           <Monkey variant="winner" layoutId="monkey" className="w-[700px] h-[700px] drop-shadow-2xl" imageSrc="/gif/1.gif" />
            
            {/* Floating Star Badge */}
            <motion.div 
