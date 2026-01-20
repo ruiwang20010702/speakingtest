@@ -482,6 +482,52 @@ export const InterpretationPage: React.FC = () => {
                             </p>
                         </div>
 
+                        {/* 课程规划（仅在 roadmap 页面显示） */}
+                        {activeTab === 'roadmap' && interpretation.pages.course_selling && (
+                            <div className="mt-6 pt-6 border-t border-gray-200">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                                        <BookOpen size={20} className="text-indigo-700" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-lg font-bold text-indigo-700">课程规划</h4>
+                                        <p className="text-xs text-gray-500">约5分钟 · 2200字以上</p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            if (interpretation.pages.course_selling) {
+                                                navigator.clipboard.writeText(interpretation.pages.course_selling);
+                                                setCopiedPage('course_selling');
+                                                setTimeout(() => setCopiedPage(null), 2000);
+                                            }
+                                        }}
+                                        className={`ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg font-medium text-sm transition-all ${
+                                            copiedPage === 'course_selling'
+                                                ? 'bg-emerald-100 text-emerald-700'
+                                                : 'bg-indigo-100 text-indigo-700 hover:opacity-80'
+                                        }`}
+                                    >
+                                        {copiedPage === 'course_selling' ? (
+                                            <>
+                                                <CheckCircle size={14} />
+                                                已复制
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Copy size={14} />
+                                                复制
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                                <div className="bg-indigo-50/50 rounded-xl p-5 border border-indigo-100">
+                                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap text-[15px]">
+                                        {interpretation.pages.course_selling}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
                         {/* 导航按钮 */}
                         <div className="flex justify-between mt-4">
                             <button

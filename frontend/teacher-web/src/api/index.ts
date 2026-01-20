@@ -328,6 +328,7 @@ export interface Interpretation {
     dialogue: string; // 对话表现演讲话术
     roadmap: string;  // 成长计划演讲话术
     badge: string;    // 徽章页演讲话术
+    course_selling?: string;  // 课程规划演讲稿（可选，约2200字）
   };
   full_script: string;  // 完整演讲稿（约10分钟）
 }

@@ -18,6 +18,7 @@ class ReportInterpretation:
     """AI-generated speech script for teacher-parent communication, organized by 6 pages."""
     pages: Dict[str, str]  # 按页面组织的演讲话术（每页一段字符串）
     full_script: str       # 完整演讲稿（约1500字，10分钟）
+    course_selling: Optional[str] = None  # 课程规划演讲稿（约2200字，5分钟）
     usage: Optional[dict] = None  # API 调用的 token 使用情况
     
     def to_dict(self) -> dict:
@@ -25,11 +26,15 @@ class ReportInterpretation:
         return {
             "pages": self.pages,
             "full_script": self.full_script,
+            "course_selling": self.course_selling,
         }
     
     def pages_to_json(self) -> dict:
-        """只返回 pages 部分的 dict（用于存储到 interpretation_pages 字段）"""
-        return self.pages
+        """返回 pages 和 course_selling 的 dict（用于存储到 interpretation_pages 字段）"""
+        result = self.pages.copy()
+        if self.course_selling:
+            result["course_selling"] = self.course_selling
+        return result
 
 
 from src.adapters.gateways.qwen_client import QwenOmniGateway
@@ -59,7 +64,7 @@ class ReportInterpretationService:
         """
         Generate speech script based on test results using LLM.
         """
-        # Call LLM
+        # Call LLM with course selling enabled
         result = await self.qwen.generate_report_interpretation(
             student_name=student_name,
             level=level,
@@ -70,12 +75,15 @@ class ReportInterpretationService:
             part1_details=part1_details,
             part2_items=part2_items,
             radar_data=radar_data,
+            include_course_selling=True,  # 启用课程规划生成
+            target_level=None,  # 使用推荐目标级别
         )
         
         if result.success:
             return ReportInterpretation(
                 pages=result.pages,
                 full_script=result.full_script,
+                course_selling=result.course_selling,
                 usage=result.usage
             )
         else:
