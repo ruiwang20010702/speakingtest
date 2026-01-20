@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { ArrowLeft, Loader2, Copy, CheckCircle, BookOpen, Radar, BookText, MessageCircle, Map, Award, FileText, RefreshCw } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
-import { testsApi, type Interpretation, type TestReport, type InterpretationStatus } from '../../api';
+import { testsApi, type Interpretation, type TestReport } from '../../api';
 
 // 页面配置
 const PAGE_CONFIG = {
@@ -65,8 +65,8 @@ const colorClasses = {
 };
 
 // 轮询配置
-const POLL_INTERVAL = 3000;  // 3秒轮询一次
-const MAX_POLL_ATTEMPTS = 40;  // 最多轮询40次（约2分钟）
+const POLL_INTERVAL = 10000;  // 10秒轮询一次
+const MAX_POLL_ATTEMPTS = 40;  // 最多轮询40次（约6.7分钟）
 
 export const InterpretationPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -83,7 +83,7 @@ export const InterpretationPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<PageKey>('cover');
     
     const pollCountRef = useRef(0);
-    const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // 清理轮询定时器
     const clearPollTimer = useCallback(() => {

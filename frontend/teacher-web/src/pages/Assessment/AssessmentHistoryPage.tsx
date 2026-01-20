@@ -99,7 +99,7 @@ export const AssessmentHistoryPage: React.FC = () => {
         loadData();
     }, [id]);
 
-    // 轮询：当有 "generating" 状态的解读时，每 3 秒刷新一次（最多 2 分钟）
+    // 轮询：当有 "generating" 状态的解读时，每 10 秒刷新一次（最多约 6.7 分钟）
     useEffect(() => {
         const hasGenerating = assessments.some(a => a.interpretationStatus === 'generating');
         
