@@ -195,6 +195,12 @@ async def get_cost_stats(
     db: AsyncSession = Depends(get_db),
     _ = Depends(require_admin)
 ):
+    # TODO: 性能优化 - 当测评数据量超过 10 万条时，考虑以下方案：
+    # 1. 内存缓存 + TTL（5分钟）：适合单实例部署
+    # 2. Redis 缓存：适合多实例部署
+    # 3. 数据库汇总表：实时增量更新，最精确
+    # 当前实现：全表聚合查询（数据量小时性能足够）
+    
     # Total Tests
     stmt_tests = select(func.count(TestModel.id))
     total_tests = (await db.execute(stmt_tests)).scalar() or 0
