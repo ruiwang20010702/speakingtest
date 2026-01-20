@@ -14,6 +14,12 @@ from loguru import logger
 
 from src.infrastructure.config import get_settings
 from src.infrastructure.rate_limiter import RateLimiter
+from src.infrastructure.course_knowledge_base import (
+    generate_course_knowledge_prompt,
+    generate_roadmap_content_guide,
+    calculate_learning_plan,
+    normalize_level_code,
+)
 
 settings = get_settings()
 
@@ -493,6 +499,107 @@ INTERPRETATION_SCHEMA = {
 }
 
 
+# ============================================
+# 课程规划 Prompt (独立板块，与报告解读并行生成)
+# 使用 qwen-plus 模型 + 结构化输出
+# 约5分钟，2200字以上
+# ============================================
+
+COURSE_SELLING_SYSTEM_PROMPT = """你是一位资深的英语教育顾问和课程规划专家。你的任务是为班主任撰写一份**针对单一学生家长的课程规划演讲稿**，用于向该学生的家长一对一介绍孩子的英语学习规划和课程建议。
+
+## 演讲稿要求
+
+### 整体要求
+- **总时长**：约5分钟（按每分钟150字计算，总共约2200字以上）
+- **语气**：亲切、专业、积极、有说服力
+- **风格**：对话式，像在和家长一对一面对面交流，引导家长参与讨论
+- **格式**：纯文本，不需要 Markdown 格式
+
+### 内容结构（8个核心问题）
+
+采用对话式结构，通过8个核心问题引导家长参与讨论：
+
+#### 问题1：孩子当前处于哪个阶段？（约250字）
+- 用陈述句直接切入主题，如"关于孩子的学习规划，我想先和您聊聊孩子当下处于哪个阶段。"
+- 必须使用课程知识库中的正确级别名称和阶段名称
+- 介绍这个阶段在整个CEJ体系中的位置
+
+#### 问题2：学习的内容主要是什么？（约300字）
+- 过渡问题："那您知道孩子现在这个阶段主要在学什么内容吗？"
+- 必须引用课程知识库中的真实数据（词汇量、句子数、单元主题等）
+- 结合孩子课堂上的实际表现举例
+
+#### 问题3：提升哪方面能力？（约250字）
+- 用陈述句引导，如"这个阶段重点培养的是听说能力和自信表达。"
+- 结合报告数据说明，用孩子的进步案例佐证
+
+#### 问题4：目标级别到哪？（约350字）
+- 关键问题："那您对孩子的英语学习有什么期待呢？咱们的目标级别想定到哪？"
+- 介绍CEJ体系的里程碑（Level 3、Level 6、Level 9）
+- 说明每个里程碑达到后能做什么
+- 根据孩子情况建议合适的目标级别
+
+#### 问题5：能学到什么？（约400字）
+- 展望："您想知道孩子达到这个目标后能学到什么、能做到什么吗？"
+- 引用课程知识库中的阶段能力达成数据
+- 用具体生活场景让家长有画面感
+
+#### 问题6：有没有类似的成功案例？（约250字）
+- 过渡："说到这里，我想和您分享一个我们学员的真实案例。"
+- 必须使用课程知识库中的真实案例数据
+- 用真实案例增强家长信心
+
+#### 问题7：需要多少课时？（约300字）
+- 必须使用课程知识库中的课时数据，严禁自己计算
+- 课时规则：LS=148课时，L0-L6每个都是144课时，L7-L9每个都是48课时
+- 引导家长理解课时安排
+
+#### 问题8：如何规划学习周期？（约200字）
+- 根据家长的时间安排，给出具体的学习周期建议
+- 总结并确认学习计划
+
+### 写作技巧
+1. 每个问题之间要**自然衔接**，像在面对面聊天
+2. 多用"您看"、"您觉得"、"我们一起看看"等表达，体现互动感
+3. **必须使用课程知识库中的真实数据**，严禁编造任何数字
+4. 用孩子的名字称呼，增加亲切感
+5. 适时询问家长意见，让家长参与决策
+
+## 输出格式
+输出一份完整的课程规划演讲稿（纯文本字符串），约2200字以上。
+"""
+
+# 课程规划的 JSON Schema
+COURSE_SELLING_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "content": {
+            "type": "string",
+            "description": "完整的课程规划演讲稿，约2200字以上，包含8个核心问题的对话式内容"
+        }
+    },
+    "required": ["content"],
+    "additionalProperties": False
+}
+
+
+@dataclass
+class CourseSellingResult:
+    """课程规划生成结果"""
+    success: bool
+    content: Optional[str] = None     # 课程规划演讲稿内容
+    error: Optional[str] = None
+    usage: Optional[dict] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "success": self.success,
+            "content": self.content,
+            "error": self.error,
+            "usage": self.usage
+        }
+
+
 @dataclass
 class SummaryAnalysisResult:
     """测评汇总分析结果 (给家长看的学习建议 + 五维评语)"""
@@ -519,10 +626,11 @@ class SummaryAnalysisResult:
 
 @dataclass
 class ReportInterpretationResult:
-    """报告解读结果 (班主任演讲稿，按6页组织)"""
+    """报告解读结果 (班主任演讲稿，按6页组织 + 可选的课程规划)"""
     success: bool
     pages: Optional[dict] = None  # 按页面组织的演讲话术（每页一段字符串）
     full_script: str = None       # 完整演讲稿（约1500字，10分钟）
+    course_selling: Optional[str] = None  # 课程规划演讲稿（约2200字，5分钟）
     error: Optional[str] = None
     usage: Optional[dict] = None
 
@@ -531,6 +639,7 @@ class ReportInterpretationResult:
             "success": self.success,
             "pages": self.pages,
             "full_script": self.full_script,
+            "course_selling": self.course_selling,
             "error": self.error,
             "usage": self.usage
         }
@@ -1105,7 +1214,198 @@ class QwenOmniGateway:
                 # 网络异常等情况可能没有 usage
                 return SummaryAnalysisResult(success=False, error=str(e), usage=usage if usage else None)
     
+    async def generate_course_selling(
+        self,
+        student_name: str,
+        level: str,
+        total_score: float,
+        star_level: int,
+        radar_data: Optional[list] = None,
+        target_level: str = None,
+    ) -> CourseSellingResult:
+        """
+        生成课程规划演讲稿（独立板块）
+        
+        使用 qwen-plus 模型 + 结构化输出
+        约5分钟，2200字以上
+        
+        Args:
+            student_name: 学生姓名
+            level: 当前级别
+            total_score: 总分
+            star_level: 星级
+            radar_data: 五维能力数据
+            target_level: 目标级别（如果为 None 则使用推荐目标级别）
+        """
+        # 获取课程知识库数据
+        course_knowledge = generate_course_knowledge_prompt(level, target_level)
+        roadmap_guide = generate_roadmap_content_guide(level, target_level)
+        
+        # 构建输入数据摘要
+        input_summary = {
+            "student_name": student_name,
+            "current_level": level,
+            "total_score": total_score,
+            "star_level": star_level,
+            "radar": radar_data,
+        }
+        
+        user_prompt = f"""请根据以下学生信息和课程知识库，生成课程规划演讲稿：
+
+## 学生信息摘要
+{json.dumps(input_summary, ensure_ascii=False, indent=2)}
+
+## 课程知识库数据（必须引用！）
+{course_knowledge}
+
+## 内容指南（必须遵循！）
+{roadmap_guide}
+
+请按 JSON Schema 要求输出，生成约2200字以上的课程规划演讲稿。"""
+
+        request_body = {
+            "model": self.plus_model,  # 使用 qwen-plus
+            "messages": [
+                {"role": "system", "content": COURSE_SELLING_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt}
+            ],
+            "stream": False,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "course_selling",
+                    "strict": True,
+                    "schema": COURSE_SELLING_SCHEMA
+                }
+            }
+        }
+        
+        async with self.semaphore:
+            logger.info(f"开始生成课程规划 (qwen-plus, 8个核心问题): {student_name}")
+            usage = {}
+            content = ""
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:  # 课程规划内容多，超时时间更长
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers={"Authorization": f"Bearer {self.api_key}"},
+                        json=request_body
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    content = data["choices"][0]["message"]["content"]
+                    usage = data.get("usage", {})
+                    
+                    logger.info(f"课程规划完成, tokens: {usage}")
+                    
+                    # 移除可能的思考标签
+                    cleaned_content = strip_thinking_tags(content)
+                    result_data = json.loads(cleaned_content)
+                    return CourseSellingResult(
+                        success=True,
+                        content=result_data.get("content", ""),
+                        usage=usage
+                    )
+                    
+            except json.JSONDecodeError as e:
+                logger.error(f"课程规划 JSON 解析失败: {e}, content={content[:200] if content else 'empty'}")
+                # 即使解析失败，也返回 usage 数据用于计费（API 已调用成功）
+                return CourseSellingResult(success=False, error=f"JSON 解析失败: {e}", usage=usage)
+            except Exception as e:
+                logger.exception(f"课程规划生成失败: {e}")
+                # 网络异常等情况，usage 可能为空字典，但仍要记录（表示尝试调用）
+                return CourseSellingResult(success=False, error=str(e), usage=usage)
+
     async def generate_report_interpretation(
+        self,
+        student_name: str,
+        level: str,
+        total_score: float,
+        part1_score: float,
+        part2_score: Optional[float],
+        star_level: int,
+        part1_details: Optional[dict] = None,
+        part2_items: Optional[list] = None,
+        radar_data: Optional[list] = None,
+        include_course_selling: bool = False,
+        target_level: str = None,
+    ) -> ReportInterpretationResult:
+        """
+        生成报告解读 (按6页组织：cover/radar/vocab/dialogue/roadmap/badge)
+        
+        使用 qwen-plus 模型 + 结构化输出
+        
+        Args:
+            student_name: 学生姓名
+            level: 当前级别
+            total_score: 总分
+            part1_score: Part 1 得分
+            part2_score: Part 2 得分
+            star_level: 星级
+            part1_details: Part 1 详情（单词掌握情况）
+            part2_items: Part 2 题目列表
+            radar_data: 五维能力数据
+            include_course_selling: 是否同时生成课程规划（并行调用）
+            target_level: 目标级别（用于课程规划）
+        """
+        if include_course_selling:
+            # 并行调用：同时生成6页报告和课程规划
+            logger.info(f"开始并行生成报告解读和课程规划: {student_name}")
+            
+            report_task = self._generate_report_pages(
+                student_name, level, total_score, part1_score, part2_score,
+                star_level, part1_details, part2_items, radar_data
+            )
+            selling_task = self.generate_course_selling(
+                student_name, level, total_score, star_level,
+                radar_data, target_level
+            )
+            
+            # 并行执行，允许异常传播
+            results = await asyncio.gather(
+                report_task, selling_task, return_exceptions=True
+            )
+            
+            report_result = results[0]
+            selling_result = results[1]
+            
+            # 处理异常情况
+            if isinstance(report_result, Exception):
+                logger.exception(f"报告解读生成异常: {report_result}")
+                report_result = ReportInterpretationResult(
+                    success=False, error=str(report_result)
+                )
+            if isinstance(selling_result, Exception):
+                logger.exception(f"课程规划生成异常: {selling_result}")
+                selling_result = CourseSellingResult(
+                    success=False, error=str(selling_result)
+                )
+            
+            # 合并结果 - 即使失败也要记录成本
+            combined_usage = {}
+            if report_result.usage is not None:
+                combined_usage["report"] = report_result.usage
+            if selling_result.usage is not None:
+                combined_usage["course_selling"] = selling_result.usage
+            
+            return ReportInterpretationResult(
+                success=report_result.success,  # 主报告成功即可
+                pages=report_result.pages if report_result.success else None,
+                full_script=report_result.full_script if report_result.success else None,
+                course_selling=selling_result.content if selling_result.success else None,
+                error=report_result.error if not report_result.success else (
+                    f"课程规划失败: {selling_result.error}" if not selling_result.success else None
+                ),
+                usage=combined_usage
+            )
+        else:
+            # 仅生成6页报告
+            return await self._generate_report_pages(
+                student_name, level, total_score, part1_score, part2_score,
+                star_level, part1_details, part2_items, radar_data
+            )
+
+    async def _generate_report_pages(
         self,
         student_name: str,
         level: str,
@@ -1118,9 +1418,7 @@ class QwenOmniGateway:
         radar_data: Optional[list] = None,
     ) -> ReportInterpretationResult:
         """
-        生成报告解读 (按6页组织：cover/radar/vocab/dialogue/roadmap/badge)
-        
-        使用 qwen-plus 模型 + 结构化输出
+        内部方法：生成6页报告解读
         """
         # 构建 Prompt 输入数据（按页面说明数据来源）
         input_data = {
