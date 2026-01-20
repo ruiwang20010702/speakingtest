@@ -116,10 +116,10 @@ class CSVImportUseCase:
             # Batch query: load all existing students by external_user_id (1 query instead of N)
             existing_students: Dict[str, StudentProfileModel] = {}
             if external_ids:
-                    stmt = select(StudentProfileModel).where(
+                stmt = select(StudentProfileModel).where(
                     StudentProfileModel.external_user_id.in_(external_ids)
-                    )
-                    result = await self.db.execute(stmt)
+                )
+                result = await self.db.execute(stmt)
                 for student in result.scalars().all():
                     existing_students[student.external_user_id] = student
             
