@@ -41,7 +41,7 @@
 | **高并发 (Concurrency)** | 系统吞吐量 (QPS) | 支持 **1000+ QPS** (峰值)；支持 **5000+** 学生同时在线作答 |
 | **高可用 (Availability)** | 服务可用性 (SLA) | **99.9%** (月度不可用时间 < 43分钟) |
 | **低延迟 (Latency)** | 接口响应时间 (P95) | 核心接口 < 200ms；Part 1 评测 < 500ms (流式) |
-| **技术栈 (Tech Stack)** | 后端/前端 | **Python (FastAPI + SQLAlchemy Async + PostgreSQL + RabbitMQ)** / **React + Vite + TypeScript** |
+| **技术栈 (Tech Stack)** | 后端/前端 | **Backend: Python (FastAPI + SQLAlchemy Async + AsyncPG + RabbitMQ)** / **Frontend: React 19 + Vite 6/7 + TypeScript + Tailwind CSS 3/4** |
 | **数据安全 (Security)** | 数据持久化 | RPO < 1分钟 (数据库主从 + 每日全量备份 + Binlog 实时备份) |
 | **可观测性 (Observability)** | 监控覆盖率 | 核心链路 100% 覆盖 (Trace/Log/Metric)；报警响应 < 5分钟 |
 
@@ -273,12 +273,24 @@ graph TD
   - 前端轮询检查生成状态（每 2 秒轮询一次，最多 60 次）
   - 超时或失败后支持重试（最多 3 次）
 - **目标用户**：班主任（用于向家长解读报告）
+- **输出内容（6页演讲稿结构）**：
+  - **Page 1 (Cover)**: 开场白与测评背景，建立专业形象。
+  - **Page 2 (Radar)**: 五维图谱深度解析，直观展示能力分布。
+  - **Page 3 (Vocab)**: 核心词汇掌握情况，列举具体单词得分与问题。
+  - **Page 4 (Dialogue)**: 真实对话表现分析，引用 Part 2 精彩/薄弱回答。
+  - **Page 5 (Roadmap)**: 针对性学习路径规划，给出具体提升方案。
+  - **Page 6 (Badge)**: 结语与荣誉激励，鼓励学生坚持学习。
+  - **Full Script**: 完整演讲稿（约1500字），串联上述 6 页内容，适合 10 分钟深度沟通。
+
+#### 老师端（课程销售建议 - 新增）
+
+- **生成方式**：**qwen-plus 模型 + 结构化输出**
+- **触发时机**：与报告解读同步生成，或单独触发。
+- **目标用户**：班主任/CC（用于课程续费或升级销售）
 - **输出内容**：
-  - 亮点 (highlights): 1-2 条最突出的优点
-  - 短板 (weaknesses): 1-2 条需要提升的方向
-  - 证据点 (evidence): 1-3 条具体证据（引用报告片段/示例/转写摘录）
-  - 行动建议 (suggestions): 3 条具体的练习建议
-  - 家长沟通话术 (parent_script): Markdown 格式，200-400 字
+  - **购买建议 (suggestion)**: 明确推荐的课程包（如“建议升级至 L2 进阶课”）。
+  - **销售话术 (script)**: 针对该学生的个性化销售话术，结合测评结果中的痛点（如“发音不准影响自信”）与亮点（如“词汇量大适合更高阶挑战”）进行说服。
+  - **异议处理 (objection_handling)**: 预判家长可能提出的拒绝理由（如“太贵”、“没时间”）并给出回应策略。
 - **风险提示**：如录音环境差导致的置信度下降说明（若可判断）
 
 #### 家长端（测评汇总分析）
@@ -704,19 +716,41 @@ for chunk in completion:
 }
 ```
 
-**报告解读 JSON Schema**：
+**报告解读 JSON Schema (Updated)**：
 
 ```json
 {
   "type": "object",
   "properties": {
-    "highlights": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 2},
-    "weaknesses": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 2},
-    "evidence": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 3},
-    "suggestions": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
-    "parent_script": {"type": "string", "description": "家长沟通话术 (Markdown格式，200-400字)"}
+    "pages": {
+      "type": "object",
+      "properties": {
+        "cover": {"type": "string", "description": "Page 1: 封面与开场白"},
+        "radar": {"type": "string", "description": "Page 2: 五维图谱解析"},
+        "vocab": {"type": "string", "description": "Page 3: 词汇掌握情况"},
+        "dialogue": {"type": "string", "description": "Page 4: 对话表现分析"},
+        "roadmap": {"type": "string", "description": "Page 5: 学习路径规划"},
+        "badge": {"type": "string", "description": "Page 6: 结语与荣誉"}
+      },
+      "required": ["cover", "radar", "vocab", "dialogue", "roadmap", "badge"]
+    },
+    "full_script": {"type": "string", "description": "完整演讲稿 (Markdown, 约1500字)"}
   },
-  "required": ["highlights", "weaknesses", "evidence", "suggestions", "parent_script"]
+  "required": ["pages", "full_script"]
+}
+```
+
+**课程销售建议 JSON Schema (New)**：
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "suggestion": {"type": "string", "description": "购买建议 (如: 建议升级至 L2)"},
+    "script": {"type": "string", "description": "销售话术 (结合痛点与亮点)"},
+    "objection_handling": {"type": "string", "description": "异议处理 (预判拒绝理由并回应)"}
+  },
+  "required": ["suggestion", "script", "objection_handling"]
 }
 ```
 
@@ -838,9 +872,20 @@ CREATE TABLE users (
     id BIGINT PRIMARY KEY,
     role VARCHAR(20) NOT NULL, -- teacher, student, admin
     email VARCHAR(100), -- 仅老师/管理员有
+    password_hash VARCHAR(255), -- 密码哈希 (New)
     status TINYINT DEFAULT 1, -- 1:active, 0:disabled
+    
+    -- CRM 冗余字段 (用于 Teacher)
+    ss_crm_name VARCHAR(100),
+    ss_name VARCHAR(100),
+    ss_sm_name VARCHAR(100),
+    ss_dept4_name VARCHAR(100),
+    ss_group VARCHAR(100),
+    crm_synced_at TIMESTAMP,
+    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted BOOLEAN DEFAULT FALSE,
     UNIQUE KEY uk_email (email)
 );
 ```
@@ -877,6 +922,7 @@ CREATE TABLE student_profiles (
 - **Indexes**: `idx_student_id`, `idx_created_at`
 
 ```sql
+```sql
 CREATE TABLE tests (
     id BIGINT PRIMARY KEY,
     student_id BIGINT NOT NULL,
@@ -904,21 +950,28 @@ CREATE TABLE tests (
     part2_failure_reason VARCHAR(500),
     
     -- Summary (测评汇总分析，给家长看)
-    summary_analysis JSONB, -- {highlights, weaknesses, weekly_plan}
+    summary_highlights TEXT, -- JSON array
+    summary_weaknesses TEXT, -- JSON array
+    summary_weekly_plan TEXT, -- JSON array
+    summary_dimension_feedback JSONB, -- AI 生成的五维评语
     summary_generated_at TIMESTAMPTZ,
     
     -- Interpretation (报告解读，给班主任用，异步生成)
     interpretation_pages JSONB, -- 按6页组织的解读内容
-    interpretation_parent_script TEXT, -- 家长沟通话术
+    interpretation_parent_script TEXT, -- 完整演讲稿 (full_script)
     interpretation_generated_at TIMESTAMPTZ,
-    interpretation_status VARCHAR(20), -- pending/generating/completed/failed (异步状态)
-    interpretation_retry_count SMALLINT DEFAULT 0, -- 生成重试次数 (最多3次)
+    interpretation_status VARCHAR(20), -- pending/generating/completed/failed
+    interpretation_retry_count SMALLINT DEFAULT 0,
+    
+    -- Report Override (人工修正)
+    report_override JSONB, -- 存储老师手动编辑的覆盖数据
     
     -- 费用追踪
     cost DECIMAL(10, 6),
-    tokens_used JSONB DEFAULT '{}',
+    tokens_used JSONB DEFAULT '{}', -- 包含 history 数组
     
     created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     completed_at TIMESTAMPTZ,
     INDEX idx_student_id (student_id),
     INDEX idx_status (status)
@@ -951,13 +1004,15 @@ CREATE TABLE questions (
 - **Indexes**: `idx_test_id`
 
 ```sql
+```sql
 CREATE TABLE test_items (
     id BIGINT PRIMARY KEY,
     test_id BIGINT NOT NULL,
     question_no INT NOT NULL, -- 题目序号
     score SMALLINT NOT NULL, -- 0, 1, 2
     feedback TEXT, -- 单题评语
-    transcript_segment TEXT, -- 该题对应的转写片段
+    evidence TEXT, -- 证据点 (原 transcript_segment)
+    created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (test_id, question_no)
 );
 ```
@@ -1135,7 +1190,7 @@ questions/{level}/{unit}/{question_no}_{question}.{ext}
 #### Part1 流程（Qwen-Omni 异步队列）
 
 ```
-POST /tests/{id}/submit-part1
+POST /api/v1/tests/{id}/part1
     ↓
 1. 接收音频 OSS Key，更新 test 状态为 processing
 2. 将任务放入 RabbitMQ 队列 (Part1Queue)
@@ -1154,7 +1209,7 @@ Worker 异步处理：
 #### Part2 流程（Qwen-Omni 异步队列）
 
 ```
-POST /tests/{id}/submit-part2
+POST /api/v1/tests/{id}/part2
     ↓
 1. 接收音频 OSS Key，更新 test 状态为 processing
 2. 将任务放入 RabbitMQ 队列 (Part2Queue)
@@ -1176,7 +1231,7 @@ Worker 异步处理：
 #### 报告解读流程（Qwen-Plus 异步队列）
 
 ```
-POST /tests/{id}/interpretation
+POST /api/v1/tests/{id}/interpretation
     ↓
 1. 检查当前 interpretation_status
    - 若 "generating"：返回 {status: "generating", message: "正在生成中"}
@@ -1207,13 +1262,23 @@ Worker 异步处理：
 |--------|------|------|
 | GET | `/api/v1/students` | 学生列表（默认从 CRM 学生列表接口拉取 + 缓存；支持分页/搜索/筛选） |
 | POST | `/api/v1/students/import` | 导入学生（从 CRM 拉取） |
-| POST | `/api/v1/students/{id}/tests` | 获取该学生测评历史 |
-| POST | `/api/v1/students/{id}/entry-token` | 生成/重置该学生入口 token（返回链接 + 二维码内容） |
+| POST | `/api/v1/students/batch-entry-tokens` | 批量生成学生入口 token |
+| POST | `/api/v1/students/{id}/entry-token` | 生成/重置单个学生入口 token |
 | GET | `/api/v1/tests/{id}` | 完整报告 |
+| PATCH | `/api/v1/tests/{id}/report` | **编辑**报告（覆盖 AI 评分） |
+| GET | `/api/v1/tests/{id}/report/override` | 获取报告覆盖数据 |
 | POST | `/api/v1/tests/{id}/interpretation` | **生成**解读版（异步队列处理，立即返回状态） |
 | GET | `/api/v1/tests/{id}/interpretation/status` | **轮询**解读版生成状态（前端每 2 秒调用） |
 | GET | `/api/v1/tests/{id}/interpretation` | **获取**解读版（需先生成完成） |
 | POST | `/api/v1/tests/{id}/share` | 生成家长分享链接 |
+
+### Admin (管理后台)
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/api/v1/admin/stats/overview` | 全局概览（学生数/测试数/分享率/转化率） |
+| GET | `/api/v1/admin/teachers` | 教师列表（含名下学生数/测试数统计） |
+| POST | `/api/v1/admin/tasks/{task_id}/retry` | 失败任务手动重试 |
 
 ### Health Check (健康检查)
 
@@ -1375,7 +1440,20 @@ Worker 异步处理：
 | **报告解读生成失败** | Qwen API 5xx 或 超时 > 90s | 标记 `interpretation_status=failed`；前端提示"AI 正在深度思考，请稍后查看报告"；前端提示"生成失败，请重试" | 队列 Worker 最多重试 **3 次**（NACK 重试）。**费用记录**：失败时也记录费用（只要有 usage 返回），每次尝试都追加到 `interpretation_history[]` |
 | **CRM 接口异常** | 接口超时/5xx | **使用本地缓存**；若无缓存，允许老师手动输入学生姓名（标记为 `unverified`） | 接口恢复后自动同步清洗数据 |
 
-### 15.2 并发控制 (Concurrency Control)
+### 15.2 费用追踪 (Cost Tracking)
+
+> **原则**：所有 AI 调用必须记录 Token 消耗与费用，包括失败的尝试。
+
+- **数据结构**：`TestModel.tokens_used` (JSON)
+- **记录字段**：
+  - `part1_history`: Array<{attempt, prompt_tokens, completion_tokens, cost, error?}>
+  - `part2_history`: Array<{attempt, prompt_tokens, completion_tokens, cost, error?}>
+  - `summary_analysis_history`: Array<{attempt, prompt_tokens, completion_tokens, cost, error?}>
+  - `interpretation_history`: Array<{attempt, prompt_tokens, completion_tokens, cost, error?}>
+  - `total_cost`: Sum(all_histories)
+- **统计**：Admin 看板可按时间/模型/功能模块聚合查询成本。
+
+### 15.3 并发控制 (Concurrency Control)
 
 - **Part 2 异步削峰**：
   - 学生提交后，音频上传 OSS，任务写入 `test_queue` (RabbitMQ/Kafka)。
@@ -1387,7 +1465,7 @@ Worker 异步处理：
   - 读写分离：老师端报表查询走 Read Replica。
   - 慢查询熔断：超过 3s 的统计查询自动熔断，返回缓存旧值。
 
-### 15.3 Part 1 并发控制 (Waiting Room)
+### 15.4 Part 1 并发控制 (Waiting Room)
 
 > **约束**：Qwen-Omni API 限流 **60 RPM**。为防止超限导致服务不可用，必须实施严格的排队机制。
 

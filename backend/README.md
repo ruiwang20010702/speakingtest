@@ -1,104 +1,103 @@
-# Speaking Test System - Backend
+# AI 口语测评系统 - 后端服务 (Backend)
 
-基于 **FastAPI + RabbitMQ + Qwen-Omni** 构建的 AI 口语测评后端服务。
+基于 **FastAPI + RabbitMQ + Qwen-Omni** 构建的高性能 AI 口语测评后端。采用 **Clean Architecture (整洁架构)** 设计，确保业务逻辑与外部依赖（AI、数据库、存储）的深度解耦。
+
+---
 
 ## 🌟 核心功能
 
-- **Token 鉴权**：基于 JWT 的教师/管理员认证，一次性 Token 的学生入口。
-- **Part 1 测评**：单词朗读评测，基于 Qwen-Omni 音频理解。
-- **Part 2 测评**：开放式问答评测，异步处理，支持流利度/内容/语法多维度评分。
-- **报告生成**：自动生成学生能力雷达图、强弱项分析及个性化建议。
-- **数据管理**：学生档案、题库管理、测评记录持久化。
+- **多模态 AI 评测**：
+  - **Part 1 (Word Reading)**：基于 `qwen3-omni-flash` 的单词/短语朗读 4 维度评分。
+  - **Part 2 (Dialogue)**：12 题连续问答评测，支持语义理解、语法纠错及流利度评估。
+- **异步任务架构**：基于 RabbitMQ 实现任务削峰填谷，支持长耗时 AI 推理任务的稳定执行。
+- **智能报告生成**：
+  - 自动融合 Part 1 & 2 数据，生成五维能力雷达图。
+  - 利用 `qwen-plus` 结构化输出生成家长建议与教师解读演讲稿。
+- **精细化成本追踪**：实时记录每一笔 AI 调用的 Token 消耗，并根据模型单价换算为 RMB 成本。
+- **运维与管理**：支持失败任务重试、审计日志追踪、题库动态管理。
+
+---
 
 ## 🛠️ 技术栈
 
-- **Language**: Python 3.11+
-- **Framework**: FastAPI (Async)
-- **Database**: PostgreSQL (SQLAlchemy + AsyncPG)
-- **Queue**: RabbitMQ (aio-pika)
-- **Storage**: Aliyun OSS
-- **AI**: Qwen-Omni (Audio), Qwen-Plus (Text Analysis)
+- **语言**: Python 3.11+
+- **框架**: FastAPI (全异步)
+- **数据库**: PostgreSQL (SQLAlchemy + AsyncPG)
+- **任务队列**: RabbitMQ (aio-pika)
+- **缓存/限流**: Redis
+- **对象存储**: 阿里云 OSS
+- **AI 模型**: Qwen-Omni (音频评测), Qwen-Plus (文本分析)
 
-## 📋 前置依赖
+---
 
-| 服务 | 用途 | 必须? | 安装命令 (macOS) |
-|------|------|-------|------------------|
-| **PostgreSQL** | 主数据库 | ✅ | `brew install postgresql@15` |
-| **RabbitMQ** | 异步任务队列 | ✅ | `brew install rabbitmq` |
-| **Redis** | 限流/缓存 | ❌ (生产建议) | `brew install redis` |
+## 📂 项目结构 (Clean Architecture)
 
-## 🚀 快速启动 (Quick Start)
+```text
+src/
+├── domain/                 # [核心层] 领域实体与业务规则 (纯 Python)
+│   ├── entities/           # 核心业务对象 (Student, Test, Score)
+│   └── ports/              # 抽象接口 (Repository, AI Gateway)
+│
+├── use_cases/              # [应用层] 业务用例编排
+│   ├── evaluate_part1.py   # Part 1 评测逻辑
+│   ├── evaluate_part2.py   # Part 2 异步评测逻辑
+│   └── interpretation.py   # 报告解读生成逻辑
+│
+├── adapters/               # [适配器层] 外部依赖实现
+│   ├── controllers/        # FastAPI 路由 (Admin, Student, Report)
+│   ├── gateways/       # 外部服务网关 (QwenClient, OSSClient)
+│   └── repositories/       # 数据库实现 (SQLAlchemy Models)
+│
+└── infrastructure/         # [基础设施层] 框架与配置
+    ├── main.py             # App 入口
+    ├── database.py         # 数据库连接池
+    └── queue_service.py    # RabbitMQ 生产者/消费者封装
+```
+
+---
+
+## 🚀 快速启动
 
 ### 1. 环境准备
-
 ```bash
 cd backend
-
-# 创建虚拟环境
 python -m venv venv
 source venv/bin/activate
-
-# 安装依赖
 pip install -r requirements.txt
-
-# 配置环境变量
-cp .env.example .env
-# 编辑 .env 填入数据库、OSS、Qwen API Key 等配置
+cp .env.example .env  # 填入 API Keys 和数据库配置
 ```
 
 ### 2. 初始化数据库
-
 ```bash
-# 运行迁移脚本
 python migrate_db.py
 ```
 
-### 3. 启动服务 (推荐)
-
-使用 `scripts/dev.sh` 脚本一键启动所有服务（RabbitMQ + Workers + API）：
-
+### 3. 一键启动 (API + 3 Workers)
 ```bash
 ./scripts/dev.sh
 ```
 
-> **提示**: 该脚本会自动检查端口、启动 RabbitMQ、启动 3 个异步 Worker 进程以及 FastAPI 服务。按 `Ctrl+C` 可一键停止所有进程。
+---
 
-### 4. 手动启动 (可选)
+## ⚙️ Worker 职责说明
 
-如果需要单独调试：
+系统包含三个核心异步 Worker，通过 RabbitMQ 协同工作：
 
-```bash
-# 启动 RabbitMQ
-brew services start rabbitmq
+1.  **`part1_worker.py`**：处理单词朗读评测，调用 Qwen-Omni 音频接口。
+2.  **`part2_worker.py`**：处理 12 题对话评测，生成转写、评分及家长端汇总分析。
+3.  **`interpretation_worker.py`**：为教师生成报告解读演讲稿（约 10 分钟长度）。
 
-# 启动 API 服务
-uvicorn src.infrastructure.main:app --reload --host 0.0.0.0 --port 8000
+---
 
-# 启动 Worker (新终端)
-python scripts/part1_worker.py
-python scripts/part2_worker.py
-python scripts/interpretation_worker.py
-```
+## 📚 API 调试
 
-## 📂 项目结构
+启动服务后，可通过以下地址查看交互式文档：
+- **Swagger UI**: `http://localhost:8000/docs`
+- **ReDoc**: `http://localhost:8000/redoc`
 
-```
-backend/
-├── src/
-│   ├── adapters/           # 接口适配层
-│   │   ├── controllers/    # API 路由 (Restful)
-│   │   ├── gateways/       # 外部服务 (Qwen, OSS)
-│   │   └── repositories/   # 数据库访问 (SQLAlchemy)
-│   ├── use_cases/          # 应用业务逻辑 (Evaluation, Report)
-│   ├── domain/             # 领域实体与接口定义
-│   └── infrastructure/     # 基础设施 (Config, DB, Queue)
-├── scripts/                # 运维脚本 (Workers, Migration)
-├── database/               # SQL 迁移文件
-└── tests/                  # 单元测试
-```
+---
 
-## 📚 API 文档
-
-启动服务后访问：
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+## 🛡️ 安全与审计
+- **鉴权**：基于 JWT 的教师/管理员认证。
+- **审计**：所有敏感操作（Token 生成、报告重置、配置变更）均记录至 `audit_logs` 表。
+- **限流**：基于 Redis 实现的接口频率限制，保护 AI 接口配额。

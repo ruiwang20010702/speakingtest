@@ -83,25 +83,45 @@ class ErrorResponse(BaseModel):
 | `POST` | `/api/v1/tests/{id}/part1` | **Async**: Upload & Submit Part 1 Audio |
 | `POST` | `/api/v1/tests/{id}/part2` | **Async**: Upload & Submit Part 2 Audio |
 
-**Reports**
+**Reports & Interpretation**
 | Method | Path | Description |
 | :--- | :--- | :--- |
 | `GET` | `/api/v1/tests/{id}/report` | Get full report details (Part 1 + Part 2 + Analysis) |
 | `POST` | `/api/v1/reports/share-tokens` | Create share token for parent |
 | `GET` | `/api/v1/reports/shared/{token}` | View shared report (Public) |
+| `GET` | `/api/v1/tests/{id}/interpretation` | Get AI-generated speech script for teachers |
+
+**Admin & Management**
+| Method | Path | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/admin/stats/overview` | System overview stats (Students, Tests, Shares) |
+| `GET` | `/api/v1/admin/stats/funnel` | Conversion funnel data |
+| `GET` | `/api/v1/admin/stats/cost` | Real-time API cost tracking (RMB) |
+| `GET` | `/api/v1/admin/teachers` | List teachers with summary stats |
+| `GET` | `/api/v1/admin/failed-tasks` | List failed/stuck tasks |
+| `POST` | `/api/v1/admin/failed-tasks/{id}/retry` | Retry a failed task |
+| `GET` | `/api/v1/admin/audit-logs` | Query system audit logs |
 
 ---
 
 ## 3. Key Design Decisions
 
 1.  **Async & Queue-Based Architecture**:
-    *   Both **Part 1** and **Part 2** evaluations are handled asynchronously.
+    *   **Part 1, Part 2, and Interpretation** evaluations are handled asynchronously.
     *   API endpoints upload audio to OSS and push tasks to **RabbitMQ**.
-    *   Dedicated **Worker Processes** consume tasks to handle long-running AI inference (Qwen).
+    *   Dedicated **Worker Processes** consume tasks:
+        *   `part1_worker.py`: Handles word/sentence reading evaluation.
+        *   `part2_worker.py`: Handles 12-question dialogue evaluation and summary analysis.
+        *   `interpretation_worker.py`: Handles AI speech script generation for teachers.
     
 2.  **AI Provider**:
     *   **Qwen-Omni (Flash)**: Used for both Part 1 (Reading) and Part 2 (Q&A) audio evaluation due to its multimodal capabilities and cost-effectiveness.
-    *   **Qwen-Plus**: Used for generating structured summary analysis and report interpretations.
+    *   **Qwen-Plus**: Used for generating structured summary analysis and report interpretations (speech scripts).
 
-3.  **Dependency Injection**: 
+3.  **Cost Tracking**:
+    *   The system records the exact token usage for every AI call.
+    *   Costs are calculated in real-time based on current model pricing (Input Text, Input Audio, Output Text).
+    *   Total cost is aggregated at the `Test` level and can be queried via Admin APIs.
+
+4.  **Dependency Injection**: 
     *   Use FastAPI's DI system to inject `DBSession`, `OSSClient`, and `QwenGateway`, ensuring testability and modularity.
