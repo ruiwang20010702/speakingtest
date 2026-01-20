@@ -40,8 +40,8 @@ const TestContainer: React.FC = () => {
       const testId = parseInt(testIdStr);
 
       const { submitPart1 } = await import('./services/api');
-      // 直接使用传入的题目列表，避免重复请求
-      const part1Text = part1Questions.map(q => q.text).join(' ');
+      // 直接使用传入的题目列表，用逗号分隔（配合 AI 短语识别规则）
+      const part1Text = part1Questions.map(q => q.text).join(', ');
 
       // 创建 Promise 并存储引用（静默执行，不显示状态）
       part1PromiseRef.current = submitPart1(testId, audio, part1Text)

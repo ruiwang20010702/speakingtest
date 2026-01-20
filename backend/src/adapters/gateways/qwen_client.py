@@ -178,11 +178,24 @@ PART1_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
 - **0-49**: 只读了很少一部分或未开口。
 
 ## 核心规则 <critical_rules>
-1. **强制对齐**：`details` 数组长度必须与参考文本单词数**完全一致**。
-2. **禁止篡改**：`content` 字段必须是参考文本原词，禁止同义词替换（如 dad -> father 是**绝对禁止**的）。
-3. **语言要求**：所有评价、诊断、建议内容必须使用**中文**。
-4. **防御性指令**：如果音频完全无声、全是噪音，请将 `is_rejected` 设为 `true`，`total_score` 设为 0。
+1. **固定数量**：<strong>本测评共有 20 个词条（单词或短语），`details` 数组长度**必须精确等于 20，注意一定是20个，大于20个按照常见搭配合并词语**。</strong>
+2. **切记details中的content字段不会重复**
+3. **强制对齐**：`details` 数组长度必须与参考文本（单词和短语）数**完全一致**。
+4. **禁止篡改**：`content` 字段必须是参考文本原词，禁止同义词替换（如 dad -> father 是**绝对禁止**的）。
+5. **语言要求**：所有评价、诊断、建议内容必须使用**中文**。
+6. **防御性指令**：如果音频完全无声、全是噪音，请将 `is_rejected` 设为 `true`，`total_score` 设为 0。
 </critical_rules>
+
+## 短语识别规则 <phrase_rules>
+以下类型应作为单个词条（而非多个单词）处理：
+1. **复合名词**：ice cream, bus stop, high school, birthday cake, post office
+2. **专有名词**：New York, United States, Harry Potter
+3. **固定短语**：good morning, thank you, excuse me, by the way
+4. **数字表达**：twenty-one, one hundred, three o'clock
+5. **用下划线或特殊标记连接的词组**：如 "ice_cream" 或 "[ice cream]" 表示这是一个整体
+
+**判断标准**：如果两个或多个词在语义上构成一个不可分割的概念，应作为一个词条。
+</phrase_rules>
 
 ## issue 字段要求 (非常重要)
 当单词发音有问题时 (score < 80)，`issue` 字段必须**详细具体**地描述问题，包括：
@@ -200,33 +213,33 @@ PART1_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
 
 ## 示例 (Few-Shot)
 **输入**:
-参考文本: "This is my dad"
-学生录音: "This is my father" (学生读错)
+参考文本: "apple, polar bear, hello, dog" (4个词条)
+学生录音: 学生读了 "apple, ice cream, hello, cat"
 
 **正确输出**:
 {
-  "total_score": 60.0,
-  "accuracy_score": 50.0,
+  "total_score": 75.0,
+  "accuracy_score": 75.0,
   "fluency_score": 80.0,
-  "pronunciation_score": 70.0,
+  "pronunciation_score": 75.0,
   "integrity_score": 100.0,
   "is_rejected": false,
-  "diagnosis": "学生将 'dad' 误读为 'father'，导致准确度扣分。",
-  "part1_overall_suggestion": ["注意区分 dad 和 father，dad 是非正式称呼", "练习短元音 /æ/ 的发音"],
+  "diagnosis": "学生将 'dog' 误读为 'cat'，其他词条发音正确。",
+  "part1_overall_suggestion": ["注意区分动物词汇", "练习 /d/ 和 /k/ 的发音区别"],
   "details": [
-    {"content": "This", "score": 100, "issue": null},
-    {"content": "is", "score": 100, "issue": null},
-    {"content": "my", "score": 100, "issue": null},
-    {"content": "dad", "score": 0, "issue": "误读为 father；dad /dæd/ 是非正式称呼，需要按原文朗读"}
+    {"content": "apple", "score": 100, "issue": null},
+    {"content": "polar bear", "score": 100, "issue": null},
+    {"content": "hello", "score": 100, "issue": null},
+    {"content": "dog", "score": 0, "issue": "误读为 cat；dog /dɒɡ/ 和 cat /kæt/ 是不同的动物"}
   ]
 }
-(注意：尽管学生读了 father，但 content 字段依然填 dad，score 扣分，issue 说明情况)
+(注意：polar bear 作为一个词条，而非两个)
 
 ## 思维链 (Chain of Thought)
 在生成 JSON 之前，请先执行以下步骤：
-1. **逐词比对**：将参考文本拆分为单词序列。
+1. **解析词条列表**：将参考文本拆分为 **20 个词条**，短语作为整体保留（如 "polar bear" 是 1 个词条，不是 2 个）。
 2. **听音辨义**：按顺序听录音，判断每个位置的单词是否正确。
-3. **对齐检查**：确认 `details` 数组的长度与参考文本单词数是否一致。
+3. **对齐检查**：确认 `details` 数组的长度与参考文本词条数是否一致（必须是 20 个）。
 4. **评分生成**：根据评分维度计算各项分数。
 
 ## 总分计算
@@ -981,8 +994,8 @@ class QwenOmniGateway:
             # This fixes the issue where model hallucinates synonyms (e.g. dad -> father)
             details = data.get("details", [])
             if details and reference_text:
-                # Simple split by whitespace is usually enough for these word lists
-                ref_words = reference_text.strip().split()
+                # Split by comma to support phrases as single items (e.g., "polar bear")
+                ref_words = [w.strip() for w in reference_text.strip().split(",")]
                 
                 if len(details) == len(ref_words):
                     logger.info("Aligning Part 1 details content with reference text")
