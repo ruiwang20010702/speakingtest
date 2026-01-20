@@ -96,13 +96,13 @@ class CSVImportUseCase:
             
             for row_num, row in enumerate(reader, start=2):
                 total_rows += 1
-                    student_id = row.get('student_id', '').strip()
-                    student_name = row.get('student_name', '').strip()
-                    
-                    if not student_id or not student_name:
-                        errors.append(f"Row {row_num}: Missing student_id or student_name")
-                        continue
-                    
+                student_id = row.get('student_id', '').strip()
+                student_name = row.get('student_name', '').strip()
+                
+                if not student_id or not student_name:
+                    errors.append(f"Row {row_num}: Missing student_id or student_name")
+                    continue
+                
                 rows_data.append({
                     'row_num': row_num,
                     'student_id': student_id,
