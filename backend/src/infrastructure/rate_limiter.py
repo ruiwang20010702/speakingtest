@@ -31,13 +31,13 @@ class RateLimiter:
     def get_qwen_limiter(cls) -> asyncio.Semaphore:
         """
         Get Qwen API rate limiter.
-        Limits to 1 request per second (60 RPM).
-        Note: This is a simple semaphore; for true RPM limiting,
-        use a token bucket or sliding window in production.
+        Allows 2 concurrent requests to support parallel calls
+        (e.g., report interpretation + course selling).
+        Qwen API limit is 60 RPM, 2 concurrent is safe.
         """
         if "qwen" not in cls._instances:
-            # Allow only 1 concurrent request to self-throttle
-            cls._instances["qwen"] = asyncio.Semaphore(1)
+            # Allow 2 concurrent requests for parallel report generation
+            cls._instances["qwen"] = asyncio.Semaphore(2)
         return cls._instances["qwen"]
 
 
