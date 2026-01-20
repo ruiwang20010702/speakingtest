@@ -44,6 +44,11 @@ class RateLimiter:
         Get Qwen Plus (文本分析) API rate limiter.
         qwen-plus RPM=600, allow 10 concurrent requests.
         Used for summary analysis, report interpretation, course selling.
+
+        NOTE:
+        - 这是当前线上实际使用的 Qwen 文本模型限流器；
+        - 所有 qwen-plus 相关调用都应该通过该 Semaphore 做并发控制；
+        - 具体并发上限由这里的常量（目前为 10）控制，如需调整请修改此处。
         """
         if "qwen_plus" not in cls._instances:
             cls._instances["qwen_plus"] = asyncio.Semaphore(10)
@@ -52,8 +57,15 @@ class RateLimiter:
     @classmethod
     def get_qwen_limiter(cls) -> asyncio.Semaphore:
         """
-        [Deprecated] Use get_qwen_omni_limiter() or get_qwen_plus_limiter() instead.
-        Kept for backward compatibility, defaults to omni limiter.
+        [LEGACY / COMPAT ONLY]
+
+        旧版统一 Qwen 限流入口，目前项目代码中**已不再主动使用**。
+
+        - 新代码请直接使用：
+          - `get_qwen_omni_limiter()` 控制音频评测并发（Part1 / Part2）
+          - `get_qwen_plus_limiter()` 控制文本分析并发（汇总分析 / 报告解读等）
+        - 仅保留给历史代码或外部脚本做兼容使用，默认返回 omni 限流器。
+        - 如需删除，请先全局搜索确认没有外部依赖。
         """
         return cls.get_qwen_omni_limiter()
 
@@ -71,8 +83,19 @@ async def with_xunfei_limit(coro):
 
 async def with_qwen_limit(coro):
     """
-    Execute coroutine with Qwen rate limiting.
-    Adds a 1-second delay after each call to respect 60 RPM.
+    [LEGACY HELPER]
+
+    旧版 Qwen 限流封装，目前项目主流程中**没有引用**。
+
+    历史行为：
+    - 使用 `get_qwen_limiter()` 获取统一的 Qwen Semaphore；
+    - 每次调用后强制 `sleep(1.0)`，相当于最多 1 QPS。
+
+    当前推荐做法：
+    - 对音频评测：直接使用 `RateLimiter.get_qwen_omni_limiter()` 并在调用处 `async with`。
+    - 对文本分析：直接使用 `RateLimiter.get_qwen_plus_limiter()` 并在调用处 `async with`。
+
+    如果没有兼容性需求，可以考虑后续删除该 helper。
     """
     semaphore = RateLimiter.get_qwen_limiter()
     async with semaphore:
