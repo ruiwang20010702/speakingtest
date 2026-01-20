@@ -183,80 +183,80 @@ export const TeacherManagementPage: React.FC = () => {
                 </div>
             ) : (
                 <>
-                    <div className="bg-surface rounded-2xl shadow-sm overflow-hidden">
-                        <table className="w-full">
-                            <thead className="bg-gray-50 border-b border-gray-100">
-                                <tr>
-                                    <th className="text-left px-6 py-4 text-sm font-semibold text-text-sub">老师</th>
-                                    <th className="text-left px-6 py-4 text-sm font-semibold text-text-sub">部门</th>
-                                    <th className="text-center px-6 py-4 text-sm font-semibold text-text-sub">学生数</th>
-                                    <th className="text-center px-6 py-4 text-sm font-semibold text-text-sub">测评数</th>
-                                    <th className="text-center px-6 py-4 text-sm font-semibold text-text-sub">分享数</th>
-                                    <th className="text-right px-6 py-4 text-sm font-semibold text-text-sub">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {filteredTeachers.length > 0 ? (
-                                    filteredTeachers.map((teacher) => (
-                                        <tr
-                                            key={teacher.user_id}
-                                            className="hover:bg-gray-50 transition-colors cursor-pointer"
-                                            onClick={() => navigate(`/admin/teachers/${teacher.user_id}`)}
-                                        >
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                                                        <span className="text-primary font-semibold">
-                                                            {(teacher.ss_crm_name || teacher.email).charAt(0).toUpperCase()}
-                                                        </span>
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-medium text-text-main">
-                                                            {teacher.ss_crm_name || teacher.email}
-                                                        </p>
-                                                        {teacher.ss_crm_name && (
-                                                            <p className="text-xs text-text-sub">{teacher.email}</p>
-                                                        )}
-                                                    </div>
+                <div className="bg-surface rounded-2xl shadow-sm overflow-hidden">
+                    <table className="w-full">
+                        <thead className="bg-gray-50 border-b border-gray-100">
+                            <tr>
+                                <th className="text-left px-6 py-4 text-sm font-semibold text-text-sub">老师</th>
+                                <th className="text-left px-6 py-4 text-sm font-semibold text-text-sub">部门</th>
+                                <th className="text-center px-6 py-4 text-sm font-semibold text-text-sub">学生数</th>
+                                <th className="text-center px-6 py-4 text-sm font-semibold text-text-sub">测评数</th>
+                                <th className="text-center px-6 py-4 text-sm font-semibold text-text-sub">分享数</th>
+                                <th className="text-right px-6 py-4 text-sm font-semibold text-text-sub">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {filteredTeachers.length > 0 ? (
+                                filteredTeachers.map((teacher) => (
+                                    <tr
+                                        key={teacher.user_id}
+                                        className="hover:bg-gray-50 transition-colors cursor-pointer"
+                                        onClick={() => navigate(`/admin/teachers/${teacher.user_id}`)}
+                                    >
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                                    <span className="text-primary font-semibold">
+                                                        {(teacher.ss_crm_name || teacher.email).charAt(0).toUpperCase()}
+                                                    </span>
                                                 </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-left">
-                                                <span className="text-sm text-text-sub">
-                                                    {teacher.ss_dept4_name || '-'}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
-                                                    {teacher.student_count}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-700">
-                                                    {teacher.test_count}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-700">
-                                                    {teacher.share_count}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                                                    <ChevronRight size={20} className="text-text-sub" />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={6} className="px-6 py-20 text-center text-text-sub">
-                                            {searchQuery ? `未找到匹配 "${searchQuery}" 的老师` : '暂无老师数据'}
+                                                <div>
+                                                    <p className="font-medium text-text-main">
+                                                        {teacher.ss_crm_name || teacher.email}
+                                                    </p>
+                                                    {teacher.ss_crm_name && (
+                                                        <p className="text-xs text-text-sub">{teacher.email}</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-left">
+                                            <span className="text-sm text-text-sub">
+                                                {teacher.ss_dept4_name || '-'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
+                                                {teacher.student_count}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-700">
+                                                {teacher.test_count}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-700">
+                                                {teacher.share_count}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                                                <ChevronRight size={20} className="text-text-sub" />
+                                            </button>
                                         </td>
                                     </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={6} className="px-6 py-20 text-center text-text-sub">
+                                        {searchQuery ? `未找到匹配 "${searchQuery}" 的老师` : '暂无老师数据'}
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
 
                     {/* Pagination */}
                     {totalPages > 1 && (
