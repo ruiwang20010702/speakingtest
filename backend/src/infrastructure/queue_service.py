@@ -129,15 +129,15 @@ class Part2TaskConsumer:
         self.connection = await connect_robust(self.url)
         self.channel = await self.connection.channel()
         
-        # prefetch=1: 确保一次只处理一个任务
-        await self.channel.set_qos(prefetch_count=1)
+        # prefetch=5: 配合 qwen3-omni-flash 5 并发限流
+        await self.channel.set_qos(prefetch_count=5)
         
         self.queue = await self.channel.declare_queue(
             self.QUEUE_NAME,
             durable=True,
         )
         
-        logger.info(f"Part2TaskConsumer 已连接，限速: {self.RPM_LIMIT} RPM")
+        logger.info(f"Part2TaskConsumer 已连接，prefetch=5")
     
     async def _on_message(self, message: IncomingMessage):
         """处理消息"""
@@ -282,9 +282,10 @@ class Part1TaskConsumer:
     async def connect(self):
         self.connection = await connect_robust(self.url)
         self.channel = await self.connection.channel()
-        await self.channel.set_qos(prefetch_count=1)
+        # prefetch=5: 配合 qwen3-omni-flash 5 并发限流
+        await self.channel.set_qos(prefetch_count=5)
         self.queue = await self.channel.declare_queue(self.QUEUE_NAME, durable=True)
-        logger.info(f"Part1TaskConsumer 已连接，限速: {self.RPM_LIMIT} RPM")
+        logger.info(f"Part1TaskConsumer 已连接，prefetch=5")
     
     async def _on_message(self, message: IncomingMessage):
         async with message.process():
@@ -443,9 +444,10 @@ class InterpretationTaskConsumer:
     async def connect(self):
         self.connection = await connect_robust(self.url)
         self.channel = await self.connection.channel()
-        await self.channel.set_qos(prefetch_count=1)
+        # prefetch=10: 配合 qwen-plus 10 并发限流
+        await self.channel.set_qos(prefetch_count=10)
         self.queue = await self.channel.declare_queue(self.QUEUE_NAME, durable=True)
-        logger.info(f"InterpretationTaskConsumer 已连接，限速: {self.RPM_LIMIT} RPM")
+        logger.info(f"InterpretationTaskConsumer 已连接，prefetch=10")
     
     async def _on_message(self, message: IncomingMessage):
         async with message.process():
