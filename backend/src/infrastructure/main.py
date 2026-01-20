@@ -49,6 +49,11 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Application shutting down...")
+    
+    # 关闭全局 HTTP 客户端
+    from src.infrastructure.http_client import close_http_client
+    await close_http_client()
+    
     await engine.dispose()
 
 

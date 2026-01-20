@@ -17,8 +17,9 @@ engine = create_async_engine(
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
     # 连接池超时设置（秒）
-    pool_pre_ping=True,  # 连接前先 ping，自动重连断开的连接
-    pool_recycle=3600,   # 连接回收时间（1小时），避免长时间连接超时
+    pool_pre_ping=True,   # 连接前先 ping，自动重连断开的连接
+    pool_recycle=3600,    # 连接回收时间（1小时），避免长时间连接超时
+    pool_timeout=30,      # 获取连接超时 30 秒（避免网关 60s 超时）
 )
 
 # Async session factory

@@ -317,52 +317,54 @@ class XunfeiGateway:
             result_data = {}
             
             try:
-                async with websockets.connect(url) as ws:
-                    # 1. Send first frame (ssb command, no audio)
-                    first_frame = self._build_first_frame(reference_text)
-                    await ws.send(json.dumps(first_frame))
-                    logger.debug("Sent first frame (ssb) to Xunfei")
-                    
-                    # Wait for server to process parameters (important!)
-                    await asyncio.sleep(0.3)
-                    
-                    # 2. Send audio frames with cmd:auw
-                    chunk_count = 0
-                    all_chunks = []
-                    async for chunk in audio_iterator:
-                        all_chunks.append(chunk)
-                    
-                    total_chunks = len(all_chunks)
-                    for i, chunk in enumerate(all_chunks):
-                        is_last = (i == total_chunks - 1)
-                        audio_frame = self._build_audio_frame(chunk, seq=i+1, is_last=is_last)
-                        await ws.send(json.dumps(audio_frame))
-                        chunk_count += 1
+                # 整体超时 50 秒（网关 60 秒，留 10 秒余量）
+                async with asyncio.timeout(50):
+                    async with websockets.connect(url) as ws:
+                        # 1. Send first frame (ssb command, no audio)
+                        first_frame = self._build_first_frame(reference_text)
+                        await ws.send(json.dumps(first_frame))
+                        logger.debug("Sent first frame (ssb) to Xunfei")
                         
-                        if on_progress:
-                            await on_progress(chunk_count)
+                        # Wait for server to process parameters (important!)
+                        await asyncio.sleep(0.3)
                         
-                        # Control send rate (~40ms per chunk)
-                        await asyncio.sleep(0.04)
-                    
-                    logger.debug(f"Sent {chunk_count} audio frames, waiting for result")
-                    
-                    # Receive result
-                    while True:
-                        response = await asyncio.wait_for(ws.recv(), timeout=30)
-                        data = json.loads(response)
+                        # 2. Send audio frames with cmd:auw
+                        chunk_count = 0
+                        all_chunks = []
+                        async for chunk in audio_iterator:
+                            all_chunks.append(chunk)
                         
-                        code = data.get("code", -1)
-                        if code != 0:
-                            logger.error(f"Xunfei error: {data}")
-                            result_data = {"code": code, "message": data.get("message", "Unknown error")}
-                            break
+                        total_chunks = len(all_chunks)
+                        for i, chunk in enumerate(all_chunks):
+                            is_last = (i == total_chunks - 1)
+                            audio_frame = self._build_audio_frame(chunk, seq=i+1, is_last=is_last)
+                            await ws.send(json.dumps(audio_frame))
+                            chunk_count += 1
+                            
+                            if on_progress:
+                                await on_progress(chunk_count)
+                            
+                            # Control send rate (~40ms per chunk)
+                            await asyncio.sleep(0.04)
                         
-                        # Check if evaluation is complete
-                        status = data.get("data", {}).get("status")
-                        if status == 2:  # Complete
-                            result_data = data
-                            break
+                        logger.debug(f"Sent {chunk_count} audio frames, waiting for result")
+                        
+                        # Receive result
+                        while True:
+                            response = await asyncio.wait_for(ws.recv(), timeout=30)
+                            data = json.loads(response)
+                            
+                            code = data.get("code", -1)
+                            if code != 0:
+                                logger.error(f"Xunfei error: {data}")
+                                result_data = {"code": code, "message": data.get("message", "Unknown error")}
+                                break
+                            
+                            # Check if evaluation is complete
+                            status = data.get("data", {}).get("status")
+                            if status == 2:  # Complete
+                                result_data = data
+                                break
                         
             except asyncio.TimeoutError:
                 logger.error("Xunfei evaluation timeout")

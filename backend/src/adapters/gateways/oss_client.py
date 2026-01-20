@@ -88,11 +88,14 @@ class OSSClient:
         key = self._generate_key(test_id, part, extension)
         
         try:
-            # 上传文件 (Run in executor to avoid blocking)
+            # 上传文件 (Run in executor to avoid blocking, with 30s timeout)
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None, 
-                lambda: self.bucket.put_object(key, audio_data)
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None, 
+                    lambda: self.bucket.put_object(key, audio_data)
+                ),
+                timeout=30.0  # OSS 上传超时 30 秒
             )
             
             if result.status == 200:
