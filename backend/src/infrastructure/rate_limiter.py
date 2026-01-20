@@ -28,17 +28,34 @@ class RateLimiter:
         return cls._instances["xunfei"]
 
     @classmethod
+    def get_qwen_omni_limiter(cls) -> asyncio.Semaphore:
+        """
+        Get Qwen Omni (音频评测) API rate limiter.
+        qwen3-omni-flash RPM=60, allow 5 concurrent requests.
+        Used for Part 1/Part 2 audio evaluation.
+        """
+        if "qwen_omni" not in cls._instances:
+            cls._instances["qwen_omni"] = asyncio.Semaphore(5)
+        return cls._instances["qwen_omni"]
+
+    @classmethod
+    def get_qwen_plus_limiter(cls) -> asyncio.Semaphore:
+        """
+        Get Qwen Plus (文本分析) API rate limiter.
+        qwen-plus RPM=600, allow 10 concurrent requests.
+        Used for summary analysis, report interpretation, course selling.
+        """
+        if "qwen_plus" not in cls._instances:
+            cls._instances["qwen_plus"] = asyncio.Semaphore(10)
+        return cls._instances["qwen_plus"]
+
+    @classmethod
     def get_qwen_limiter(cls) -> asyncio.Semaphore:
         """
-        Get Qwen API rate limiter.
-        Allows 2 concurrent requests to support parallel calls
-        (e.g., report interpretation + course selling).
-        Qwen API limit is 60 RPM, 2 concurrent is safe.
+        [Deprecated] Use get_qwen_omni_limiter() or get_qwen_plus_limiter() instead.
+        Kept for backward compatibility, defaults to omni limiter.
         """
-        if "qwen" not in cls._instances:
-            # Allow 2 concurrent requests for parallel report generation
-            cls._instances["qwen"] = asyncio.Semaphore(2)
-        return cls._instances["qwen"]
+        return cls.get_qwen_omni_limiter()
 
 
 async def with_xunfei_limit(coro):

@@ -733,7 +733,9 @@ class QwenOmniGateway:
         self.base_url = settings.QWEN_BASE_URL
         self.model = settings.QWEN_MODEL           # qwen3-omni-flash (音频评测)
         self.plus_model = settings.QWEN_PLUS_MODEL  # qwen-plus (文本分析)
-        self.semaphore = RateLimiter.get_qwen_limiter()
+        # 分开限流：omni (音频) RPM=60, plus (文本) RPM=600
+        self.omni_semaphore = RateLimiter.get_qwen_omni_limiter()  # 5 并发
+        self.plus_semaphore = RateLimiter.get_qwen_plus_limiter()  # 10 并发
         # 思考模式配置
         self.enable_thinking = settings.QWEN_ENABLE_THINKING
         self.thinking_budget = settings.QWEN_THINKING_BUDGET
@@ -801,8 +803,8 @@ class QwenOmniGateway:
             request_body["thinking_budget"] = self.thinking_budget
             logger.info(f"Part 2 启用思考模式，thinking_budget={self.thinking_budget}")
         
-        # 使用 Semaphore 限流
-        async with self.semaphore:
+        # 使用 omni_semaphore 限流 (qwen3-omni-flash, RPM=60)
+        async with self.omni_semaphore:
             logger.info(f"开始 Qwen Part 2 评测，音频大小: {len(audio_data)} bytes")
             
             try:
@@ -887,7 +889,8 @@ class QwenOmniGateway:
             request_body["thinking_budget"] = self.thinking_budget
             logger.info(f"Part 1 启用思考模式，thinking_budget={self.thinking_budget}")
         
-        async with self.semaphore:
+        # 使用 omni_semaphore 限流 (qwen3-omni-flash, RPM=60)
+        async with self.omni_semaphore:
             logger.info(f"开始 Qwen Part 1 评测，音频大小: {len(audio_data)} bytes")
             try:
                 # 流式请求
@@ -1175,7 +1178,8 @@ class QwenOmniGateway:
             }
         }
         
-        async with self.semaphore:
+        # 使用 plus_semaphore 限流 (qwen-plus, RPM=600)
+        async with self.plus_semaphore:
             logger.info(f"开始生成测评汇总分析 (qwen-plus): {student_name}")
             usage = {}  # 初始化 usage，确保失败时也能访问
             content = ""
@@ -1280,7 +1284,8 @@ class QwenOmniGateway:
             }
         }
         
-        async with self.semaphore:
+        # 使用 plus_semaphore 限流 (qwen-plus, RPM=600)
+        async with self.plus_semaphore:
             logger.info(f"开始生成课程规划 (qwen-plus, 8个核心问题): {student_name}")
             usage = {}
             content = ""
@@ -1470,7 +1475,8 @@ class QwenOmniGateway:
             }
         }
         
-        async with self.semaphore:
+        # 使用 plus_semaphore 限流 (qwen-plus, RPM=600)
+        async with self.plus_semaphore:
             logger.info(f"开始生成报告解读 (qwen-plus, 6页结构): {student_name}")
             usage = {}  # 初始化 usage，确保失败时也能访问
             content = ""
