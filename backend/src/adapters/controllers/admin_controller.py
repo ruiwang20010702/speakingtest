@@ -31,7 +31,9 @@ class FunnelStats(BaseModel):
 
 class CostStats(BaseModel):
     total_tests: int
-    estimated_cost_cny: float
+    total_cost_cny: float           # 真实总成本（从数据库读取）
+    avg_cost_per_test: float        # 真实平均单次成本
+    estimated_cost_cny: float       # 兼容旧字段（保留）
 
 @router.get(
     "/stats/overview",
@@ -186,26 +188,30 @@ async def get_funnel_stats(
 @router.get(
     "/stats/cost",
     response_model=CostStats,
-    summary="获取成本估算",
-    description="基于测评次数估算 API 成本。"
+    summary="获取成本统计",
+    description="获取真实的 API 调用成本统计（从数据库读取）。"
 )
 async def get_cost_stats(
     db: AsyncSession = Depends(get_db),
     _ = Depends(require_admin)
 ):
-    # Total Tests (including failed ones as they might have incurred cost, but let's count all)
+    # Total Tests
     stmt_tests = select(func.count(TestModel.id))
     total_tests = (await db.execute(stmt_tests)).scalar() or 0
     
-    # Estimated Cost per Test (CNY)
-    # Xunfei Part 1: ~0.05 CNY (Estimate)
-    # Qwen Part 2: ~0.01 CNY (Estimate)
-    # Total: ~0.06 CNY
-    cost_per_test = 0.06
+    # 真实总成本（从 tests.cost 字段求和）
+    stmt_cost = select(func.sum(TestModel.cost))
+    total_cost = (await db.execute(stmt_cost)).scalar() or 0
+    total_cost_cny = float(total_cost)
+    
+    # 计算真实平均单次成本
+    avg_cost_per_test = total_cost_cny / total_tests if total_tests > 0 else 0
     
     return CostStats(
         total_tests=total_tests,
-        estimated_cost_cny=total_tests * cost_per_test
+        total_cost_cny=total_cost_cny,
+        avg_cost_per_test=avg_cost_per_test,
+        estimated_cost_cny=total_cost_cny  # 兼容旧字段，现在使用真实值
     )
 
 

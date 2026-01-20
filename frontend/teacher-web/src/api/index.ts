@@ -142,7 +142,9 @@ export interface FunnelStats {
 
 export interface CostStats {
   total_tests: number;
-  estimated_cost_cny: number;
+  total_cost_cny: number;        // 真实总成本
+  avg_cost_per_test: number;     // 真实平均单次成本
+  estimated_cost_cny: number;    // 兼容旧字段
 }
 
 // Teacher Management Types

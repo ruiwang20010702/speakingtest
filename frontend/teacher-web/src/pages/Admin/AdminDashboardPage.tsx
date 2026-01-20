@@ -213,9 +213,9 @@ export const AdminDashboardPage: React.FC = () => {
                         <div className="space-y-6">
                             <div className="text-center p-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl">
                                 <p className="text-4xl font-bold text-green-700">
-                                    ¥{cost.estimated_cost_cny.toFixed(2)}
+                                    ¥{cost.total_cost_cny.toFixed(2)}
                                 </p>
-                                <p className="text-sm text-green-600 mt-1">预估总成本</p>
+                                <p className="text-sm text-green-600 mt-1">真实总成本</p>
                             </div>
                             
                             <div className="space-y-3">
@@ -224,15 +224,15 @@ export const AdminDashboardPage: React.FC = () => {
                                     <span className="font-semibold text-text-main">{cost.total_tests}</span>
                                 </div>
                                 <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-sm text-text-sub">单次成本</span>
+                                    <span className="text-sm text-text-sub">平均单次成本</span>
                                     <span className="font-semibold text-text-main">
-                                        ¥{cost.total_tests > 0 ? (cost.estimated_cost_cny / cost.total_tests).toFixed(4) : '0.00'}
+                                        ¥{cost.avg_cost_per_test.toFixed(4)}
                                     </span>
                                 </div>
                                 <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                                     <span className="text-sm text-text-sub">月度预估</span>
                                     <span className="font-semibold text-text-main">
-                                        ¥{(cost.estimated_cost_cny * 4).toFixed(2)}
+                                        ¥{(cost.total_cost_cny * 4).toFixed(2)}
                                     </span>
                                 </div>
                             </div>
