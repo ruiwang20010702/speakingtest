@@ -96,13 +96,13 @@ class CSVImportUseCase:
             
             for row_num, row in enumerate(reader, start=2):
                 total_rows += 1
-                    student_id = row.get('student_id', '').strip()
-                    student_name = row.get('student_name', '').strip()
-                    
-                    if not student_id or not student_name:
-                        errors.append(f"Row {row_num}: Missing student_id or student_name")
-                        continue
-                    
+                student_id = row.get('student_id', '').strip()
+                student_name = row.get('student_name', '').strip()
+                
+                if not student_id or not student_name:
+                    errors.append(f"Row {row_num}: Missing student_id or student_name")
+                    continue
+                
                 rows_data.append({
                     'row_num': row_num,
                     'student_id': student_id,
@@ -116,10 +116,10 @@ class CSVImportUseCase:
             # Batch query: load all existing students by external_user_id (1 query instead of N)
             existing_students: Dict[str, StudentProfileModel] = {}
             if external_ids:
-                    stmt = select(StudentProfileModel).where(
+                stmt = select(StudentProfileModel).where(
                     StudentProfileModel.external_user_id.in_(external_ids)
-                    )
-                    result = await self.db.execute(stmt)
+                )
+                result = await self.db.execute(stmt)
                 for student in result.scalars().all():
                     existing_students[student.external_user_id] = student
             

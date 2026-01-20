@@ -326,21 +326,21 @@ async def list_teachers(
     student_counts = {row.teacher_id: row.count for row in result.all()}
         
     # 4. Batch query: test count per teacher (1 query)
-        stmt_tests = (
+    stmt_tests = (
         select(
             StudentProfileModel.teacher_id,
             func.count(TestModel.id).label('count')
         )
-            .select_from(TestModel)
-            .join(StudentProfileModel, TestModel.student_id == StudentProfileModel.user_id)
+        .select_from(TestModel)
+        .join(StudentProfileModel, TestModel.student_id == StudentProfileModel.user_id)
         .where(StudentProfileModel.teacher_id.in_(teacher_ids))
         .group_by(StudentProfileModel.teacher_id)
-        )
+    )
     result = await db.execute(stmt_tests)
     test_counts = {row.teacher_id: row.count for row in result.all()}
-        
+    
     # 5. Batch query: share count per teacher (1 query)
-        stmt_shares = (
+    stmt_shares = (
         select(
             ReportShareTokenModel.created_by,
             func.count(ReportShareTokenModel.id).label('count')
