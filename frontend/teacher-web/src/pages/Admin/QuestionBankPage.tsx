@@ -6,7 +6,13 @@ import { questionsApi, type Question, type QuestionCreate, type QuestionUpdate }
 
 // Available levels and units (can be fetched from API later)
 const LEVELS = ['L0', 'L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'L8', 'L9'];
-const UNITS = ['Unit 1', 'Unit 2', 'Unit 3', 'Unit 4', 'Unit 5', 'Unit 6', 'Unit 7', 'Unit 8', 'Unit 9', 'Unit 10', 'Unit 11', 'Unit 12'];
+
+// 根据级别获取单元数量：L0-L6 有 18 个单元，L7-L9 有 6 个单元
+const getUnitsForLevel = (level: string): string[] => {
+    const levelNum = parseInt(level.replace('L', ''));
+    const unitCount = levelNum <= 6 ? 18 : 6;
+    return Array.from({ length: unitCount }, (_, i) => `Unit ${i + 1}`);
+};
 
 export const QuestionBankPage: React.FC = () => {
     const [questions, setQuestions] = useState<Question[]>([]);
@@ -189,7 +195,14 @@ export const QuestionBankPage: React.FC = () => {
                                         {LEVELS.map(level => (
                                             <button
                                                 key={level}
-                                                onClick={() => { setSelectedLevel(level); setIsLevelDropdownOpen(false); }}
+                                                onClick={() => { 
+                                                    const newUnits = getUnitsForLevel(level);
+                                                    if (!newUnits.includes(selectedUnit)) {
+                                                        setSelectedUnit('Unit 1');
+                                                    }
+                                                    setSelectedLevel(level); 
+                                                    setIsLevelDropdownOpen(false); 
+                                                }}
                                                 className={`w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50 transition-colors ${
                                                     selectedLevel === level ? 'bg-primary/5 text-primary font-medium' : 'text-text-main'
                                                 }`}
@@ -231,7 +244,7 @@ export const QuestionBankPage: React.FC = () => {
                                     className="absolute z-50 w-full mt-2 bg-surface border border-gray-200 rounded-xl shadow-xl overflow-hidden"
                                 >
                                     <div className="max-h-64 overflow-y-auto py-2">
-                                        {UNITS.map(unit => (
+                                        {getUnitsForLevel(selectedLevel).map(unit => (
                                             <button
                                                 key={unit}
                                                 onClick={() => { setSelectedUnit(unit); setIsUnitDropdownOpen(false); }}
