@@ -205,29 +205,29 @@ async def upload_audio(
                     "error": "FileTooLarge",
                     "message": f"文件过大，最大支持 {settings.UPLOAD_MAX_SIZE_MB}MB"
                 }
+            )
+        
+        # 上传到 OSS
+        oss_client = get_oss_client()
+        result = await oss_client.upload_audio(
+            audio_data=audio_data,
+            test_id=test_id,
+            part=part,
+            extension=extension
         )
-    
-    # 上传到 OSS
-    oss_client = get_oss_client()
-    result = await oss_client.upload_audio(
-        audio_data=audio_data,
-        test_id=test_id,
-        part=part,
-        extension=extension
-    )
-    
-    if not result.success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "UploadFailed", "message": result.error}
+        
+        if not result.success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "UploadFailed", "message": result.error}
+            )
+        
+        return UploadResponse(
+            success=True,
+            url=result.url,
+            key=result.key,
+            message="上传成功"
         )
-    
-    return UploadResponse(
-        success=True,
-        url=result.url,
-        key=result.key,
-        message="上传成功"
-    )
     finally:
         # Always release semaphore
         semaphore.release()

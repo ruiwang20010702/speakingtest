@@ -89,6 +89,9 @@ def decode_token(token: str) -> Optional[TokenData]:
     Returns:
         TokenData if valid, None if invalid/expired
     """
+    if token is None:
+        return None
+    
     try:
         payload = jwt.decode(
             token, 
