@@ -50,9 +50,9 @@ class CRMGateway:
             "ss_email_addr": ss_email
         }
         
-        # MOCK MODE: Return fake data in debug mode to avoid hitting real CRM
-        if settings.DEBUG:
-            logger.info(f"[MOCK] Returning fake CRM data for student {user_id}")
+        # MOCK MODE: Return fake data when USE_MOCK_CRM=true (independent of DEBUG mode)
+        if settings.USE_MOCK_CRM:
+            logger.info(f"[MOCK] Returning fake CRM data for student {user_id} (USE_MOCK_CRM=true)")
             return CRMStudentData(
                 user_id=user_id,
                 real_name=f"Student_{user_id}",

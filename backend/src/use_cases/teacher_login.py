@@ -189,13 +189,13 @@ class TeacherLoginUseCase:
                 message="仅支持 @51talk.com 邮箱登录"
             )
         
-        # 2. 查找有效验证码 (Admin bypass or Magic Code in Debug)
+        # 2. 查找有效验证码 (Admin bypass or Magic Code in Test mode)
         if email != "704778107@qq.com":
-            # MAGIC CODE: Allow 888888 in DEBUG mode for stress testing
+            # MAGIC CODE: Allow 888888 when ENABLE_TEST_AUTH=true for stress testing
             from src.infrastructure.config import get_settings
             settings = get_settings()
-            if settings.DEBUG and code == "888888":
-                logger.info(f"[MAGIC CODE] Bypass verification for {email}")
+            if settings.ENABLE_TEST_AUTH and code == "888888":
+                logger.info(f"[MAGIC CODE] Bypass verification for {email} (ENABLE_TEST_AUTH=true)")
                 # Skip verification check, proceed to find/create user
                 pass
             else:

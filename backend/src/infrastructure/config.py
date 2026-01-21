@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     
     # 管理员邮箱列表 (逗号分隔)
     ADMIN_EMAILS: str = ""  # 例如: "admin1@51talk.com,admin2@51talk.com"
+    
+    # CRM Mock 模式 (设为 true 则使用假数据，不调用真实 CRM API)
+    USE_MOCK_CRM: bool = False
+    
+    # 测试认证模式 (设为 true 启用魔法验证码 888888 和测试邮箱白名单)
+    ENABLE_TEST_AUTH: bool = False
 
     # Database (PostgreSQL)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/speakingtest"

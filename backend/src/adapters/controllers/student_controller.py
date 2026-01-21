@@ -291,7 +291,7 @@ async def import_student(
         operator_id=user_id,
         action="IMPORT_STUDENT",
         target_type="student",
-        target_id=result.student_id,  # Assuming result has student_id, let me check ImportStudentResponse
+        target_id=request.student_id,  # Use request.student_id since response doesn't have it
         details={"student_id": request.student_id, "is_new": result.is_new},
         request=http_request
     )

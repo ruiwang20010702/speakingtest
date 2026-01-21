@@ -34,8 +34,8 @@ class SendCodeRequestSchema(BaseModel):
         
         v = v.lower().strip()
         
-        # 检查测试邮箱白名单（仅限 DEBUG 模式）
-        if settings.DEBUG and settings.TEST_EMAIL_WHITELIST:
+        # 检查测试邮箱白名单（仅限 ENABLE_TEST_AUTH 模式）
+        if settings.ENABLE_TEST_AUTH and settings.TEST_EMAIL_WHITELIST:
             whitelist = [e.strip().lower() for e in settings.TEST_EMAIL_WHITELIST.split(",") if e.strip()]
             if v in whitelist:
                 return v
