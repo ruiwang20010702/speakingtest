@@ -151,7 +151,7 @@ export const VocabPage: React.FC = () => {
     if (!words.length) return { masteryRate: 0, starLevel: 0 };
     const perfectCount = words.filter(w => w.status === 'perfect').length;
     const masteryRate = Math.round((perfectCount / words.length) * 100);
-    const starLevel = masteryRate >= 90 ? 5 : masteryRate >= 75 ? 4 : masteryRate >= 60 ? 3 : masteryRate >= 40 ? 2 : 1;
+    const starLevel = masteryRate >= 90 ? 5 : masteryRate >= 70 ? 4 : masteryRate >= 60 ? 3 : masteryRate >= 40 ? 2 : 1;
     return { masteryRate, starLevel };
   }, [words]);
 
@@ -229,18 +229,18 @@ export const VocabPage: React.FC = () => {
               <div className="flex flex-col">
                 <div className="flex items-center space-x-1 text-baby/60 mb-0.5">
                    <Activity size={10} />
-                   <span className="text-[8px] font-black uppercase tracking-widest">出现频率</span>
+                   <span className="text-[8px] font-black uppercase tracking-widest">单词数量</span>
                 </div>
-                <span className="text-lg font-black text-white italic leading-none">{words.length}<span className="text-baby/40 text-xs ml-1 font-mono">次</span></span>
+                <span className="text-lg font-black text-white italic leading-none">{words.length}<span className="text-baby/40 text-xs ml-1 font-mono">个</span></span>
               </div>
               <div className="w-px h-8 bg-white/10" />
               <div className="flex flex-col">
                 <div className="flex items-center space-x-1 text-baby/60 mb-0.5">
                    <ShieldCheck size={10} />
-                   <span className="text-[8px] font-black uppercase tracking-widest">发音质量</span>
+                   <span className="text-[8px] font-black uppercase tracking-widest">掌握情况</span>
                 </div>
                 <span className="text-lg font-black text-white italic leading-none">
-                  {stats.masteryRate >= 80 ? '优秀' : stats.masteryRate >= 60 ? '良好' : '加油'}
+                  {stats.masteryRate >= 90 ? '优秀' : stats.masteryRate >= 70 ? '良好' : stats.masteryRate >= 60 ? '一般' : '加油'}
                 </span>
               </div>
             </div>

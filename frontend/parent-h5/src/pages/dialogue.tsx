@@ -168,22 +168,40 @@ export const DialoguePage: React.FC = () => {
       </div>
 
       <div className="relative z-30 mb-4">
-        <motion.div 
-          initial={{ x: -20, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          className="inline-flex items-center space-x-1.5 bg-baby px-2 py-0.5 rounded-sm border-[1.5px] border-black shadow-[2px_2px_0px_#000]"
-        >
-          <MessageCircle size={10} className="text-klein fill-klein" />
-          <span className="text-[8px] font-black text-klein uppercase tracking-widest">语音实录对比</span>
-        </motion.div>
-        <motion.h2 
-          initial={{ x: -20, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="text-3xl font-black text-white italic tracking-tighter mt-2 leading-none"
-        >
-          对话<span className="text-baby">能力表现</span>
-        </motion.h2>
+        <div className="flex items-start justify-between">
+          <div>
+            <motion.div 
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              className="inline-flex items-center space-x-1.5 bg-baby px-2 py-0.5 rounded-sm border-[1.5px] border-black shadow-[2px_2px_0px_#000]"
+            >
+              <MessageCircle size={10} className="text-klein fill-klein" />
+              <span className="text-[8px] font-black text-klein uppercase tracking-widest">语音实录对比</span>
+            </motion.div>
+            <motion.h2 
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="text-3xl font-black text-white italic tracking-tighter mt-2 leading-none"
+            >
+              对话<span className="text-baby">能力表现</span>
+            </motion.h2>
+          </div>
+          
+          {/* Part2 总分展示 */}
+          <motion.div
+            initial={{ scale: 0, rotate: -10 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ delay: 0.3, type: "spring" }}
+            className="bg-white border-2 border-black rounded-xl p-2 shadow-[3px_3px_0px_#000] flex flex-col items-center"
+          >
+            <span className="text-[7px] font-black text-klein/50 uppercase tracking-widest">对话总分</span>
+            <div className="flex items-baseline">
+              <span className="text-2xl font-black text-klein italic">{data?.part2?.score ?? '-'}</span>
+              <span className="text-[10px] font-bold text-klein/40 ml-0.5">/100</span>
+            </div>
+          </motion.div>
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col justify-center space-y-4 relative z-20">
