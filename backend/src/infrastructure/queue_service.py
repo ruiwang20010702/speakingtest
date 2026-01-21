@@ -102,7 +102,7 @@ class Part2TaskConsumer:
     
     特性:
     - 限速: 60 RPM (每秒最多 1 个请求)
-    - prefetch=1: 一次只处理一个任务
+    - prefetch=5: 一次只处理一个任务
     - 自动重试: 失败任务会被 NACK 并重新入队
     """
     
@@ -422,7 +422,7 @@ class InterpretationTaskConsumer:
     
     特性:
     - 最大重试 3 次
-    - prefetch=1: 一次只处理一个任务
+    - prefetch=10: 一次只处理一个任务
     - 限速: 60 RPM
     """
     
