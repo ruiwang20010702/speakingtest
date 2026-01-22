@@ -1333,8 +1333,10 @@ Worker 异步处理：
 | `JWT_SECRET_KEY` | JWT 签名密钥（生产环境必须修改） | 32 字符以上随机字符串 |
 | `ADMIN_EMAILS` | 管理员邮箱列表（逗号分隔） | `admin1@51talk.com,admin2@51talk.com` |
 | `CORS_ORIGINS` | 允许的跨域来源（逗号分隔） | `https://teacher.example.com` |
-| `TEST_EMAIL_WHITELIST` | 测试环境邮箱白名单（仅 DEBUG 模式） | `test@example.com` |
+| `TEST_EMAIL_WHITELIST` | 测试环境邮箱白名单（仅 ENABLE_TEST_AUTH 模式） | `test@example.com` |
 | `FRONTEND_TEACHER_URL` | 老师端前端地址 | `http://localhost:5173` |
+| `USE_MOCK_CRM` | CRM Mock 模式（设为 true 则使用假数据，不调用真实 CRM API） | `false` |
+| `ENABLE_TEST_AUTH` | 测试认证模式（设为 true 启用魔法验证码 888888 和 TEST_EMAIL_WHITELIST） | `false` |
 
 **安全检查**：
 - 生产环境启动时自动检测 `JWT_SECRET_KEY` 是否为默认值，若是则拒绝启动
