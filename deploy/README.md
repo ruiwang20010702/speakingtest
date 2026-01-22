@@ -42,7 +42,7 @@
 - **后端服务器安全组**: 开放 8000 (API) 给前端内网，5672 (RabbitMQ) 仅限内网。
 
 #### 1.2 创建实例
-- **RDS**: PostgreSQL 15+，高可用版。
+- **RDS**: PostgreSQL 17，高可用版。
 - **OSS**: 私有 Bucket，开启跨域配置（允许前端直传）。
 
 ---
@@ -51,7 +51,7 @@
 
 1.  **安装依赖**:
     ```bash
-    sudo apt update && sudo apt install -y python3.11 python3.11-venv rabbitmq-server redis-server
+    sudo apt update && sudo apt install -y python3.11 python3.11-venv rabbitmq-server
     ```
 2.  **配置服务**:
     - 使用 `systemd` 管理 `speakingtest-api` 和 3 个 Worker 进程。
@@ -65,7 +65,6 @@
 # 数据库与队列
 DATABASE_URL=postgresql+asyncpg://user:pass@rm-xxx.pg.rds.aliyuncs.com:5432/speakingtest
 RABBITMQ_URL=amqp://guest:guest@localhost:5672/
-REDIS_URL=redis://localhost:6379/0
 
 # AI 配置 (通义千问)
 QWEN_API_KEY=sk-xxxx
