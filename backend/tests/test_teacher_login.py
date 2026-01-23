@@ -138,7 +138,7 @@ class TestTeacherLoginUseCase:
             assert response.role == "teacher"
 
     @pytest.mark.asyncio
-    async def test_login_admin_role(self, test_db):
+    async def test_login_admin_role(self, test_db, monkeypatch):
         """Test admin email (from ADMIN_EMAILS config) gets admin role on login."""
         # Create a valid verification code for admin email
         # Note: admin email needs valid verification code, no bypass
@@ -158,20 +158,24 @@ class TestTeacherLoginUseCase:
             code="123456"
         )
 
-        # Mock the config to include our test email in ADMIN_EMAILS
-        with patch("src.use_cases.teacher_login.get_settings") as mock_settings:
-            mock_settings.return_value.ENABLE_TEST_AUTH = False
-            mock_settings.return_value.TEST_EMAIL_WHITELIST = ""
-            mock_settings.return_value.ADMIN_EMAILS = admin_email
+        # Set environment variable for ADMIN_EMAILS
+        monkeypatch.setenv("ADMIN_EMAILS", admin_email)
+        
+        # Clear cached settings to pick up new env var
+        from src.infrastructure.config import get_settings
+        get_settings.cache_clear()
             
-            with patch("src.use_cases.teacher_login.fetch_crm_user_info", new_callable=AsyncMock) as mock_crm:
-                mock_crm.return_value = None
+        with patch("src.use_cases.teacher_login.fetch_crm_user_info", new_callable=AsyncMock) as mock_crm:
+            mock_crm.return_value = None
 
-                use_case = TeacherLoginUseCase(test_db)
-                response = await use_case.execute(request)
+            use_case = TeacherLoginUseCase(test_db)
+            response = await use_case.execute(request)
 
-                assert response.success is True
-                assert response.role == "admin"
+            assert response.success is True
+            assert response.role == "admin"
+        
+        # Restore settings cache
+        get_settings.cache_clear()
 
     @pytest.mark.asyncio
     async def test_login_invalid_email(self, test_db):
