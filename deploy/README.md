@@ -62,20 +62,37 @@
 ### 3. 环境变量配置 (.env)
 
 ```bash
-# 数据库与队列
+# ========== 安全配置（必须修改） ==========
+DEBUG=false
+ENABLE_TEST_AUTH=false
+ENABLE_TOKEN_REENTRY=false
+JWT_SECRET_KEY=<使用 openssl rand -hex 32 生成>
+
+# Cookie 安全（httpOnly Cookie 认证）
+COOKIE_NAME=access_token
+COOKIE_DOMAIN=.your-domain.com
+COOKIE_SECURE=true
+COOKIE_SAMESITE=lax
+COOKIE_PATH=/api
+
+# CORS（必须显式配置）
+CORS_ORIGINS=https://student.your-domain.com,https://parent.your-domain.com,https://teacher.your-domain.com
+
+# ========== 数据库与队列 ==========
 DATABASE_URL=postgresql+asyncpg://user:pass@rm-xxx.pg.rds.aliyuncs.com:5432/speakingtest
 RABBITMQ_URL=amqp://guest:guest@localhost:5672/
+REDIS_URL=redis://localhost:6379/0
 
-# AI 配置 (通义千问)
+# ========== AI 配置 (通义千问) ==========
 QWEN_API_KEY=sk-xxxx
 
-# 阿里云 OSS
+# ========== 阿里云 OSS ==========
 OSS_ACCESS_KEY_ID=LTAIxxxx
 OSS_ACCESS_KEY_SECRET=xxxx
 OSS_ENDPOINT=oss-cn-hangzhou.aliyuncs.com
 OSS_BUCKET_NAME=speaking-test-audio
 
-# 前端 URL (用于生成分享链接)
+# ========== 前端 URL (用于生成分享链接) ==========
 FRONTEND_STUDENT_URL=https://student.your-domain.com/s
 FRONTEND_PARENT_URL=https://parent.your-domain.com
 FRONTEND_TEACHER_URL=https://teacher.your-domain.com
@@ -100,7 +117,29 @@ sudo journalctl -u speakingtest-worker-part2 -f
 
 ---
 
-## 🛡️ 生产环境安全建议
-1.  **JWT 密钥**: 必须使用 `openssl rand -hex 32` 生成强密钥。
-2.  **数据库白名单**: RDS 仅允许后端 ECS 内网 IP 访问。
-3.  **HTTPS**: 必须为所有端配置 SSL 证书（推荐使用 Certbot）。
+## 🛡️ 生产环境安全清单
+
+### 必须配置
+- [ ] **JWT 密钥**: 使用 `openssl rand -hex 32` 生成强密钥
+- [ ] **Cookie 安全**: `COOKIE_SECURE=true` + `COOKIE_DOMAIN=.your-domain.com`
+- [ ] **CORS**: 显式配置 `CORS_ORIGINS`（不能为空）
+- [ ] **禁用测试模式**: `ENABLE_TEST_AUTH=false` + `ENABLE_TOKEN_REENTRY=false`
+- [ ] **HTTPS**: 所有端配置 SSL 证书（推荐 Certbot）
+
+### 网络安全
+- [ ] **数据库白名单**: RDS 仅允许后端 ECS 内网 IP 访问
+- [ ] **Redis 白名单**: 仅允许内网访问
+- [ ] **RabbitMQ**: 修改默认 guest 账号密码
+
+### 验证命令
+```bash
+# 检查 Cookie 设置
+curl -I https://teacher.your-domain.com/api/v1/auth/login
+# 应看到: Set-Cookie: access_token=...; HttpOnly; Secure; SameSite=Lax
+
+# 检查 CORS
+curl -I -H "Origin: https://teacher.your-domain.com" https://teacher.your-domain.com/api/v1/health
+# 应看到: Access-Control-Allow-Origin: https://teacher.your-domain.com
+```
+
+详细部署清单请参考 [production-checklist.md](./production-checklist.md)
