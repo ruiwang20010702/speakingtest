@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, defer
 from loguru import logger
 
 from src.infrastructure.database import get_db, get_db_readonly
@@ -270,7 +270,18 @@ async def get_student_tests(
     # Query from main table first
     if offset < main_total:
         main_limit = min(page_size, main_total - offset)
-        stmt = select(TestModel).where(
+        stmt = select(TestModel).options(
+            defer(TestModel.part1_raw_result),
+            defer(TestModel.part2_raw_result),
+            defer(TestModel.tokens_used),
+            defer(TestModel.summary_highlights),
+            defer(TestModel.summary_weaknesses),
+            defer(TestModel.summary_weekly_plan),
+            defer(TestModel.summary_dimension_feedback),
+            defer(TestModel.interpretation_pages),
+            defer(TestModel.interpretation_parent_script),
+            defer(TestModel.report_override),
+        ).where(
             TestModel.student_id == student_id
         ).order_by(TestModel.created_at.desc()).offset(offset).limit(main_limit)
         
