@@ -75,7 +75,9 @@ class SendVerificationCodeUseCase:
     
     CODE_LENGTH = 6
     EXPIRE_MINUTES = 5
-    RATE_LIMIT_SECONDS = 60  # 1分钟内只能发一次
+    RATE_LIMIT_SECONDS = 60  # 同一邮箱 1 分钟内只能发一次
+    IP_RATE_LIMIT_COUNT = 10  # 同一 IP 10 分钟内最多发 10 次
+    IP_RATE_LIMIT_WINDOW = 600  # 10 分钟窗口
     
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -102,6 +104,7 @@ class SendVerificationCodeUseCase:
             )
         
         # 2. 检查频率限制
+        # 2a. 同一邮箱频率限制
         rate_limit_time = china_now() - timedelta(seconds=self.RATE_LIMIT_SECONDS)
         stmt = select(VerificationCodeModel).where(
             and_(
@@ -117,6 +120,25 @@ class SendVerificationCodeUseCase:
                 success=False,
                 message="发送过于频繁，请稍后再试"
             )
+        
+        # 2b. 同一 IP 频率限制（防暴力攻击）
+        if request.ip_address:
+            from sqlalchemy import func
+            ip_window = china_now() - timedelta(seconds=self.IP_RATE_LIMIT_WINDOW)
+            ip_count_stmt = select(func.count(VerificationCodeModel.id)).where(
+                and_(
+                    VerificationCodeModel.ip_address == request.ip_address,
+                    VerificationCodeModel.created_at > ip_window
+                )
+            )
+            ip_count = (await self.db.execute(ip_count_stmt)).scalar() or 0
+            
+            if ip_count >= self.IP_RATE_LIMIT_COUNT:
+                logger.warning(f"IP 频率限制触发: ip={request.ip_address}, count={ip_count}")
+                return SendCodeResponse(
+                    success=False,
+                    message="请求过于频繁，请稍后再试"
+                )
         
         # 3. 生成验证码
         code = self._generate_code()
