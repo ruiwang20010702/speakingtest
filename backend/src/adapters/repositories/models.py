@@ -321,6 +321,12 @@ class TestRawDataModel(Base):
     # 用户编辑覆盖
     report_override = Column(JSON_TYPE, nullable=True)
     
+    # Summary Analysis (测评汇总分析) - 从 tests 表分离
+    summary_highlights = Column(Text, nullable=True)      # JSON array: 亮点
+    summary_weaknesses = Column(Text, nullable=True)      # JSON array: 短板
+    summary_weekly_plan = Column(Text, nullable=True)     # JSON array: 周计划
+    summary_dimension_feedback = Column(JSON_TYPE, nullable=True)  # AI 生成的五维评语
+    
     # 元数据
     created_at = Column(DateTime(timezone=True), default=lambda: china_now())
     updated_at = Column(DateTime(timezone=True), default=lambda: china_now(), onupdate=lambda: china_now())

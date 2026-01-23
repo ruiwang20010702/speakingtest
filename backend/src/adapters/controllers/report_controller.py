@@ -503,12 +503,17 @@ async def get_report_override(
         })
     
     # Extract suggestion from summary analysis (generated after test completion)
+    # Optimized: prefer raw_data table, fallback to main table
+    summary_highlights = (raw_data.summary_highlights if raw_data else None) or test.summary_highlights
+    summary_weaknesses = (raw_data.summary_weaknesses if raw_data else None) or test.summary_weaknesses
+    summary_weekly_plan = (raw_data.summary_weekly_plan if raw_data else None) or test.summary_weekly_plan
+    
     original_suggestion = None
     if test.summary_generated_at:
         original_suggestion = {
-            "highlights": json.loads(test.summary_highlights) if test.summary_highlights else [],
-            "weaknesses": json.loads(test.summary_weaknesses) if test.summary_weaknesses else [],
-            "suggestions": json.loads(test.summary_weekly_plan) if test.summary_weekly_plan else [],
+            "highlights": json.loads(summary_highlights) if summary_highlights else [],
+            "weaknesses": json.loads(summary_weaknesses) if summary_weaknesses else [],
+            "suggestions": json.loads(summary_weekly_plan) if summary_weekly_plan else [],
         }
     
     original = OriginalReportData(
@@ -1194,17 +1199,24 @@ async def get_parent_h5_report(
         }
     elif test.summary_generated_at:
         # 使用自动生成的测评汇总分析 (给家长看)
+        # Optimized: prefer raw_data table, fallback to main table
+        h5_summary_highlights = (raw_data_obj.summary_highlights if raw_data_obj else None) or test.summary_highlights
+        h5_summary_weaknesses = (raw_data_obj.summary_weaknesses if raw_data_obj else None) or test.summary_weaknesses
+        h5_summary_weekly_plan = (raw_data_obj.summary_weekly_plan if raw_data_obj else None) or test.summary_weekly_plan
+        
         interpretation = {
-            "highlights": json.loads(test.summary_highlights) if test.summary_highlights else [],
-            "weaknesses": json.loads(test.summary_weaknesses) if test.summary_weaknesses else [],
-            "suggestions": json.loads(test.summary_weekly_plan) if test.summary_weekly_plan else []
+            "highlights": json.loads(h5_summary_highlights) if h5_summary_highlights else [],
+            "weaknesses": json.loads(h5_summary_weaknesses) if h5_summary_weaknesses else [],
+            "suggestions": json.loads(h5_summary_weekly_plan) if h5_summary_weekly_plan else []
         }
     else:
         # 没有生成过，使用 None 让 ParentReportService 生成默认建议
         interpretation = None
     
     # 获取 AI 生成的五维评语（用于雷达图 comment 和 tags）
-    dimension_feedback = test.summary_dimension_feedback if hasattr(test, 'summary_dimension_feedback') else None
+    # Optimized: prefer raw_data table, fallback to main table
+    dimension_feedback = (raw_data_obj.summary_dimension_feedback if raw_data_obj else None) or \
+                        (test.summary_dimension_feedback if hasattr(test, 'summary_dimension_feedback') else None)
     
     # Apply radar override if available
     override_radar = override.get("radar")
