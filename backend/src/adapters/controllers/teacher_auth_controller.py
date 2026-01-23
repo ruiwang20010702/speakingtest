@@ -1,14 +1,16 @@
 """
 Teacher Auth Controller
 基于 /api-design-principles 和 /fastapi-auth-patterns 设计
+支持 httpOnly Cookie 认证（更安全）
 """
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database import get_db
 from src.infrastructure.responses import ErrorResponse
 from src.infrastructure.audit import log_audit
+from src.infrastructure.auth import set_auth_cookie, clear_auth_cookie, get_current_user_id
 from src.use_cases.teacher_login import (
     SendVerificationCodeUseCase,
     TeacherLoginUseCase,
@@ -140,11 +142,12 @@ async def send_verification_code(
         401: {"model": ErrorResponse}
     },
     summary="验证码登录",
-    description="使用邮箱验证码登录，返回 JWT Token"
+    description="使用邮箱验证码登录，返回 JWT Token 并设置 httpOnly Cookie"
 )
 async def login_with_code(
     request: LoginRequestSchema,
     http_request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -152,6 +155,7 @@ async def login_with_code(
     
     - 验证码正确且未过期时，返回 JWT Token
     - 如果用户不存在，自动创建新用户
+    - 同时设置 httpOnly Cookie（浏览器自动携带，更安全）
     """
     use_case = TeacherLoginUseCase(db)
     result = await use_case.execute(
@@ -171,6 +175,9 @@ async def login_with_code(
             detail={"error": result.error, "message": result.message}
         )
     
+    # 设置 httpOnly Cookie（浏览器端更安全）
+    set_auth_cookie(response, result.access_token)
+    
     # Audit Log
     await log_audit(
         db=db,
@@ -188,3 +195,37 @@ async def login_with_code(
         role=result.role,
         name=result.name or "Teacher"
     )
+
+
+@router.post(
+    "/logout",
+    summary="退出登录",
+    description="清除认证 Cookie，退出登录"
+)
+async def logout(
+    response: Response,
+    http_request: Request,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    退出登录
+    
+    - 清除 httpOnly Cookie
+    - 记录审计日志
+    """
+    # 清除 Cookie
+    clear_auth_cookie(response)
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        operator_id=user_id,
+        action="LOGOUT",
+        target_type="user",
+        target_id=user_id,
+        details={},
+        request=http_request
+    )
+    
+    return {"success": True, "message": "已退出登录"}

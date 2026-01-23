@@ -14,8 +14,10 @@ from openai import OpenAI
 # 配置
 # ============================================
 
-# API Key 从环境变量获取，或直接填写
-API_KEY = os.getenv("DASHSCOPE_API_KEY") or "sk-038d7badfa974ca9850ed879dae34a47"
+# API Key 必须从环境变量获取（安全要求，不允许硬编码）
+API_KEY = os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
+if not API_KEY:
+    raise ValueError("请设置环境变量 DASHSCOPE_API_KEY 或 QWEN_API_KEY")
 
 # 模型名称
 MODEL = "qwen3-omni-flash"
@@ -26,7 +28,8 @@ BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 def create_client():
     """创建 OpenAI 客户端"""
-    if not API_KEY:
+    # API_KEY 已在模块加载时验证
+    if not API_KEY:  # 备用检查
         raise ValueError(
             "请设置 DASHSCOPE_API_KEY 环境变量，或在代码中直接填写 API_KEY\n"
             "获取方式：https://bailian.console.aliyun.com/"

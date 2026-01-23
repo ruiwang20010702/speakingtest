@@ -62,8 +62,9 @@ export const LoginPage: React.FC = () => {
         setIsLoading(true);
         try {
             const response = await authApi.login(email, code);
-            const { access_token, name, role } = response.data;
-            login(access_token, email, name, role);
+            const { name, role } = response.data;
+            // Token 已通过 httpOnly Cookie 设置，只保存用户信息
+            login(email, name, role);
             // 根据角色跳转到对应的工作台
             navigate(role === 'admin' ? '/admin/dashboard' : '/dashboard');
         } catch (err: any) {

@@ -1,11 +1,12 @@
 """
 Authentication Module (JWT + RBAC)
 Based on /fastapi-auth-patterns workflow.
+Supports both httpOnly Cookie and Authorization header for JWT.
 """
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request, Response
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from argon2 import PasswordHasher
@@ -20,8 +21,8 @@ settings = get_settings()
 # Password hasher using Argon2 (Python 3.14 compatible)
 _password_hasher = PasswordHasher()
 
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/tokens")
+# OAuth2 scheme (fallback for Authorization header)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/tokens", auto_error=False)
 
 
 # ============================================
@@ -106,12 +107,79 @@ def decode_token(token: str) -> Optional[TokenData]:
 
 
 # ============================================
+# Cookie Utilities
+# ============================================
+
+def set_auth_cookie(response: Response, token: str) -> None:
+    """
+    Set httpOnly authentication cookie.
+    
+    Args:
+        response: FastAPI Response object
+        token: JWT access token
+    """
+    # 计算过期时间（秒）
+    max_age = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    
+    response.set_cookie(
+        key=settings.COOKIE_NAME,
+        value=token,
+        max_age=max_age,
+        httponly=True,                           # 防止 XSS 读取
+        secure=settings.COOKIE_SECURE,           # 仅 HTTPS
+        samesite=settings.COOKIE_SAMESITE,       # CSRF 保护
+        path=settings.COOKIE_PATH,               # 仅 API 路径
+        domain=settings.COOKIE_DOMAIN or None,   # Cookie 域名
+    )
+
+
+def clear_auth_cookie(response: Response) -> None:
+    """Clear authentication cookie (logout)."""
+    response.delete_cookie(
+        key=settings.COOKIE_NAME,
+        path=settings.COOKIE_PATH,
+        domain=settings.COOKIE_DOMAIN or None,
+    )
+
+
+def get_token_from_request(request: Request, auth_header: Optional[str] = None) -> Optional[str]:
+    """
+    Extract JWT token from request (Cookie first, then Authorization header).
+    
+    Priority:
+    1. httpOnly Cookie (recommended for browsers)
+    2. Authorization: Bearer header (for mobile apps / API clients)
+    
+    Args:
+        request: FastAPI Request object
+        auth_header: Authorization header value (from oauth2_scheme)
+    
+    Returns:
+        JWT token string or None
+    """
+    # 1. Try Cookie first (more secure for browsers)
+    token = request.cookies.get(settings.COOKIE_NAME)
+    if token:
+        return token
+    
+    # 2. Fallback to Authorization header (for API clients)
+    if auth_header:
+        return auth_header
+    
+    return None
+
+
+# ============================================
 # Dependencies
 # ============================================
 
-async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
+async def get_current_user_id(
+    request: Request,
+    auth_header: Optional[str] = Depends(oauth2_scheme)
+) -> int:
     """
     Dependency to extract current user ID from JWT token.
+    Supports both httpOnly Cookie and Authorization header.
     
     Usage:
         @router.get("/me")
@@ -124,6 +192,10 @@ async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    token = get_token_from_request(request, auth_header)
+    if not token:
+        raise credentials_exception
+    
     token_data = decode_token(token)
     if token_data is None:
         raise credentials_exception
@@ -131,12 +203,49 @@ async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
     return token_data.user_id
 
 
-async def get_current_user_role(token: str = Depends(oauth2_scheme)) -> str:
+async def get_current_user_role(
+    request: Request,
+    auth_header: Optional[str] = Depends(oauth2_scheme)
+) -> str:
     """Get current user's role from token."""
+    token = get_token_from_request(request, auth_header)
+    if not token:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
     token_data = decode_token(token)
     if token_data is None:
         raise HTTPException(status_code=401, detail="Invalid token")
     return token_data.role
+
+
+async def get_token_data(
+    request: Request,
+    auth_header: Optional[str] = Depends(oauth2_scheme)
+) -> TokenData:
+    """
+    Get full token data (user_id and role).
+    
+    Usage:
+        @router.get("/me")
+        async def get_me(token_data: TokenData = Depends(get_token_data)):
+            user_id = token_data.user_id
+            role = token_data.role
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    token = get_token_from_request(request, auth_header)
+    if not token:
+        raise credentials_exception
+    
+    token_data = decode_token(token)
+    if token_data is None:
+        raise credentials_exception
+    
+    return token_data
 
 
 # ============================================
@@ -146,13 +255,21 @@ async def get_current_user_role(token: str = Depends(oauth2_scheme)) -> str:
 def require_role(*allowed_roles: str):
     """
     Dependency factory for role-based access control.
+    Supports both httpOnly Cookie and Authorization header.
     
     Usage:
         @router.get("/admin-only")
         async def admin_endpoint(user_id: int = Depends(require_role("admin"))):
             ...
     """
-    async def role_checker(token: str = Depends(oauth2_scheme)) -> int:
+    async def role_checker(
+        request: Request,
+        auth_header: Optional[str] = Depends(oauth2_scheme)
+    ) -> int:
+        token = get_token_from_request(request, auth_header)
+        if not token:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        
         token_data = decode_token(token)
         if token_data is None:
             raise HTTPException(status_code=401, detail="Invalid token")

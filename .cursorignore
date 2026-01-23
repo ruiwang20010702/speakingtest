@@ -1,0 +1,6 @@
+# Cursor AI 过滤规则
+# 默认情况下 Cursor 会过滤所有 .env* 文件（安全考虑）
+
+# 允许读取 .env.example（模板文件，不含真实密钥）
+!.env.example
+!backend/.env.example

@@ -1,7 +1,14 @@
 """
 Student Entry Token Use Case
 Validates entry token and creates a session for the student.
+
+Security:
+- Tokens are single-use by default (STRICT_TOKEN_MODE)
+- Once used, token cannot be reused even if test is incomplete
+- This prevents link sharing/leakage abuse
+- Set ENABLE_TOKEN_REENTRY=true for development/testing only
 """
+import logging
 from datetime import datetime
 from typing import Optional
 from dataclasses import dataclass
@@ -10,8 +17,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.timezone import now as china_now
+from src.infrastructure.config import get_settings
 from src.adapters.repositories.models import StudentEntryTokenModel, UserModel, StudentProfileModel, TestModel
 from src.infrastructure.auth import create_access_token
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -36,16 +46,22 @@ class VerifyStudentEntryTokenUseCase:
     """
     Use case for verifying student entry token and creating a session.
     
-    Flow:
+    Security Flow:
     1. Find token in database
-    2. Check if token is valid (not expired, not used)
-    3. Mark token as used
-    4. Create or find existing test record
-    5. Generate JWT session token
+    2. Check if token is expired
+    3. Check if token is already used (strict mode blocks reuse)
+    4. Check if test is already completed
+    5. Mark token as used (prevents future reuse)
+    6. Create or find existing test record
+    7. Generate JWT session token
+    
+    Note: In strict mode (default), a used token cannot be reused even
+    if the test is incomplete. This prevents link sharing abuse.
     """
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.settings = get_settings()
 
     async def execute(self, token: str) -> StudentSessionResponse | TokenVerificationError:
         """
@@ -69,7 +85,6 @@ class VerifyStudentEntryTokenUseCase:
             )
 
         # 2. Check if expired
-        # Ensure current time is timezone-aware (UTC) to match database
         now = china_now()
         
         if entry_token.expires_at < now:
@@ -78,10 +93,19 @@ class VerifyStudentEntryTokenUseCase:
                 message="入口链接已过期，请联系老师获取新链接"
             )
 
-        # 3. Check if test is already completed
-        # We allow re-entry if the test is not completed, even if token was used before.
+        # 3. Check if token is already used (strict mode - default for production)
+        # In strict mode, once a token is used, it cannot be reused
+        # This prevents link sharing/leakage abuse
+        allow_reentry = getattr(self.settings, 'ENABLE_TOKEN_REENTRY', False)
         
-        # Find latest test first to check status
+        if entry_token.is_used and not allow_reentry:
+            logger.warning(f"Token reuse attempt blocked: token={token[:8]}..., student={entry_token.student_id}")
+            return TokenVerificationError(
+                error="TokenUsed",
+                message="入口链接已使用，请联系老师获取新链接"
+            )
+
+        # 4. Check if test is already completed
         stmt = select(TestModel).where(
             TestModel.student_id == entry_token.student_id,
             TestModel.level == entry_token.level,
@@ -92,12 +116,12 @@ class VerifyStudentEntryTokenUseCase:
         test = result.scalar_one_or_none()
 
         if test and test.status == 'completed':
-             return TokenVerificationError(
+            return TokenVerificationError(
                 error="TestCompleted",
                 message="您已完成该测评，无法再次进入"
             )
 
-        # 4. Get student info
+        # 5. Get student info
         stmt = select(StudentProfileModel).where(StudentProfileModel.user_id == entry_token.student_id)
         result = await self.db.execute(stmt)
         student_profile = result.scalar_one_or_none()
@@ -108,14 +132,14 @@ class VerifyStudentEntryTokenUseCase:
                 message="学生信息不存在，请联系老师"
             )
 
-        # 5. Mark token as used (track usage, but don't block re-entry)
+        # 6. Mark token as used (this is the security gate - prevents future reuse)
         if not entry_token.is_used:
             entry_token.is_used = True
-            entry_token.used_at = china_now()
+            entry_token.used_at = now
+            logger.info(f"Token marked as used: student={entry_token.student_id}, level={entry_token.level}")
 
-        # 6. Create test if not exists (should exist from generation, but safe fallback)
+        # 7. Create test if not exists
         if not test:
-            # Create new test
             test = TestModel(
                 student_id=entry_token.student_id,
                 level=entry_token.level,
@@ -123,9 +147,9 @@ class VerifyStudentEntryTokenUseCase:
                 status="pending"
             )
             self.db.add(test)
-            await self.db.flush()  # Get the ID
+            await self.db.flush()
 
-        # 7. Generate JWT
+        # 8. Generate JWT (includes test_id for ownership verification)
         access_token = create_access_token(
             data={
                 "sub": str(entry_token.student_id),

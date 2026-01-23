@@ -68,6 +68,9 @@ const MOCK_DATA: ParentReportData = {
   }
 };
 
+// Check if we're in development mode
+const isDev = import.meta.env.DEV;
+
 export function useReportData(): UseReportDataResult {
   const [data, setData] = useState<ParentReportData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,24 +82,38 @@ export function useReportData(): UseReportDataResult {
 
     const token = getTokenFromUrl();
     
-    // If no token, use mock data for development
+    // If no token, use mock data for development only
     if (!token) {
-      console.log('[useReportData] No token found, using mock data');
-      setData(MOCK_DATA);
+      if (isDev) {
+        console.log('[useReportData] No token found, using mock data');
+        setData(MOCK_DATA);
+      } else {
+        // Production: show error instead of mock data
+        setError('缺少报告链接参数');
+        setData(null);
+      }
       setIsLoading(false);
       return;
     }
 
     try {
-      console.log('[useReportData] Fetching report for token:', token);
+      // Only log in development - NEVER log the token
+      if (isDev) {
+        console.log('[useReportData] Fetching report...');
+      }
       const reportData = await fetchParentReport(token);
-      console.log('[useReportData] Report data fetched successfully:', reportData);
+      // NEVER log report data (contains student info)
+      if (isDev) {
+        console.log('[useReportData] Report fetched successfully');
+      }
       setData(reportData);
     } catch (err) {
-      console.error('[useReportData] Error fetching report:', err);
+      // Only log error type in development, not details
+      if (isDev) {
+        console.error('[useReportData] Error fetching report');
+      }
       const errorMessage = err instanceof Error ? err.message : '加载失败';
       setError(errorMessage);
-      // 不 fallback 到 mock 数据，让用户知道真实错误
       setData(null);
     } finally {
       setIsLoading(false);

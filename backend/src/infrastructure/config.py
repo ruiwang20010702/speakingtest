@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     
     # 测试认证模式 (设为 true 启用魔法验证码 888888 和测试邮箱白名单)
     ENABLE_TEST_AUTH: bool = False
+    
+    # 学生入口 Token 重复使用 (生产环境应为 False，防止链接泄露后被多次使用)
+    ENABLE_TOKEN_REENTRY: bool = False
 
     # Database (PostgreSQL)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/speakingtest"
@@ -46,6 +49,13 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "your-secret-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    
+    # Cookie Security (httpOnly Cookie 替代 localStorage)
+    COOKIE_NAME: str = "access_token"            # Cookie 名称
+    COOKIE_DOMAIN: str = ""                      # Cookie 域名（为空时使用请求域名）
+    COOKIE_SECURE: bool = True                   # 仅 HTTPS（生产环境必须为 True）
+    COOKIE_SAMESITE: str = "lax"                 # SameSite 策略: strict/lax/none
+    COOKIE_PATH: str = "/api"                    # Cookie 路径（仅 API 请求携带）
 
     # Xunfei API
     XUNFEI_APP_ID: str = ""

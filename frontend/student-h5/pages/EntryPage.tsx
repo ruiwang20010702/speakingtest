@@ -20,11 +20,15 @@ const EntryPage: React.FC = () => {
     useEffect(() => {
         const verifyToken = async () => {
             try {
-                const res = await axios.post<EntryResponse>('/api/v1/students/entry', { token });
-                const { access_token, student_name, level, unit, test_id } = res.data;
+                // 使用 withCredentials 让浏览器接收 httpOnly Cookie
+                const res = await axios.post<EntryResponse>(
+                    '/api/v1/students/entry', 
+                    { token },
+                    { withCredentials: true }
+                );
+                const { student_name, level, unit, test_id } = res.data;
 
-                // Store session info
-                localStorage.setItem('token', access_token);
+                // 只存储非敏感的会话信息（token 已通过 httpOnly Cookie 设置）
                 localStorage.setItem('studentName', student_name);
                 localStorage.setItem('level', level);
                 localStorage.setItem('unit', unit);

@@ -64,28 +64,66 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS 配置：生产环境应在 CORS_ORIGINS 环境变量中配置允许的域名
+# CORS 配置：生产环境必须显式配置 CORS_ORIGINS 环境变量
 def _get_cors_origins() -> list:
-    """获取 CORS 允许的域名列表"""
+    """
+    获取 CORS 允许的域名列表
+    
+    Security:
+    - 生产环境必须显式配置 CORS_ORIGINS
+    - 不再回退到 "*"，防止任意域跨站调用
+    - 使用 Cookie 认证时，不能使用通配符 "*"
+    """
     if settings.CORS_ORIGINS:
         # 从环境变量解析（逗号分隔）
-        return [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+        origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+        logger.info(f"CORS origins configured: {origins}")
+        return origins
     elif settings.DEBUG:
-        # 开发环境允许所有域名
-        return ["*"]
+        # 开发环境：使用常见的本地开发地址
+        # 注意：使用 Cookie (credentials) 时不能用通配符 "*"
+        dev_origins = [
+            "http://localhost:3000",
+            "http://localhost:3001", 
+            "http://localhost:3002",
+            "http://localhost:5173",  # Vite 默认端口
+            "http://localhost:5174",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://127.0.0.1:3002",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:5174",
+        ]
+        logger.warning(f"DEBUG mode: CORS allowing development origins: {dev_origins}")
+        return dev_origins
     else:
-        # 生产环境默认使用配置的前端 URL
+        # 生产环境：从前端 URL 配置中提取，但不允许空配置
         origins = []
+        from urllib.parse import urlparse
+        
         if settings.FRONTEND_STUDENT_URL:
-            # 提取基础 URL（去掉路径）
-            from urllib.parse import urlparse
             parsed = urlparse(settings.FRONTEND_STUDENT_URL)
-            origins.append(f"{parsed.scheme}://{parsed.netloc}")
+            if parsed.scheme and parsed.netloc:
+                origins.append(f"{parsed.scheme}://{parsed.netloc}")
         if settings.FRONTEND_PARENT_URL:
-            origins.append(settings.FRONTEND_PARENT_URL)
+            parsed = urlparse(settings.FRONTEND_PARENT_URL)
+            if parsed.scheme and parsed.netloc:
+                origins.append(f"{parsed.scheme}://{parsed.netloc}")
         if settings.FRONTEND_TEACHER_URL:
-            origins.append(settings.FRONTEND_TEACHER_URL)
-        return origins if origins else ["*"]
+            parsed = urlparse(settings.FRONTEND_TEACHER_URL)
+            if parsed.scheme and parsed.netloc:
+                origins.append(f"{parsed.scheme}://{parsed.netloc}")
+        
+        if not origins:
+            # 生产环境没有配置任何 CORS 域名，这是安全风险
+            logger.critical("SECURITY WARNING: No CORS_ORIGINS configured in production!")
+            logger.critical("API will reject all cross-origin requests. Set CORS_ORIGINS env variable.")
+            # 返回空列表而非 "*"，这将导致所有跨域请求被拒绝
+            # 这比允许所有域名更安全
+            return []
+        
+        logger.info(f"CORS origins derived from frontend URLs: {origins}")
+        return origins
 
 # Middleware (order matters: first added = last executed)
 app.add_middleware(RequestLoggingMiddleware)  # Request logging with correlation ID

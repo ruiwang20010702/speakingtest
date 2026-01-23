@@ -791,7 +791,7 @@ async def regenerate_report(
     test_id: int,
     request: RegenerateReportRequest = None,
     db: AsyncSession = Depends(get_db),
-    _ = Depends(require_teacher)
+    token: str = Depends(oauth2_scheme)
 ):
     """
     教师手动重新生成学生报告。
@@ -804,7 +804,21 @@ async def regenerate_report(
     前提条件：
     - Part 1 音频链接已保存（part1_audio_url）
     - Part 2 音频链接已保存（part2_audio_url）
+    
+    Security:
+    - Admin can regenerate any report
+    - Teacher can only regenerate reports of their own students
     """
+    # Parse token and check role
+    token_data = decode_token(token)
+    if token_data is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    user_id = token_data.user_id
+    role = token_data.role
+    
+    if role not in ("admin", "teacher"):
+        raise HTTPException(status_code=403, detail="Only admin and teacher can regenerate reports")
     import uuid
     import logging
     from src.infrastructure.queue_service import Part1Task, Part2Task, enqueue_part1_task, enqueue_part2_task
@@ -823,6 +837,19 @@ async def regenerate_report(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="测评记录不存在"
         )
+    
+    # 1.5 RBAC: Teacher can only regenerate their own students' reports
+    if role == "teacher":
+        stmt = select(StudentProfileModel).where(
+            StudentProfileModel.user_id == test.student_id,
+            StudentProfileModel.teacher_id == user_id
+        )
+        result = await db.execute(stmt)
+        if not result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权操作此测评（非您的学生）"
+            )
     
     # 2. 检查 OSS 链接是否存在
     if not test.part1_audio_url:

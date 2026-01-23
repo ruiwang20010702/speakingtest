@@ -1,29 +1,47 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+// API Base URL configuration
+// - Production: use relative path (handled by nginx proxy)
+// - Development: use localhost with explicit port
+const getApiBaseUrl = (): string => {
+  // 1. Environment variable takes priority
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  
+  // 2. Production: use relative path for same-origin requests
+  if (import.meta.env.PROD) {
+    return '/api/v1';
+  }
+  
+  // 3. Development: support various hosts for testing
+  const hostname = window.location.hostname;
+  if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    // Mobile/LAN testing - use same protocol to avoid mixed content
+    return `${window.location.protocol}//${hostname}:8000/api/v1`;
+  }
+  
+  // 4. Default development
+  return 'http://localhost:8000/api/v1';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  // 启用 Cookie 认证（httpOnly Cookie 更安全，防止 XSS 窃取 token）
+  withCredentials: true,
 });
 
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Handle 401 errors
+// Handle 401 errors - redirect to login
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
+      // 清理本地状态（不再需要清理 token，因为已改用 httpOnly Cookie）
       window.location.href = '/login';
     }
     return Promise.reject(error);

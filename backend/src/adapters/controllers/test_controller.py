@@ -1,23 +1,106 @@
 """
 Test Controller
 Handles test-related endpoints including Part 1 and Part 2 evaluation.
+
+Security:
+- All endpoints require authentication
+- Ownership validation: users can only access their own tests
+- Students: can only access tests where test.student_id == user_id
+- Teachers: can only access tests of students they created
+- Admins: can access all tests
 """
 import logging
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import Optional
 
 from src.infrastructure.database import get_db
 
 logger = logging.getLogger(__name__)
-from src.infrastructure.auth import get_current_user_id
+from src.infrastructure.auth import get_current_user_id, decode_token, oauth2_scheme
 from src.infrastructure.responses import ErrorResponse
 from src.adapters.gateways.oss_client import get_oss_client
+from src.adapters.repositories.models import TestModel, StudentProfileModel
 from src.use_cases.evaluate_part1 import (
     SubmitPart1UseCase,
     SubmitPart1Request,
 )
+
+
+async def verify_test_ownership(
+    test_id: int,
+    user_id: int,
+    role: str,
+    db: AsyncSession
+) -> TestModel:
+    """
+    Verify that the user has permission to access the test.
+    
+    - Students: can only access their own tests
+    - Teachers: can only access tests of their students
+    - Admins: can access all tests
+    
+    Returns the test if authorized, raises HTTPException otherwise.
+    """
+    stmt = select(TestModel).where(TestModel.id == test_id)
+    result = await db.execute(stmt)
+    test = result.scalar_one_or_none()
+    
+    if not test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "TestNotFound", "message": "测评记录不存在"}
+        )
+    
+    # Admin can access all
+    if role == "admin":
+        return test
+    
+    # Student can only access their own test
+    if role == "student":
+        if test.student_id != user_id:
+            logger.warning(f"Student {user_id} tried to access test {test_id} (owner: {test.student_id})")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"error": "Forbidden", "message": "无权访问此测评"}
+            )
+        return test
+    
+    # Teacher can only access tests of their students
+    if role == "teacher":
+        stmt = select(StudentProfileModel).where(
+            StudentProfileModel.user_id == test.student_id,
+            StudentProfileModel.teacher_id == user_id
+        )
+        result = await db.execute(stmt)
+        profile = result.scalar_one_or_none()
+        
+        if not profile:
+            logger.warning(f"Teacher {user_id} tried to access test {test_id} (student: {test.student_id})")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"error": "Forbidden", "message": "无权访问此测评（非您的学生）"}
+            )
+        return test
+    
+    # Unknown role - deny
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"error": "Forbidden", "message": "无权访问"}
+    )
+
+
+async def get_current_user_with_role(token: str = Depends(oauth2_scheme)):
+    """Get current user ID and role from token."""
+    token_data = decode_token(token)
+    if token_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
+    return {"user_id": token_data.user_id, "role": token_data.role}
 
 router = APIRouter()
 
@@ -45,6 +128,7 @@ class TestStatusResponse(BaseModel):
     response_model=Part1SubmitResponse,
     responses={
         400: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
         404: {"model": ErrorResponse}
     }
 )
@@ -52,7 +136,7 @@ async def submit_part1(
     test_id: int,
     reference_text: str = Form(..., description="The text student should read"),
     audio: UploadFile = File(..., description="Audio file"),
-    user_id: int = Depends(get_current_user_id),
+    user: dict = Depends(get_current_user_with_role),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -63,7 +147,12 @@ async def submit_part1(
     3. Return immediately with task_id
     
     The evaluation runs in the background. Check test status for results.
+    
+    Security: Only the student who owns the test can submit audio.
     """
+    # Verify ownership - students can only submit to their own tests
+    await verify_test_ownership(test_id, user["user_id"], user["role"], db)
+    
     # 1. Read audio data
     audio_data = await audio.read()
     
@@ -122,28 +211,24 @@ async def submit_part1(
 
 @router.get(
     "/{test_id}",
-    response_model=TestStatusResponse
+    response_model=TestStatusResponse,
+    responses={
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse}
+    }
 )
 async def get_test_status(
     test_id: int,
-    user_id: int = Depends(get_current_user_id),
+    user: dict = Depends(get_current_user_with_role),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get current test status and scores.
+    
+    Security: Users can only view tests they own or (for teachers) their students' tests.
     """
-    from sqlalchemy import select
-    from src.adapters.repositories.models import TestModel
-    
-    stmt = select(TestModel).where(TestModel.id == test_id)
-    result = await db.execute(stmt)
-    test = result.scalar_one_or_none()
-    
-    if not test:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": "TestNotFound", "message": "测评记录不存在"}
-        )
+    # Verify ownership
+    test = await verify_test_ownership(test_id, user["user_id"], user["role"], db)
     
     return TestStatusResponse(
         test_id=test.id,
@@ -178,13 +263,14 @@ class Part2SubmitResponse(BaseModel):
     response_model=Part2SubmitResponse,
     responses={
         400: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
         404: {"model": ErrorResponse}
     }
 )
 async def submit_part2(
     test_id: int,
     request: Part2SubmitRequest,
-    user_id: int = Depends(get_current_user_id),
+    user: dict = Depends(get_current_user_with_role),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -195,21 +281,15 @@ async def submit_part2(
     评测完成后可通过 GET /tests/{id} 查询结果。
     
     注意：这是异步操作，不会立即返回评分结果。
+    
+    Security: Only the student who owns the test can submit audio.
     """
     from sqlalchemy import select, and_
-    from src.adapters.repositories.models import TestModel, QuestionModel
+    from src.adapters.repositories.models import QuestionModel
     from src.use_cases.evaluate_part2 import SubmitPart2UseCase, SubmitPart2Request
     
-    # 1. 获取 Test 信息（主要是 level 和 unit）
-    stmt = select(TestModel).where(TestModel.id == test_id)
-    result = await db.execute(stmt)
-    test = result.scalar_one_or_none()
-    
-    if not test:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": "TestNotFound", "message": "测评记录不存在"}
-        )
+    # Verify ownership - students can only submit to their own tests
+    test = await verify_test_ownership(test_id, user["user_id"], user["role"], db)
     
     # 2. 确定题目来源
     questions = request.questions
@@ -317,12 +397,13 @@ class FullReportResponse(BaseModel):
     "/{test_id}/report",
     response_model=FullReportResponse,
     responses={
+        403: {"model": ErrorResponse},
         404: {"model": ErrorResponse}
     }
 )
 async def get_full_report(
     test_id: int,
-    user_id: int = Depends(get_current_user_id),
+    user: dict = Depends(get_current_user_with_role),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -334,12 +415,16 @@ async def get_full_report(
     - 总分和星级
     
     注意: 只有 status="completed" 时 Part 2 数据才完整。
-    """
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-    from src.adapters.repositories.models import TestModel, TestItemModel, StudentProfileModel
     
-    # 查询测评记录（含逐题评分）
+    Security: Users can only view reports for tests they own or (for teachers) their students' tests.
+    """
+    from sqlalchemy.orm import selectinload
+    from src.adapters.repositories.models import TestItemModel
+    
+    # Verify ownership first
+    await verify_test_ownership(test_id, user["user_id"], user["role"], db)
+    
+    # 查询测评记录（含逐题评分）- need fresh query with selectinload
     stmt = (
         select(TestModel)
         .options(selectinload(TestModel.items))
@@ -347,12 +432,6 @@ async def get_full_report(
     )
     result = await db.execute(stmt)
     test = result.scalar_one_or_none()
-    
-    if not test:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": "TestNotFound", "message": "测评记录不存在"}
-        )
     
     # 获取学生姓名
     student_name = None

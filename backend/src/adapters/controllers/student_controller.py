@@ -1,15 +1,17 @@
 """
 Student Entry Controller
 Handles student entry token verification and session creation.
+支持 httpOnly Cookie 认证（更安全）
 """
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database import get_db
 from src.infrastructure.responses import ErrorResponse
 from src.infrastructure.audit import log_audit
+from src.infrastructure.auth import set_auth_cookie
 from src.use_cases.verify_student_token import (
     VerifyStudentEntryTokenUseCase,
     StudentSessionResponse,
@@ -45,6 +47,7 @@ class EntryResponse(BaseModel):
 )
 async def verify_entry_token(
     request: EntryRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -54,6 +57,7 @@ async def verify_entry_token(
     the entry link from their teacher.
     
     Returns a JWT token for subsequent API calls.
+    同时设置 httpOnly Cookie（浏览器自动携带，更安全）
     """
     use_case = VerifyStudentEntryTokenUseCase(db)
     result = await use_case.execute(request.token)
@@ -70,6 +74,9 @@ async def verify_entry_token(
                 "message": result.message
             }
         )
+
+    # 设置 httpOnly Cookie（浏览器端更安全）
+    set_auth_cookie(response, result.access_token)
 
     return EntryResponse(
         access_token=result.access_token,

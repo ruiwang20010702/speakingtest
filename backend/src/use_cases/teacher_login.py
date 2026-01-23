@@ -83,21 +83,22 @@ class SendVerificationCodeUseCase:
     
     async def execute(self, request: SendCodeRequest) -> SendCodeResponse:
         """执行发送验证码"""
+        from src.infrastructure.config import get_settings
+        settings = get_settings()
         
         # 1. 验证邮箱格式
         email = request.email.lower().strip()
-        is_admin = email == "704778107@qq.com"
         
-        if not is_admin and not email.endswith("@51talk.com"):
+        # 检查测试邮箱白名单（仅限 ENABLE_TEST_AUTH 模式）
+        is_whitelisted = False
+        if settings.ENABLE_TEST_AUTH and settings.TEST_EMAIL_WHITELIST:
+            whitelist = [e.strip().lower() for e in settings.TEST_EMAIL_WHITELIST.split(",") if e.strip()]
+            is_whitelisted = email in whitelist
+        
+        if not is_whitelisted and not email.endswith("@51talk.com"):
             return SendCodeResponse(
                 success=False,
                 message="仅支持 @51talk.com 邮箱登录"
-            )
-            
-        if is_admin:
-            return SendCodeResponse(
-                success=True,
-                message="无需验证码，请直接登录 (任意输入6位验证码)"
             )
         
         # 2. 检查频率限制
@@ -177,83 +178,88 @@ class TeacherLoginUseCase:
     
     async def execute(self, request: LoginRequest) -> LoginResponse:
         """执行登录"""
+        from src.infrastructure.config import get_settings
+        settings = get_settings()
         
         email = request.email.lower().strip()
         code = request.code.strip()
         
-        # 1. 验证邮箱格式
-        if email != "704778107@qq.com" and not email.endswith("@51talk.com"):
+        # 1. 验证邮箱格式 - 检查测试邮箱白名单
+        is_whitelisted = False
+        if settings.ENABLE_TEST_AUTH and settings.TEST_EMAIL_WHITELIST:
+            whitelist = [e.strip().lower() for e in settings.TEST_EMAIL_WHITELIST.split(",") if e.strip()]
+            is_whitelisted = email in whitelist
+        
+        if not is_whitelisted and not email.endswith("@51talk.com"):
             return LoginResponse(
                 success=False,
                 error="InvalidEmail",
                 message="仅支持 @51talk.com 邮箱登录"
             )
         
-        # 2. 查找有效验证码 (Admin bypass or Magic Code in Test mode)
-        if email != "704778107@qq.com":
-            # MAGIC CODE: Allow 888888 when ENABLE_TEST_AUTH=true for stress testing
-            from src.infrastructure.config import get_settings
-            settings = get_settings()
-            if settings.ENABLE_TEST_AUTH and code == "888888":
-                logger.info(f"[MAGIC CODE] Bypass verification for {email} (ENABLE_TEST_AUTH=true)")
-                # Skip verification check, proceed to find/create user
-                pass
-            else:
-                now = china_now()
-                stmt = select(VerificationCodeModel).where(
+        # 2. 验证验证码
+        # MAGIC CODE: Allow 888888 ONLY when ENABLE_TEST_AUTH=true (for stress testing)
+        # This should NEVER be enabled in production!
+        use_magic_code = settings.ENABLE_TEST_AUTH and code == "888888"
+        
+        if use_magic_code:
+            logger.warning(f"[TEST MODE] Magic code bypass for {email} - ENABLE_TEST_AUTH is ON!")
+            # Skip verification check, proceed to find/create user
+            verification = None  # No verification record to mark as used
+        else:
+            now = china_now()
+            stmt = select(VerificationCodeModel).where(
+                and_(
+                    VerificationCodeModel.email == email,
+                    VerificationCodeModel.code == code,
+                    VerificationCodeModel.is_used == False,
+                    VerificationCodeModel.expires_at > now
+                )
+            )
+            result = await self.db.execute(stmt)
+            verification = result.scalar_one_or_none()
+            
+            if not verification:
+                # 区分是过期还是错误
+                stmt_any = select(VerificationCodeModel).where(
                     and_(
                         VerificationCodeModel.email == email,
-                        VerificationCodeModel.code == code,
-                        VerificationCodeModel.is_used == False,
-                        VerificationCodeModel.expires_at > now
+                        VerificationCodeModel.code == code
                     )
                 )
-                result = await self.db.execute(stmt)
-                verification = result.scalar_one_or_none()
+                result_any = await self.db.execute(stmt_any)
+                any_code = result_any.scalar_one_or_none()
                 
-                if not verification:
-                    # 区分是过期还是错误
-                    stmt_any = select(VerificationCodeModel).where(
-                        and_(
-                            VerificationCodeModel.email == email,
-                            VerificationCodeModel.code == code
+                if any_code:
+                    if any_code.is_used:
+                        return LoginResponse(
+                            success=False,
+                            error="CodeUsed",
+                            message="验证码已使用，请重新获取"
                         )
-                    )
-                    result_any = await self.db.execute(stmt_any)
-                    any_code = result_any.scalar_one_or_none()
-                    
-                    if any_code:
-                        if any_code.is_used:
-                            return LoginResponse(
-                                success=False,
-                                error="CodeUsed",
-                                message="验证码已使用，请重新获取"
-                            )
-                        else:
-                            return LoginResponse(
-                                success=False,
-                                error="CodeExpired",
-                                message="验证码已过期，请重新获取"
-                            )
                     else:
                         return LoginResponse(
                             success=False,
-                            error="CodeInvalid",
-                            message="验证码错误"
+                            error="CodeExpired",
+                            message="验证码已过期，请重新获取"
                         )
-                
-                # 3. 标记验证码已使用
-                verification.is_used = True
-                verification.used_at = now
+                else:
+                    return LoginResponse(
+                        success=False,
+                        error="CodeInvalid",
+                        message="验证码错误"
+                    )
+            
+            # 3. 标记验证码已使用
+            verification.is_used = True
+            verification.used_at = now
         
         # 4. 查找或创建用户
         stmt_user = select(UserModel).where(UserModel.email == email)
         result_user = await self.db.execute(stmt_user)
         user = result_user.scalar_one_or_none()
         
-        # 从配置获取管理员邮箱列表
-        from src.infrastructure.config import get_settings
-        settings = get_settings()
+        # 从配置获取管理员邮箱列表（已在函数开头获取 settings）
         admin_emails = [e.strip().lower() for e in settings.ADMIN_EMAILS.split(",") if e.strip()]
         is_admin = email.lower() in admin_emails
         
