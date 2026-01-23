@@ -6,6 +6,7 @@ Performance optimizations:
 - Uses get_db_readonly for read operations (no commit overhead)
 - Uses Redis caching for expensive aggregate queries (5-minute TTL)
 """
+import random
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select, func, case
@@ -161,8 +162,8 @@ async def get_overview_stats(
         failed_tasks=failed_tasks
     )
     
-    # Cache the result for 5 minutes
-    await cache_set(cache_key, result.model_dump(), ttl=300)
+    # Cache the result for 5 minutes (with jitter to prevent cache avalanche)
+    await cache_set(cache_key, result.model_dump(), ttl=300 + random.randint(-30, 30))
     
     return result
 
@@ -207,8 +208,8 @@ async def get_funnel_stats(
         opened=opened
     )
     
-    # Cache for 5 minutes
-    await cache_set(cache_key, result.model_dump(), ttl=300)
+    # Cache for 5 minutes (with jitter to prevent cache avalanche)
+    await cache_set(cache_key, result.model_dump(), ttl=300 + random.randint(-30, 30))
     
     return result
 
@@ -247,8 +248,8 @@ async def get_cost_stats(
         estimated_cost_cny=total_cost_cny  # 兼容旧字段，现在使用真实值
     )
     
-    # Cache for 5 minutes
-    await cache_set(cache_key, result.model_dump(), ttl=300)
+    # Cache for 5 minutes (with jitter to prevent cache avalanche)
+    await cache_set(cache_key, result.model_dump(), ttl=300 + random.randint(-30, 30))
     
     return result
 
