@@ -42,18 +42,18 @@ const TestContainer: React.FC = () => {
     // In development, allow mock data for testing
     if (isDev) {
       console.log('[DEV] No valid session, using mock data');
-      if (!localStorage.getItem('studentName')) {
+  if (!localStorage.getItem('studentName')) {
         localStorage.setItem('studentName', 'Test Student');
-      }
-      if (!localStorage.getItem('level')) {
-        localStorage.setItem('level', 'L0');
-      }
-      if (!localStorage.getItem('unit')) {
-        localStorage.setItem('unit', 'Full Level');
-      }
-      if (!localStorage.getItem('testId')) {
-        const tempTestId = Date.now();
-        localStorage.setItem('testId', tempTestId.toString());
+  }
+  if (!localStorage.getItem('level')) {
+    localStorage.setItem('level', 'L0');
+  }
+  if (!localStorage.getItem('unit')) {
+    localStorage.setItem('unit', 'Full Level');
+  }
+  if (!localStorage.getItem('testId')) {
+    const tempTestId = Date.now();
+    localStorage.setItem('testId', tempTestId.toString());
         console.log('[DEV] Using temporary testId:', tempTestId);
       }
     } else {
@@ -191,7 +191,7 @@ const App: React.FC = () => {
           {isDev ? (
             // Development: allow direct access to /test for testing
             <>
-              <Route path="/" element={<Navigate to="/test" replace />} />
+          <Route path="/" element={<Navigate to="/test" replace />} />
               <Route path="*" element={<Navigate to="/test" replace />} />
             </>
           ) : (

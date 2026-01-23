@@ -116,7 +116,7 @@ class VerifyStudentEntryTokenUseCase:
         test = result.scalar_one_or_none()
 
         if test and test.status == 'completed':
-            return TokenVerificationError(
+             return TokenVerificationError(
                 error="TestCompleted",
                 message="您已完成该测评，无法再次进入"
             )

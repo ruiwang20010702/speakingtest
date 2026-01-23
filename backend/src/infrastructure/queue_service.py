@@ -101,13 +101,16 @@ class Part2TaskConsumer:
     从队列拉取任务并执行评测
     
     特性:
-    - 限速: 60 RPM (每秒最多 1 个请求)
-    - prefetch=1: 一次只处理一个任务
+    - 限速: 可配置 RPM (通过 QWEN_OMNI_RPM 环境变量)
+    - prefetch: 可配置 (通过 QWEN_OMNI_CONCURRENCY * QUEUE_PREFETCH_MULTIPLIER)
     - 自动重试: 失败任务会被 NACK 并重新入队
+    
+    性能说明:
+    - 默认 prefetch=5, RPM=60 → 单消费者约 1 QPS
+    - 扩容建议: 启动多个消费者实例，或提升 Qwen 账号配额
     """
     
     QUEUE_NAME = "part2_evaluation_tasks"
-    RPM_LIMIT = 60  # Qwen API 限制
     
     def __init__(
         self,
@@ -122,22 +125,26 @@ class Part2TaskConsumer:
         self.process_func = process_func
         self.connection = None
         self.channel = None
-        self.interval = 60.0 / self.RPM_LIMIT  # 1 秒/请求
+        # 可配置的限速参数
+        self.rpm_limit = settings.QWEN_OMNI_RPM
+        self.interval = 60.0 / self.rpm_limit if self.rpm_limit > 0 else 0
+        self.prefetch = settings.QWEN_OMNI_CONCURRENCY * settings.QUEUE_PREFETCH_MULTIPLIER
+        self.disable_sleep = settings.QUEUE_DISABLE_SLEEP
     
     async def connect(self):
         """建立连接，设置 prefetch"""
         self.connection = await connect_robust(self.url)
         self.channel = await self.connection.channel()
         
-        # prefetch=5: 配合 qwen3-omni-flash 5 并发限流
-        await self.channel.set_qos(prefetch_count=5)
+        # 可配置的 prefetch，配合并发限流
+        await self.channel.set_qos(prefetch_count=self.prefetch)
         
         self.queue = await self.channel.declare_queue(
             self.QUEUE_NAME,
             durable=True,
         )
         
-        logger.info(f"Part2TaskConsumer 已连接，prefetch=5")
+        logger.info(f"Part2TaskConsumer 已连接，prefetch={self.prefetch}, RPM={self.rpm_limit}")
     
     async def _on_message(self, message: IncomingMessage):
         """处理消息"""
@@ -163,8 +170,9 @@ class Part2TaskConsumer:
                 raise  # 抛出异常会触发 NACK 并重新入队
             
             finally:
-                # 限速等待
-                await asyncio.sleep(self.interval)
+                # 限速等待（可通过 QUEUE_DISABLE_SLEEP=true 禁用，用于压测）
+                if not self.disable_sleep and self.interval > 0:
+                    await asyncio.sleep(self.interval)
     
     async def start(self):
         """启动消费者"""
@@ -263,10 +271,9 @@ class Part1TaskProducer:
 
 
 class Part1TaskConsumer:
-    """Part 1 任务消费者"""
+    """Part 1 任务消费者 (可配置化限流)"""
     
     QUEUE_NAME = "part1_evaluation_tasks"
-    RPM_LIMIT = 60
     
     def __init__(
         self,
@@ -277,15 +284,18 @@ class Part1TaskConsumer:
         self.process_func = process_func
         self.connection = None
         self.channel = None
-        self.interval = 60.0 / self.RPM_LIMIT
+        # 可配置的限速参数
+        self.rpm_limit = settings.QWEN_OMNI_RPM
+        self.interval = 60.0 / self.rpm_limit if self.rpm_limit > 0 else 0
+        self.prefetch = settings.QWEN_OMNI_CONCURRENCY * settings.QUEUE_PREFETCH_MULTIPLIER
+        self.disable_sleep = settings.QUEUE_DISABLE_SLEEP
     
     async def connect(self):
         self.connection = await connect_robust(self.url)
         self.channel = await self.connection.channel()
-        # prefetch=5: 配合 qwen3-omni-flash 5 并发限流
-        await self.channel.set_qos(prefetch_count=5)
+        await self.channel.set_qos(prefetch_count=self.prefetch)
         self.queue = await self.channel.declare_queue(self.QUEUE_NAME, durable=True)
-        logger.info(f"Part1TaskConsumer 已连接，prefetch=5")
+        logger.info(f"Part1TaskConsumer 已连接，prefetch={self.prefetch}, RPM={self.rpm_limit}")
     
     async def _on_message(self, message: IncomingMessage):
         async with message.process():
@@ -305,7 +315,8 @@ class Part1TaskConsumer:
                 logger.exception(f"Part1 任务处理异常: {e}")
                 raise
             finally:
-                await asyncio.sleep(self.interval)
+                if not self.disable_sleep and self.interval > 0:
+                    await asyncio.sleep(self.interval)
     
     async def start(self):
         await self.connect()
@@ -418,16 +429,15 @@ class InterpretationTaskProducer:
 
 class InterpretationTaskConsumer:
     """
-    报告解读任务消费者
+    报告解读任务消费者 (使用 qwen-plus，可配置化限流)
     
     特性:
     - 最大重试 3 次
-    - prefetch=1: 一次只处理一个任务
-    - 限速: 60 RPM
+    - prefetch: 可配置 (通过 QWEN_PLUS_CONCURRENCY)
+    - 限速: 可配置 RPM (通过 QWEN_PLUS_RPM)
     """
     
     QUEUE_NAME = "interpretation_tasks"
-    RPM_LIMIT = 60
     MAX_RETRIES = 3
     
     def __init__(
@@ -439,15 +449,18 @@ class InterpretationTaskConsumer:
         self.process_func = process_func
         self.connection = None
         self.channel = None
-        self.interval = 60.0 / self.RPM_LIMIT
+        # 使用 qwen-plus 的配置（RPM 更高）
+        self.rpm_limit = settings.QWEN_PLUS_RPM
+        self.interval = 60.0 / self.rpm_limit if self.rpm_limit > 0 else 0
+        self.prefetch = settings.QWEN_PLUS_CONCURRENCY * settings.QUEUE_PREFETCH_MULTIPLIER
+        self.disable_sleep = settings.QUEUE_DISABLE_SLEEP
     
     async def connect(self):
         self.connection = await connect_robust(self.url)
         self.channel = await self.connection.channel()
-        # prefetch=10: 配合 qwen-plus 10 并发限流
-        await self.channel.set_qos(prefetch_count=10)
+        await self.channel.set_qos(prefetch_count=self.prefetch)
         self.queue = await self.channel.declare_queue(self.QUEUE_NAME, durable=True)
-        logger.info(f"InterpretationTaskConsumer 已连接，prefetch=10")
+        logger.info(f"InterpretationTaskConsumer 已连接，prefetch={self.prefetch}, RPM={self.rpm_limit}")
     
     async def _on_message(self, message: IncomingMessage):
         async with message.process():
@@ -467,7 +480,8 @@ class InterpretationTaskConsumer:
                 logger.exception(f"Interpretation 任务处理异常: {e}")
                 raise  # 抛出异常会触发 NACK 并重新入队
             finally:
-                await asyncio.sleep(self.interval)
+                if not self.disable_sleep and self.interval > 0:
+                    await asyncio.sleep(self.interval)
     
     async def start(self):
         await self.connect()

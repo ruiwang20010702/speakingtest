@@ -1,13 +1,18 @@
 """
 Admin Controller
 Handles aggregated statistics for the admin dashboard.
+
+Performance optimizations:
+- Uses get_db_readonly for read operations (no commit overhead)
+- Uses Redis caching for expensive aggregate queries (5-minute TTL)
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.database import get_db
+from src.infrastructure.database import get_db, get_db_readonly
+from src.infrastructure.cache import cache_get, cache_set
 from src.infrastructure.auth import require_admin, require_teacher, decode_token, oauth2_scheme
 from src.adapters.repositories.models import (
     StudentProfileModel, TestModel, ReportShareTokenModel, StudentEntryTokenModel
@@ -39,10 +44,10 @@ class CostStats(BaseModel):
     "/stats/overview",
     response_model=OverviewStats,
     summary="获取概览数据",
-    description="获取系统总览数据：学生总数、测评总数、分享次数、打开次数。教师只能看到自己学生的数据。"
+    description="获取系统总览数据：学生总数、测评总数、分享次数、打开次数。教师只能看到自己学生的数据。结果缓存5分钟。"
 )
 async def get_overview_stats(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_readonly),  # 使用只读连接
     token: str = Depends(oauth2_scheme)
 ):
     # Decode token to get user info
@@ -56,6 +61,12 @@ async def get_overview_stats(
     # Check role - allow admin and teacher
     if role not in ("admin", "teacher"):
         raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Try to get from cache first (5 minute TTL)
+    cache_key = f"stats:overview:{role}:{user_id}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return OverviewStats(**cached)
     
     # For teachers, filter by their students only
     if role == "teacher":
@@ -141,7 +152,7 @@ async def get_overview_stats(
         )
         failed_tasks = (await db.execute(stmt_failed)).scalar() or 0
     
-    return OverviewStats(
+    result = OverviewStats(
         total_students=total_students,
         total_tests=total_tests,
         total_shares=total_shares,
@@ -149,17 +160,28 @@ async def get_overview_stats(
         pending_followups=pending_followups,
         failed_tasks=failed_tasks
     )
+    
+    # Cache the result for 5 minutes
+    await cache_set(cache_key, result.model_dump(), ttl=300)
+    
+    return result
 
 @router.get(
     "/stats/funnel",
     response_model=FunnelStats,
     summary="获取漏斗数据",
-    description="获取转化漏斗数据：扫码进入 -> 完成测评 -> 老师分享 -> 家长打开。"
+    description="获取转化漏斗数据：扫码进入 -> 完成测评 -> 老师分享 -> 家长打开。结果缓存5分钟。"
 )
 async def get_funnel_stats(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_readonly),  # 使用只读连接
     _ = Depends(require_admin)
 ):
+    # 性能优化：使用 Redis 缓存（5分钟 TTL）
+    cache_key = "stats:funnel:admin"
+    cached = await cache_get(cache_key)
+    if cached:
+        return FunnelStats(**cached)
+    
     # 1. Scanned/Entry (Tokens created)
     # Note: Ideally we track 'is_used', but 'created' is a good proxy for 'Entry Intent' or 'Distributed'
     # Let's use 'is_used' for actual entries
@@ -178,28 +200,33 @@ async def get_funnel_stats(
     stmt_opened = select(func.count(ReportShareTokenModel.id)).where(ReportShareTokenModel.view_count > 0)
     opened = (await db.execute(stmt_opened)).scalar() or 0
     
-    return FunnelStats(
+    result = FunnelStats(
         scanned=scanned,
         completed=completed,
         shared=shared,
         opened=opened
     )
+    
+    # Cache for 5 minutes
+    await cache_set(cache_key, result.model_dump(), ttl=300)
+    
+    return result
 
 @router.get(
     "/stats/cost",
     response_model=CostStats,
     summary="获取成本统计",
-    description="获取真实的 API 调用成本统计（从数据库读取）。"
+    description="获取真实的 API 调用成本统计（从数据库读取）。结果缓存5分钟。"
 )
 async def get_cost_stats(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_readonly),  # 使用只读连接
     _ = Depends(require_admin)
 ):
-    # TODO: 性能优化 - 当测评数据量超过 10 万条时，考虑以下方案：
-    # 1. 内存缓存 + TTL（5分钟）：适合单实例部署
-    # 2. Redis 缓存：适合多实例部署
-    # 3. 数据库汇总表：实时增量更新，最精确
-    # 当前实现：全表聚合查询（数据量小时性能足够）
+    # 性能优化：使用 Redis 缓存（5分钟 TTL）
+    cache_key = "stats:cost:admin"
+    cached = await cache_get(cache_key)
+    if cached:
+        return CostStats(**cached)
     
     # Total Tests
     stmt_tests = select(func.count(TestModel.id))
@@ -213,12 +240,17 @@ async def get_cost_stats(
     # 计算真实平均单次成本
     avg_cost_per_test = total_cost_cny / total_tests if total_tests > 0 else 0
     
-    return CostStats(
+    result = CostStats(
         total_tests=total_tests,
         total_cost_cny=total_cost_cny,
         avg_cost_per_test=avg_cost_per_test,
         estimated_cost_cny=total_cost_cny  # 兼容旧字段，现在使用真实值
     )
+    
+    # Cache for 5 minutes
+    await cache_set(cache_key, result.model_dump(), ttl=300)
+    
+    return result
 
 
 # ============================================
@@ -849,7 +881,7 @@ async def regenerate_report(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="无权操作此测评（非您的学生）"
-            )
+        )
     
     # 2. 检查 OSS 链接是否存在
     if not test.part1_audio_url:

@@ -85,8 +85,8 @@ export function useReportData(): UseReportDataResult {
     // If no token, use mock data for development only
     if (!token) {
       if (isDev) {
-        console.log('[useReportData] No token found, using mock data');
-        setData(MOCK_DATA);
+      console.log('[useReportData] No token found, using mock data');
+      setData(MOCK_DATA);
       } else {
         // Production: show error instead of mock data
         setError('缺少报告链接参数');

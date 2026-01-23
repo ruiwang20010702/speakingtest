@@ -40,16 +40,42 @@ Base = declarative_base()
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
-    Dependency injection for database session.
-    Usage in FastAPI:
-        @router.get("/users")
-        async def get_users(db: AsyncSession = Depends(get_db)):
+    Dependency injection for database session (with auto-commit).
+    
+    Usage in FastAPI for write operations:
+        @router.post("/users")
+        async def create_user(db: AsyncSession = Depends(get_db)):
             ...
+    
+    Note: For read-only operations, use get_db_readonly() for better performance.
     """
     async with AsyncSessionLocal() as session:
         try:
             yield session
             await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
+async def get_db_readonly() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Dependency injection for read-only database session (no auto-commit).
+    
+    Performance optimization: Avoids unnecessary commit on GET requests.
+    Use this for pure read operations (SELECT queries).
+    
+    Usage in FastAPI:
+        @router.get("/users")
+        async def get_users(db: AsyncSession = Depends(get_db_readonly)):
+            ...
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            # No commit for read-only operations
         except Exception:
             await session.rollback()
             raise

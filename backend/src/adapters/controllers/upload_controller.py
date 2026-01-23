@@ -7,8 +7,13 @@ Security:
 - Users can only upload to tests they own
 - Students: can only upload to tests where test.student_id == user_id
 - Teachers/Admins: can upload to their students' tests
+
+Performance:
+- Concurrent upload limit (prevents memory exhaustion under high load)
+- Configurable via UPLOAD_MAX_CONCURRENT environment variable
 """
 import logging
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,10 +23,25 @@ from typing import Optional
 from src.infrastructure.database import get_db
 from src.infrastructure.auth import decode_token, oauth2_scheme
 from src.infrastructure.responses import ErrorResponse
+from src.infrastructure.config import get_settings
 from src.adapters.gateways.oss_client import get_oss_client
 from src.adapters.repositories.models import TestModel, StudentProfileModel
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
+
+# Global semaphore for limiting concurrent uploads
+# Prevents memory exhaustion when many users upload simultaneously
+_upload_semaphore: Optional[asyncio.Semaphore] = None
+
+
+def get_upload_semaphore() -> asyncio.Semaphore:
+    """Get the upload semaphore (lazy initialized)."""
+    global _upload_semaphore
+    if _upload_semaphore is None:
+        _upload_semaphore = asyncio.Semaphore(settings.UPLOAD_MAX_CONCURRENT)
+        logger.info(f"Upload semaphore initialized: max_concurrent={settings.UPLOAD_MAX_CONCURRENT}")
+    return _upload_semaphore
 
 router = APIRouter()
 
@@ -114,7 +134,8 @@ async def verify_upload_permission(
     responses={
         400: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
-        404: {"model": ErrorResponse}
+        404: {"model": ErrorResponse},
+        503: {"model": ErrorResponse}
     }
 )
 async def upload_audio(
@@ -129,13 +150,15 @@ async def upload_audio(
     
     前端录音完成后调用此接口上传音频，获取 URL 后再调用评测接口。
     
-    支持格式: mp3, wav, m4a, webm
-    最大大小: 20MB
+    支持格式: mp3, wav, m4a, webm, pcm
+    最大大小: 可配置 (默认 20MB)
     
     Security: Users can only upload to tests they own.
+    Performance: Concurrent uploads limited to prevent memory exhaustion.
     """
     # Verify ownership before allowing upload
     await verify_upload_permission(test_id, user["user_id"], user["role"], db)
+    
     # 验证文件类型
     allowed_extensions = ["mp3", "wav", "m4a", "webm", "pcm"]
     
@@ -146,42 +169,65 @@ async def upload_audio(
         if ext in allowed_extensions:
             extension = ext
     
-    # 读取文件内容
-    audio_data = await audio.read()
-    
-    # 验证大小 (20MB)
-    max_size = 20 * 1024 * 1024
-    if len(audio_data) > max_size:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "FileTooLarge", "message": "文件过大，最大支持 20MB"}
-        )
-    
-    # 验证 part 参数
+    # 验证 part 参数（在读取文件前验证，避免不必要的 IO）
     if part not in ("part1", "part2"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": "InvalidPart", "message": "part 必须是 part1 或 part2"}
         )
     
-    # 上传到 OSS
-    oss_client = get_oss_client()
-    result = await oss_client.upload_audio(
-        audio_data=audio_data,
-        test_id=test_id,
-        part=part,
-        extension=extension
-    )
+    # 使用并发限制信号量（防止内存爆炸）
+    semaphore = get_upload_semaphore()
     
-    if not result.success:
+    # Try to acquire semaphore with timeout
+    try:
+        # Wait up to 30 seconds for upload slot
+        acquired = await asyncio.wait_for(semaphore.acquire(), timeout=30.0)
+    except asyncio.TimeoutError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "UploadFailed", "message": result.error}
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "error": "ServerBusy",
+                "message": "服务器繁忙，请稍后重试"
+            }
         )
     
-    return UploadResponse(
-        success=True,
-        url=result.url,
-        key=result.key,
-        message="上传成功"
-    )
+    try:
+        # 读取文件内容（在信号量保护下）
+        audio_data = await audio.read()
+        
+        # 验证大小
+        max_size = settings.UPLOAD_MAX_SIZE_MB * 1024 * 1024
+        if len(audio_data) > max_size:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "FileTooLarge",
+                    "message": f"文件过大，最大支持 {settings.UPLOAD_MAX_SIZE_MB}MB"
+                }
+            )
+        
+        # 上传到 OSS
+        oss_client = get_oss_client()
+        result = await oss_client.upload_audio(
+            audio_data=audio_data,
+            test_id=test_id,
+            part=part,
+            extension=extension
+        )
+        
+        if not result.success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "UploadFailed", "message": result.error}
+            )
+        
+        return UploadResponse(
+            success=True,
+            url=result.url,
+            key=result.key,
+            message="上传成功"
+        )
+    finally:
+        # Always release semaphore
+        semaphore.release()
