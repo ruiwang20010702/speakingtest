@@ -219,3 +219,11 @@ curl -I https://teacher.yourdomain.com
 - 错误率 > 1%
 - 响应时间 > 3s
 - 磁盘空间 < 20%
+
+---
+
+## 🔗 相关文档
+
+- [部署指南](README.md)
+- [问题排查手册](troubleshooting.md) - **遇到问题时先看这里！**
+- [Nginx 配置说明](../nginx/README.md)
