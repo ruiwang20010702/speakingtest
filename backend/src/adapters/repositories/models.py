@@ -190,6 +190,86 @@ class TestItemModel(Base):
     )
 
 
+class TestArchiveModel(Base):
+    """
+    Archived tests table - stores historical test records.
+    
+    Records older than retention period (default 90 days) are moved here.
+    Preserves all original data for compliance and historical queries.
+    """
+    __tablename__ = "tests_archive"
+
+    id = Column(BigIntegerType, primary_key=True, autoincrement=True)
+    original_id = Column(BigInteger, nullable=False)  # 原始 tests.id
+    student_id = Column(BigInteger, nullable=False)  # 不设外键，允许学生删除后归档仍存在
+    level = Column(String(20), nullable=False)
+    unit = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False)
+    total_score = Column(Numeric(5, 2), nullable=True)
+    part1_score = Column(Numeric(5, 2), nullable=True)
+    part2_score = Column(Numeric(5, 2), nullable=True)
+    star_level = Column(SmallInteger, nullable=True)
+    part2_transcript = Column(Text, nullable=True)
+    part2_audio_url = Column(String(500), nullable=True)
+    part1_audio_url = Column(String(500), nullable=True)
+    failure_reason = Column(String(255), nullable=True)
+    retry_count = Column(SmallInteger, default=0)
+    cost = Column(Numeric(10, 6), nullable=True)
+    # 大 JSON 字段也归档（从 test_raw_data 复制）
+    part1_raw_result = Column(JSON_TYPE, nullable=True)
+    part2_raw_result = Column(JSON_TYPE, nullable=True)
+    tokens_used = Column(JSON_TYPE, nullable=True)
+    summary_highlights = Column(Text, nullable=True)
+    summary_weaknesses = Column(Text, nullable=True)
+    summary_weekly_plan = Column(Text, nullable=True)
+    summary_dimension_feedback = Column(JSON_TYPE, nullable=True)
+    summary_generated_at = Column(DateTime(timezone=True), nullable=True)
+    interpretation_pages = Column(JSON_TYPE, nullable=True)
+    interpretation_parent_script = Column(Text, nullable=True)
+    interpretation_generated_at = Column(DateTime(timezone=True), nullable=True)
+    report_override = Column(JSON_TYPE, nullable=True)
+    # 原始时间戳
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    # 归档时间
+    archived_at = Column(DateTime(timezone=True), default=lambda: china_now())
+
+    # Relationships
+    items = relationship("TestItemArchiveModel", back_populates="test", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("idx_tests_archive_student", "student_id"),
+        Index("idx_tests_archive_original", "original_id"),
+        Index("idx_tests_archive_created", "created_at"),
+        Index("idx_tests_archive_archived", "archived_at"),
+    )
+
+
+class TestItemArchiveModel(Base):
+    """Archived test items - stores historical Part 2 question scores."""
+    __tablename__ = "test_items_archive"
+
+    id = Column(BigIntegerType, primary_key=True, autoincrement=True)
+    original_id = Column(BigInteger, nullable=False)  # 原始 test_items.id
+    test_archive_id = Column(BigInteger, ForeignKey("tests_archive.id", ondelete="CASCADE"), nullable=False)
+    original_test_id = Column(BigInteger, nullable=False)  # 原始 tests.id
+    question_no = Column(Integer, nullable=False)
+    score = Column(SmallInteger, nullable=False)
+    feedback = Column(Text, nullable=True)
+    evidence = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    archived_at = Column(DateTime(timezone=True), default=lambda: china_now())
+
+    # Relationships
+    test = relationship("TestArchiveModel", back_populates="items")
+
+    __table_args__ = (
+        Index("idx_test_items_archive_test", "test_archive_id"),
+        Index("idx_test_items_archive_original_test", "original_test_id"),
+    )
+
+
 class StudentEntryTokenModel(Base):
     """Student entry token table ORM model."""
     __tablename__ = "student_entry_tokens"

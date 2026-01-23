@@ -27,6 +27,12 @@ PYTHON_ENV=/path/to/speakingtest/backend/venv/bin/python
 0 4 * * 0 cd $PROJECT_ROOT && $PYTHON_ENV scripts/archive_audit_logs.py --days 90 --use-pg-function >> /var/log/speakingtest/archive.log 2>&1
 
 # ============================================
+# 3. 归档历史测评记录（每月 1 号凌晨 5:00 执行）
+# ============================================
+# 将 90 天前已完成的测评归档到 tests_archive 表
+0 5 1 * * cd $PROJECT_ROOT && $PYTHON_ENV scripts/archive_old_tests.py --days 90 --use-pg-function >> /var/log/speakingtest/tests_archive.log 2>&1
+
+# ============================================
 # 说明
 # ============================================
 # 
@@ -35,6 +41,7 @@ PYTHON_ENV=/path/to/speakingtest/backend/venv/bin/python
 # - student_entry_tokens: 保留 30 天（过期）
 # - report_share_tokens: 保留 90 天（过期+撤销）
 # - audit_logs: 归档 90 天前的记录（不删除，移到归档表）
+# - tests: 归档 90 天前已完成的测评（移到 tests_archive 表）
 #
 # 首次执行建议：
 # 1. 使用 --dry-run 预览：python scripts/cleanup_expired_data.py --dry-run
