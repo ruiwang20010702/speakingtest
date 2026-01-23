@@ -99,12 +99,19 @@ gunicorn src.infrastructure.main:app \
 
 ### 5. Nginx 配置
 
+详细配置请参考 `nginx/` 文件夹：
+- `nginx/prod.conf` - 生产环境配置
+- `nginx/dev.conf` - 开发环境配置
+- `nginx/README.md` - 配置说明
+
 ```bash
 # 复制配置文件
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/speakingtest.conf
+sudo cp nginx/prod.conf /etc/nginx/sites-available/speakingtest.conf
 
 # 修改域名和 SSL 证书路径
 sudo nano /etc/nginx/sites-available/speakingtest.conf
+# 替换 your-domain.com 为实际域名
+# 替换 /etc/nginx/ssl/ 路径为实际证书路径
 
 # 启用站点
 sudo ln -s /etc/nginx/sites-available/speakingtest.conf /etc/nginx/sites-enabled/
