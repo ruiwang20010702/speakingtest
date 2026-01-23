@@ -289,6 +289,74 @@ class VerificationCodeModel(Base):
     )
 
 
+class TestRawDataModel(Base):
+    """
+    Test raw data table - stores large JSON fields separated from tests table.
+    
+    Performance optimization:
+    - Reduces I/O on tests table for list/stats queries
+    - Keeps main table compact for better cache hit rate
+    - Enables easier archiving of historical data
+    
+    Note: A trigger on tests table automatically syncs data to this table.
+    For read operations, prefer querying this table directly for raw data.
+    """
+    __tablename__ = "test_raw_data"
+
+    test_id = Column(BigInteger, ForeignKey("tests.id", ondelete="CASCADE"), primary_key=True)
+    
+    # Part1 原始评测数据
+    part1_raw_result = Column(JSON_TYPE, nullable=True)
+    
+    # Part2 原始评测数据
+    part2_raw_result = Column(JSON_TYPE, nullable=True)
+    
+    # Token 使用统计
+    tokens_used = Column(JSON_TYPE, nullable=True, default={})
+    
+    # 报告解读内容
+    interpretation_pages = Column(JSON_TYPE, nullable=True)
+    interpretation_parent_script = Column(Text, nullable=True)
+    
+    # 用户编辑覆盖
+    report_override = Column(JSON_TYPE, nullable=True)
+    
+    # 元数据
+    created_at = Column(DateTime(timezone=True), default=lambda: china_now())
+    updated_at = Column(DateTime(timezone=True), default=lambda: china_now(), onupdate=lambda: china_now())
+
+    # Relationship
+    test = relationship("TestModel", backref="raw_data", uselist=False)
+
+
+class AuditLogArchiveModel(Base):
+    """
+    Audit log archive table - stores historical audit records.
+    
+    Records older than retention period are moved here from audit_logs.
+    Use archive_old_audit_logs() PostgreSQL function for archiving.
+    """
+    __tablename__ = "audit_logs_archive"
+
+    id = Column(BigIntegerType, primary_key=True, autoincrement=True)
+    original_id = Column(BigInteger, nullable=False)
+    operator_id = Column(BigInteger, nullable=False)
+    action = Column(String(50), nullable=False)
+    target_type = Column(String(30), nullable=True)
+    target_id = Column(BigInteger, nullable=True)
+    client_ip = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    details = Column(JSON_TYPE, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    archived_at = Column(DateTime(timezone=True), default=lambda: china_now())
+
+    __table_args__ = (
+        Index("idx_audit_logs_archive_created", "created_at"),
+        Index("idx_audit_logs_archive_target", "target_type", "target_id"),
+        Index("idx_audit_logs_archive_operator", "operator_id"),
+    )
+
+
 class QuestionModel(Base):
     """Question bank for Part 1 (words) and Part 2 (Q&A) evaluation."""
     __tablename__ = "questions"
