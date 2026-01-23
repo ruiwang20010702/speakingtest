@@ -19,7 +19,7 @@ from src.infrastructure.auth import get_current_user_id, get_current_user_role
 from src.infrastructure.timezone import now as china_now
 from src.infrastructure.config import get_settings
 from src.adapters.repositories.models import (
-    TestModel, TestItemModel, StudentProfileModel, ReportShareTokenModel
+    TestModel, TestItemModel, StudentProfileModel, ReportShareTokenModel, TestRawDataModel
 )
 from src.infrastructure.audit import log_audit
 
@@ -236,9 +236,10 @@ async def get_test_report(
     - Part 2 items (question-by-question)
     - Audio URLs for playback
     """
-    # Get test with items
+    # Get test with items and raw_data (optimized: eager load large JSON from separate table)
     stmt = select(TestModel).options(
-        selectinload(TestModel.items)
+        selectinload(TestModel.items),
+        selectinload(TestModel.raw_data)  # Load large JSON from separate table
     ).where(TestModel.id == test_id)
     
     result = await db.execute(stmt)
@@ -270,6 +271,10 @@ async def get_test_report(
     student_profile = result.scalar_one_or_none()
     student_name = student_profile.student_name if student_profile else "Unknown"
     
+    # Optimized: prefer raw_data table, fallback to main table
+    raw_data = test.raw_data
+    part1_raw_result = (raw_data.part1_raw_result if raw_data else None) or test.part1_raw_result
+    
     return TestReportDetail(
         id=test.id,
         student_id=test.student_id,
@@ -284,7 +289,7 @@ async def get_test_report(
         part1_audio_url=test.part1_audio_url,
         part2_audio_url=test.part2_audio_url,
         part2_transcript=test.part2_transcript,
-        part1_raw_result=test.part1_raw_result,
+        part1_raw_result=part1_raw_result,
         items=[
             TestItemDetail(
                 question_no=item.question_no,
@@ -410,9 +415,10 @@ async def get_report_override(
     db: AsyncSession = Depends(get_db)
 ):
     """Get current report override data and original data for editing."""
-    # Get test with items
+    # Get test with items and raw_data (optimized)
     stmt = select(TestModel).options(
-        selectinload(TestModel.items)
+        selectinload(TestModel.items),
+        selectinload(TestModel.raw_data)  # Load large JSON from separate table
     ).where(TestModel.id == test_id)
     result = await db.execute(stmt)
     test = result.scalar_one_or_none()
@@ -442,9 +448,10 @@ async def get_report_override(
     student_profile = result.scalar_one_or_none()
     student_name = student_profile.student_name if student_profile else "学生"
     
-    # Extract original radar data from part1/part2 raw results
-    part1_raw = test.part1_raw_result or {}
-    part2_raw = test.part2_raw_result or {}
+    # Optimized: prefer raw_data table, fallback to main table
+    raw_data = test.raw_data
+    part1_raw = (raw_data.part1_raw_result if raw_data else None) or test.part1_raw_result or {}
+    part2_raw = (raw_data.part2_raw_result if raw_data else None) or test.part2_raw_result or {}
     
     original_radar = {
         "fluency": part2_raw.get("fluency_score") or part1_raw.get("fluency_score") or 0,
@@ -471,8 +478,8 @@ async def get_report_override(
     
     # Build lookup from part2_raw_result for fallback
     raw_items_lookup = {}
-    if test.part2_raw_result and isinstance(test.part2_raw_result, dict):
-        raw_items = test.part2_raw_result.get("items", [])
+    if part2_raw and isinstance(part2_raw, dict):
+        raw_items = part2_raw.get("items", [])
         for raw_item in raw_items:
             raw_items_lookup[raw_item.get("no")] = raw_item
     
@@ -518,9 +525,12 @@ async def get_report_override(
         suggestion=original_suggestion
     )
     
+    # Optimized: prefer raw_data.report_override, fallback to main table
+    report_override = (raw_data.report_override if raw_data else None) or test.report_override
+    
     return GetReportOverrideResponse(
-        has_override=test.report_override is not None,
-        override=test.report_override,
+        has_override=report_override is not None,
+        override=report_override,
         original=original
     )
 
@@ -929,9 +939,10 @@ async def view_report_by_token(
             detail="链接已过期"
         )
     
-    # Get test with items
+    # Get test with items and raw_data (optimized)
     stmt = select(TestModel).options(
-        selectinload(TestModel.items)
+        selectinload(TestModel.items),
+        selectinload(TestModel.raw_data)  # Load large JSON from separate table
     ).where(TestModel.id == share.test_id)
     
     result = await db.execute(stmt)
@@ -949,6 +960,10 @@ async def view_report_by_token(
     student_profile = result.scalar_one_or_none()
     student_name = student_profile.student_name if student_profile else "Unknown"
     
+    # Optimized: prefer raw_data table, fallback to main table
+    raw_data = test.raw_data
+    part1_raw_result = (raw_data.part1_raw_result if raw_data else None) or test.part1_raw_result
+    
     return TestReportDetail(
         id=test.id,
         student_id=test.student_id,
@@ -963,7 +978,7 @@ async def view_report_by_token(
         part1_audio_url=test.part1_audio_url,
         part2_audio_url=test.part2_audio_url,
         part2_transcript=test.part2_transcript,
-        part1_raw_result=test.part1_raw_result,
+        part1_raw_result=part1_raw_result,
         items=[
             TestItemDetail(
                 question_no=item.question_no,
@@ -1098,9 +1113,10 @@ async def get_parent_h5_report(
             detail="链接已过期"
         )
     
-    # Get test with items
+    # Get test with items and raw_data (optimized: eager load large JSON)
     stmt = select(TestModel).options(
-        selectinload(TestModel.items)
+        selectinload(TestModel.items),
+        selectinload(TestModel.raw_data)  # Load large JSON from separate table
     ).where(TestModel.id == share.test_id)
     
     result = await db.execute(stmt)
@@ -1118,8 +1134,11 @@ async def get_parent_h5_report(
     student_profile = result.scalar_one_or_none()
     student_name = student_profile.student_name if student_profile else "学生"
     
-    # Get override data
-    override = test.report_override or {}
+    # Optimized: prefer raw_data table, fallback to main table
+    raw_data_obj = test.raw_data
+    
+    # Get override data (prefer raw_data table)
+    override = (raw_data_obj.report_override if raw_data_obj else None) or test.report_override or {}
     
     # Apply overrides to base data
     final_student_name = override.get("student_name") or student_name
@@ -1189,8 +1208,9 @@ async def get_parent_h5_report(
     
     # Apply radar override if available
     override_radar = override.get("radar")
-    part1_raw = test.part1_raw_result or {}
-    part2_raw = test.part2_raw_result or {}
+    # Optimized: prefer raw_data table, fallback to main table
+    part1_raw = (raw_data_obj.part1_raw_result if raw_data_obj else None) or test.part1_raw_result or {}
+    part2_raw = (raw_data_obj.part2_raw_result if raw_data_obj else None) or test.part2_raw_result or {}
     
     if override_radar:
         # Override radar scores in part1/part2 raw for fusion

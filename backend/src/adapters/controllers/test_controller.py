@@ -33,7 +33,8 @@ async def verify_test_ownership(
     test_id: int,
     user_id: int,
     role: str,
-    db: AsyncSession
+    db: AsyncSession,
+    load_full: bool = False
 ) -> TestModel:
     """
     Verify that the user has permission to access the test.
@@ -42,11 +43,42 @@ async def verify_test_ownership(
     - Teachers: can only access tests of their students
     - Admins: can access all tests
     
+    Args:
+        load_full: If True, loads full TestModel. If False, only loads essential fields
+                   for ownership check (performance optimization).
+    
     Returns the test if authorized, raises HTTPException otherwise.
     """
-    stmt = select(TestModel).where(TestModel.id == test_id)
+    # Performance: Only select fields needed for ownership check
+    if load_full:
+        stmt = select(TestModel).where(TestModel.id == test_id)
+    else:
+        # Only select fields needed for ownership verification
+        stmt = select(
+            TestModel.id,
+            TestModel.student_id,
+            TestModel.status,
+            TestModel.level,
+            TestModel.unit
+        ).where(TestModel.id == test_id)
+    
     result = await db.execute(stmt)
-    test = result.scalar_one_or_none()
+    
+    if load_full:
+        test = result.scalar_one_or_none()
+    else:
+        row = result.first()
+        if row:
+            # Create a lightweight object for ownership check
+            test = type('TestBasic', (), {
+                'id': row.id,
+                'student_id': row.student_id,
+                'status': row.status,
+                'level': row.level,
+                'unit': row.unit
+            })()
+        else:
+            test = None
     
     if not test:
         raise HTTPException(
@@ -419,15 +451,18 @@ async def get_full_report(
     Security: Users can only view reports for tests they own or (for teachers) their students' tests.
     """
     from sqlalchemy.orm import selectinload
-    from src.adapters.repositories.models import TestItemModel
+    from src.adapters.repositories.models import TestItemModel, TestRawDataModel
     
     # Verify ownership first
     await verify_test_ownership(test_id, user["user_id"], user["role"], db)
     
-    # 查询测评记录（含逐题评分）- need fresh query with selectinload
+    # 查询测评记录（含逐题评分）- 优化：eager load raw_data 避免 N+1
     stmt = (
         select(TestModel)
-        .options(selectinload(TestModel.items))
+        .options(
+            selectinload(TestModel.items),
+            selectinload(TestModel.raw_data)  # 加载大 JSON 分离表
+        )
         .where(TestModel.id == test_id)
     )
     result = await db.execute(stmt)
@@ -441,20 +476,23 @@ async def get_full_report(
     if profile:
         student_name = profile.student_name
     
+    # 优化：优先从 raw_data 分离表读取大 JSON，fallback 到主表
+    raw_data = test.raw_data
+    part1_raw = (raw_data.part1_raw_result if raw_data else None) or test.part1_raw_result
+    part2_raw = (raw_data.part2_raw_result if raw_data else None) or test.part2_raw_result
+    
     # 解析 Part 1 详细分数
     part1_accuracy = None
     part1_fluency = None
     part1_pronunciation = None
     part1_integrity = None
     part1_overall_suggestion = []
-    if test.part1_raw_result:
-        raw = test.part1_raw_result
-        if isinstance(raw, dict):
-            part1_accuracy = raw.get("accuracy_score")
-            part1_fluency = raw.get("fluency_score")
-            part1_pronunciation = raw.get("pronunciation_score")
-            part1_integrity = raw.get("integrity_score")
-            part1_overall_suggestion = raw.get("part1_overall_suggestion", [])
+    if part1_raw and isinstance(part1_raw, dict):
+        part1_accuracy = part1_raw.get("accuracy_score")
+        part1_fluency = part1_raw.get("fluency_score")
+        part1_pronunciation = part1_raw.get("pronunciation_score")
+        part1_integrity = part1_raw.get("integrity_score")
+        part1_overall_suggestion = part1_raw.get("part1_overall_suggestion", [])
     
     # 解析 Part 2 详细分数
     part2_fluency = None
@@ -464,14 +502,13 @@ async def get_full_report(
     part2_sentence = None
     part2_overall_suggestion = []
     
-    if test.part2_raw_result and isinstance(test.part2_raw_result, dict):
-        raw = test.part2_raw_result
-        part2_fluency = raw.get("fluency_score")
-        part2_pronunciation = raw.get("pronunciation_score")
-        part2_confidence = raw.get("confidence_score")
-        part2_vocabulary = raw.get("vocabulary_score")
-        part2_sentence = raw.get("sentence_score")
-        part2_overall_suggestion = raw.get("part2_overall_suggestion", [])
+    if part2_raw and isinstance(part2_raw, dict):
+        part2_fluency = part2_raw.get("fluency_score")
+        part2_pronunciation = part2_raw.get("pronunciation_score")
+        part2_confidence = part2_raw.get("confidence_score")
+        part2_vocabulary = part2_raw.get("vocabulary_score")
+        part2_sentence = part2_raw.get("sentence_score")
+        part2_overall_suggestion = part2_raw.get("part2_overall_suggestion", [])
     
     # 构建 Part 2 逐题响应
     part2_items = [
