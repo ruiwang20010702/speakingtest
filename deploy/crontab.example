@@ -1,0 +1,47 @@
+# ============================================
+# 数据清理定时任务配置示例
+# ============================================
+# 
+# 使用方法：
+# 1. 复制此文件到服务器
+# 2. 修改路径和 Python 环境变量
+# 3. 执行: crontab -e
+# 4. 粘贴以下内容（根据实际情况调整）
+#
+# ============================================
+
+# 环境变量（根据实际部署路径调整）
+PROJECT_ROOT=/path/to/speakingtest/backend
+PYTHON_ENV=/path/to/speakingtest/backend/venv/bin/python
+
+# ============================================
+# 1. 清理过期数据（每天凌晨 3:00 执行）
+# ============================================
+# 清理 verification_codes, student_entry_tokens, report_share_tokens
+0 3 * * * cd $PROJECT_ROOT && $PYTHON_ENV scripts/cleanup_expired_data.py >> /var/log/speakingtest/cleanup.log 2>&1
+
+# ============================================
+# 2. 归档审计日志（每周日凌晨 4:00 执行）
+# ============================================
+# 将 90 天前的审计日志归档到 audit_logs_archive 表
+0 4 * * 0 cd $PROJECT_ROOT && $PYTHON_ENV scripts/archive_audit_logs.py --days 90 --use-pg-function >> /var/log/speakingtest/archive.log 2>&1
+
+# ============================================
+# 说明
+# ============================================
+# 
+# 清理策略：
+# - verification_codes: 保留 7 天（过期/已用）
+# - student_entry_tokens: 保留 30 天（过期）
+# - report_share_tokens: 保留 90 天（过期+撤销）
+# - audit_logs: 归档 90 天前的记录（不删除，移到归档表）
+#
+# 首次执行建议：
+# 1. 使用 --dry-run 预览：python scripts/cleanup_expired_data.py --dry-run
+# 2. 确认无误后再添加到 crontab
+#
+# 日志查看：
+# tail -f /var/log/speakingtest/cleanup.log
+# tail -f /var/log/speakingtest/archive.log
+#
+# ============================================
