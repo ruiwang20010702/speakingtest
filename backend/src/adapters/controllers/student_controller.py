@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.database import get_db
+from src.infrastructure.database import get_db, get_db_readonly
 from src.infrastructure.responses import ErrorResponse
 from src.infrastructure.audit import log_audit
 from src.infrastructure.auth import set_auth_cookie
@@ -140,7 +140,7 @@ async def list_students(
     page_size: int = 50,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_readonly)  # 只读操作，无需 commit
 ):
     """
     Get student list with RBAC and pagination.

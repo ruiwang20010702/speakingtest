@@ -138,7 +138,7 @@ class SendVerificationCodeUseCase:
                 return SendCodeResponse(
                     success=False,
                     message="请求过于频繁，请稍后再试"
-                )
+            )
         
         # 3. 生成验证码
         code = self._generate_code()
@@ -226,55 +226,55 @@ class TeacherLoginUseCase:
         
         if use_magic_code:
             logger.warning(f"[TEST MODE] Magic code bypass for {email} - ENABLE_TEST_AUTH is ON!")
-            # Skip verification check, proceed to find/create user
+                # Skip verification check, proceed to find/create user
             verification = None  # No verification record to mark as used
-        else:
-            now = china_now()
-            stmt = select(VerificationCodeModel).where(
-                and_(
-                    VerificationCodeModel.email == email,
-                    VerificationCodeModel.code == code,
-                    VerificationCodeModel.is_used == False,
-                    VerificationCodeModel.expires_at > now
-                )
-            )
-            result = await self.db.execute(stmt)
-            verification = result.scalar_one_or_none()
-            
-            if not verification:
-                # 区分是过期还是错误
-                stmt_any = select(VerificationCodeModel).where(
+            else:
+                now = china_now()
+                stmt = select(VerificationCodeModel).where(
                     and_(
                         VerificationCodeModel.email == email,
-                        VerificationCodeModel.code == code
+                        VerificationCodeModel.code == code,
+                        VerificationCodeModel.is_used == False,
+                        VerificationCodeModel.expires_at > now
                     )
                 )
-                result_any = await self.db.execute(stmt_any)
-                any_code = result_any.scalar_one_or_none()
+                result = await self.db.execute(stmt)
+                verification = result.scalar_one_or_none()
                 
-                if any_code:
-                    if any_code.is_used:
-                        return LoginResponse(
-                            success=False,
-                            error="CodeUsed",
-                            message="验证码已使用，请重新获取"
+                if not verification:
+                    # 区分是过期还是错误
+                    stmt_any = select(VerificationCodeModel).where(
+                        and_(
+                            VerificationCodeModel.email == email,
+                            VerificationCodeModel.code == code
                         )
+                    )
+                    result_any = await self.db.execute(stmt_any)
+                    any_code = result_any.scalar_one_or_none()
+                    
+                    if any_code:
+                        if any_code.is_used:
+                            return LoginResponse(
+                                success=False,
+                                error="CodeUsed",
+                                message="验证码已使用，请重新获取"
+                            )
+                        else:
+                            return LoginResponse(
+                                success=False,
+                                error="CodeExpired",
+                                message="验证码已过期，请重新获取"
+                            )
                     else:
                         return LoginResponse(
                             success=False,
-                            error="CodeExpired",
-                            message="验证码已过期，请重新获取"
+                            error="CodeInvalid",
+                            message="验证码错误"
                         )
-                else:
-                    return LoginResponse(
-                        success=False,
-                        error="CodeInvalid",
-                        message="验证码错误"
-                    )
-            
-            # 3. 标记验证码已使用
-            verification.is_used = True
-            verification.used_at = now
+                
+                # 3. 标记验证码已使用
+                verification.is_used = True
+                verification.used_at = now
         
         # 4. 查找或创建用户
         stmt_user = select(UserModel).where(UserModel.email == email)

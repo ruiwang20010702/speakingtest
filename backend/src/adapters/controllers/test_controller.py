@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
 
-from src.infrastructure.database import get_db
+from src.infrastructure.database import get_db, get_db_readonly
 
 logger = logging.getLogger(__name__)
 from src.infrastructure.auth import get_current_user_id, decode_token, oauth2_scheme
@@ -252,7 +252,7 @@ async def submit_part1(
 async def get_test_status(
     test_id: int,
     user: dict = Depends(get_current_user_with_role),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_readonly)  # 只读操作，无需 commit
 ):
     """
     Get current test status and scores.
@@ -436,7 +436,7 @@ class FullReportResponse(BaseModel):
 async def get_full_report(
     test_id: int,
     user: dict = Depends(get_current_user_with_role),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_readonly)  # 只读操作，无需 commit
 ):
     """
     获取完整测评报告。

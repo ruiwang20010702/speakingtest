@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.database import get_db
+from src.infrastructure.database import get_db, get_db_readonly
 from src.infrastructure.auth import get_current_user_id, get_current_user_role
 from src.adapters.repositories.models import QuestionModel
 from src.adapters.gateways.oss_client import get_oss_client
@@ -92,7 +92,7 @@ async def list_questions(
     unit: Optional[str] = None,
     page: int = 1,
     page_size: int = 50,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_readonly)  # 只读操作，无需 commit
 ):
     """
     List questions, optionally filtered by level and unit, with pagination.
@@ -164,7 +164,7 @@ async def list_questions(
 async def get_questions_by_level_unit(
     level: str,
     unit: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_readonly)  # 只读操作，无需 commit
 ):
     """
     Get all questions for a specific level and unit.

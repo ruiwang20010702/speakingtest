@@ -28,6 +28,7 @@ export interface Assessment {
     interpretationStatus?: 'pending' | 'generating' | 'completed' | 'failed';  // 报告解读状态
     failureReason?: string;   // 失败原因（当 status=failed 时）
     retryCount?: number;      // 重试次数
+    isArchived?: boolean;     // 是否为归档数据（历史测评，超过保留期）
 }
 
 export interface StatsOverview {

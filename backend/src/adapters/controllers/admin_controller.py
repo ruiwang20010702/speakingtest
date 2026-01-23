@@ -1020,3 +1020,103 @@ async def regenerate_report(
         )
 
 
+# ============================================
+# Audit Log Security Endpoints
+# ============================================
+
+class AuditChainVerificationResponse(BaseModel):
+    """Response for audit chain verification."""
+    valid: bool
+    records_checked: int
+    first_broken_id: int | None = None
+    error: str | None = None
+
+
+@router.get(
+    "/security/audit-chain/verify",
+    response_model=AuditChainVerificationResponse,
+    summary="验证审计日志哈希链完整性",
+    description="验证审计日志的哈希链是否完整，检测是否有篡改。仅管理员可访问。"
+)
+async def verify_audit_chain_endpoint(
+    start_id: int | None = None,
+    limit: int = 1000,
+    db: AsyncSession = Depends(get_db_readonly),
+    _admin = Depends(require_admin)
+):
+    """
+    Verify the integrity of audit log hash chain.
+    
+    Security:
+    - Admin only access
+    - Checks that each record's prev_hash matches the previous record's record_hash
+    - Verifies that record_hash matches recomputed hash of record content
+    
+    Args:
+        start_id: Start verification from this ID (optional)
+        limit: Maximum records to verify (default 1000, max 10000)
+    
+    Returns:
+        Verification results including validity status and error details if any
+    """
+    from src.infrastructure.audit import verify_audit_chain
+    
+    # Limit max records for performance
+    limit = min(limit, 10000)
+    
+    result = await verify_audit_chain(db, start_id=start_id, limit=limit)
+    
+    return AuditChainVerificationResponse(
+        valid=result["valid"],
+        records_checked=result["records_checked"],
+        first_broken_id=result["first_broken_id"],
+        error=result["error"]
+    )
+
+
+class AuditLogStats(BaseModel):
+    """Statistics for audit logs."""
+    total_records: int
+    records_with_hash: int
+    records_without_hash: int
+    oldest_record_date: str | None = None
+    newest_record_date: str | None = None
+
+
+@router.get(
+    "/security/audit-chain/stats",
+    response_model=AuditLogStats,
+    summary="获取审计日志统计信息",
+    description="获取审计日志的统计信息，包括记录总数、有哈希的记录数等。仅管理员可访问。"
+)
+async def get_audit_stats(
+    db: AsyncSession = Depends(get_db_readonly),
+    _admin = Depends(require_admin)
+):
+    """Get audit log statistics for security monitoring."""
+    from src.adapters.repositories.models import AuditLogModel
+    
+    # Total records
+    total_stmt = select(func.count(AuditLogModel.id))
+    total = (await db.execute(total_stmt)).scalar() or 0
+    
+    # Records with hash
+    with_hash_stmt = select(func.count(AuditLogModel.id)).where(
+        AuditLogModel.record_hash.isnot(None)
+    )
+    with_hash = (await db.execute(with_hash_stmt)).scalar() or 0
+    
+    # Date range
+    oldest_stmt = select(func.min(AuditLogModel.created_at))
+    oldest = (await db.execute(oldest_stmt)).scalar()
+    
+    newest_stmt = select(func.max(AuditLogModel.created_at))
+    newest = (await db.execute(newest_stmt)).scalar()
+    
+    return AuditLogStats(
+        total_records=total,
+        records_with_hash=with_hash,
+        records_without_hash=total - with_hash,
+        oldest_record_date=oldest.isoformat() if oldest else None,
+        newest_record_date=newest.isoformat() if newest else None
+    )

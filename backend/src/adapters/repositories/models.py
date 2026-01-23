@@ -319,7 +319,14 @@ class ReportShareTokenModel(Base):
 
 
 class AuditLogModel(Base):
-    """Audit log table ORM model."""
+    """
+    Audit log table ORM model.
+    
+    Security:
+    - Hash chain: Each record contains hash of previous record (prev_hash)
+    - Record hash: SHA-256 hash of all record fields for integrity verification
+    - Tamper detection: Any modification breaks the hash chain
+    """
     __tablename__ = "audit_logs"
 
     id = Column(BigIntegerType, primary_key=True, autoincrement=True)
@@ -331,6 +338,10 @@ class AuditLogModel(Base):
     user_agent = Column(String(500), nullable=True)
     details = Column(JSON_TYPE, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: china_now())
+    
+    # Hash chain fields for tamper detection
+    prev_hash = Column(String(64), nullable=True)   # SHA-256 hash of previous record (null for first record)
+    record_hash = Column(String(64), nullable=True)  # SHA-256 hash of this record's content
 
     __table_args__ = (
         Index("idx_audit_logs_operator_id", "operator_id"),

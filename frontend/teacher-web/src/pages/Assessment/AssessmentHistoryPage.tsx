@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { ArrowLeft, Plus, QrCode, FileText, Loader2, Sparkles, BookOpen, AlertCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Plus, QrCode, FileText, Loader2, Sparkles, BookOpen, AlertCircle, RefreshCw, Archive } from 'lucide-react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { DashboardLayout } from '../../components/Layout/DashboardLayout';
 import { StatusBadge } from '../../components/UI/StatusBadge';
@@ -69,7 +69,8 @@ export const AssessmentHistoryPage: React.FC = () => {
                 isInterpreted: t.is_interpreted ?? false,
                 interpretationStatus: t.interpretation_status ?? 'pending',
                 failureReason: t.failure_reason,
-                retryCount: t.retry_count ?? 0
+                retryCount: t.retry_count ?? 0,
+                isArchived: t.is_archived ?? false
             }));
             setAssessments(mappedAssessments);
 
@@ -282,6 +283,12 @@ export const AssessmentHistoryPage: React.FC = () => {
                             <div className="flex items-center gap-3 mb-2">
                                 <h4 className="font-bold text-text-main text-lg">{assessment.title}</h4>
                                 <StatusBadge status={assessment.status} />
+                                {assessment.isArchived && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200 flex items-center gap-1">
+                                        <Archive size={12} />
+                                        历史归档
+                                    </span>
+                                )}
                             </div>
                             <div className="flex items-center gap-4 text-sm text-text-sub">
                                 <span>{new Date(assessment.createdAt).toLocaleDateString()}</span>
@@ -328,25 +335,28 @@ export const AssessmentHistoryPage: React.FC = () => {
                                                     已重试 {assessment.retryCount} 次
                                                 </p>
                                             )}
-                                            <button
-                                                onClick={() => handleRegenerate(assessment.id)}
-                                                disabled={regeneratingId === assessment.id || (assessment.retryCount ?? 0) >= 5}
-                                                className="mt-2 px-3 py-1.5 bg-green-600 text-white rounded-md font-medium text-xs flex items-center gap-1.5 hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                                {regeneratingId === assessment.id ? (
-                                                    <>
-                                                        <Loader2 size={12} className="animate-spin" />
-                                                        生成中...
-                                                    </>
-                                                ) : (assessment.retryCount ?? 0) >= 5 ? (
-                                                    '已达重试上限'
-                                                ) : (
-                                                    <>
-                                                        <RefreshCw size={12} />
-                                                        重新生成报告
-                                                    </>
-                                                )}
-                                            </button>
+                                            {/* 归档数据不能重新生成 */}
+                                            {!assessment.isArchived && (
+                                                <button
+                                                    onClick={() => handleRegenerate(assessment.id)}
+                                                    disabled={regeneratingId === assessment.id || (assessment.retryCount ?? 0) >= 5}
+                                                    className="mt-2 px-3 py-1.5 bg-green-600 text-white rounded-md font-medium text-xs flex items-center gap-1.5 hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {regeneratingId === assessment.id ? (
+                                                        <>
+                                                            <Loader2 size={12} className="animate-spin" />
+                                                            生成中...
+                                                        </>
+                                                    ) : (assessment.retryCount ?? 0) >= 5 ? (
+                                                        '已达重试上限'
+                                                    ) : (
+                                                        <>
+                                                            <RefreshCw size={12} />
+                                                            重新生成报告
+                                                        </>
+                                                    )}
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -363,7 +373,21 @@ export const AssessmentHistoryPage: React.FC = () => {
                                         >
                                     <FileText size={16} /> 查看报告
                                 </button>
-                                        {assessment.isInterpreted ? (
+                                        {/* 归档记录：只能查看已有解读，不能生成新解读 */}
+                                        {assessment.isArchived ? (
+                                            assessment.isInterpreted ? (
+                                                <button 
+                                                    onClick={() => navigate(`/interpretation/${assessment.id}`)}
+                                                    className="px-4 py-2 border border-primary/30 bg-primary/5 text-primary rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-primary/10 transition-colors"
+                                                >
+                                                    <BookOpen size={16} /> 查看解读报告
+                                                </button>
+                                            ) : (
+                                                <span className="px-4 py-2 text-slate-400 text-sm">
+                                                    历史归档无解读
+                                                </span>
+                                            )
+                                        ) : assessment.isInterpreted ? (
                                             <button 
                                                 onClick={() => navigate(`/interpretation/${assessment.id}`)}
                                                 className="px-4 py-2 border border-primary/30 bg-primary/5 text-primary rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-primary/10 transition-colors"

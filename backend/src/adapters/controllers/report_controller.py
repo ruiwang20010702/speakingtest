@@ -14,19 +14,100 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from loguru import logger
 
-from src.infrastructure.database import get_db
+from src.infrastructure.database import get_db, get_db_readonly
 from src.infrastructure.auth import get_current_user_id, get_current_user_role
 from src.infrastructure.timezone import now as china_now
 from src.infrastructure.config import get_settings
 from src.adapters.repositories.models import (
-    TestModel, TestItemModel, StudentProfileModel, ReportShareTokenModel, TestRawDataModel
+    TestModel, TestItemModel, StudentProfileModel, ReportShareTokenModel, TestRawDataModel,
+    TestArchiveModel, TestItemArchiveModel
 )
+from src.adapters.repositories.test_archive_repository import TestArchiveRepository
 from src.infrastructure.audit import log_audit
 
 settings = get_settings()
 
 
 router = APIRouter()
+
+
+# ============================================
+# Helper: 查询测评（支持归档表）
+# ============================================
+
+async def get_test_with_archive_fallback(
+    db: AsyncSession,
+    test_id: int,
+    load_items: bool = True,
+    load_raw_data: bool = True
+) -> tuple[Optional[TestModel | TestArchiveModel], bool]:
+    """
+    查询测评，自动回退到归档表。
+    
+    Args:
+        db: 数据库会话
+        test_id: 测评 ID
+        load_items: 是否加载 items
+        load_raw_data: 是否加载 raw_data
+        
+    Returns:
+        (test_model_or_archive, is_archived)
+        - 如果主表有数据，返回 (TestModel, False)
+        - 如果主表无数据但归档表有，返回 (TestArchiveModel, True)
+        - 如果都没有，返回 (None, False)
+    """
+    # 1. 先查主表
+    options = []
+    if load_items:
+        options.append(selectinload(TestModel.items))
+    if load_raw_data:
+        options.append(selectinload(TestModel.raw_data))
+    
+    stmt = select(TestModel).options(*options).where(TestModel.id == test_id)
+    result = await db.execute(stmt)
+    test = result.scalar_one_or_none()
+    
+    if test:
+        return test, False
+    
+    # 2. 主表没有，查归档表
+    archive_options = []
+    if load_items:
+        archive_options.append(selectinload(TestArchiveModel.items))
+    
+    stmt = select(TestArchiveModel).options(*archive_options).where(
+        TestArchiveModel.original_id == test_id
+    )
+    result = await db.execute(stmt)
+    archive = result.scalar_one_or_none()
+    
+    if archive:
+        return archive, True
+    
+    return None, False
+
+
+def get_test_field(test, field: str, is_archived: bool, raw_data=None):
+    """
+    从测评或归档记录获取字段值。
+    对于大 JSON 字段，优先从 raw_data 获取（仅主表）。
+    """
+    # 大 JSON 字段列表
+    large_json_fields = {
+        'part1_raw_result', 'part2_raw_result', 'tokens_used',
+        'summary_highlights', 'summary_weaknesses', 'summary_weekly_plan',
+        'summary_dimension_feedback', 'interpretation_pages', 
+        'interpretation_parent_script', 'report_override'
+    }
+    
+    if is_archived:
+        # 归档表直接存储所有字段
+        return getattr(test, field, None)
+    else:
+        # 主表：大 JSON 字段优先从 raw_data 获取
+        if field in large_json_fields and raw_data:
+            return getattr(raw_data, field, None) or getattr(test, field, None)
+        return getattr(test, field, None)
 
 
 # ============================================
@@ -50,6 +131,7 @@ class TestSummary(BaseModel):
     interpretation_status: Optional[str] = None  # 报告解读状态: pending/generating/completed/failed
     failure_reason: Optional[str] = None  # 失败原因（当 status=failed 时）
     retry_count: int = 0  # 重试次数
+    is_archived: bool = False  # 是否为归档数据（历史测评）
 
 
 class TestItemDetail(BaseModel):
@@ -106,15 +188,16 @@ class TestListResponse(BaseModel):
     "/students/{student_id}/tests",
     response_model=TestListResponse,
     summary="获取学生测评历史",
-    description="获取指定学生的所有测评记录列表，支持分页。"
+    description="获取指定学生的所有测评记录列表，支持分页。可包含归档的历史测评。"
 )
 async def get_student_tests(
     student_id: int,
     page: int = 1,
     page_size: int = 20,
+    include_archived: bool = True,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_readonly)  # 只读操作，无需 commit
 ):
     """
     Get test history for a specific student with pagination.
@@ -126,6 +209,7 @@ async def get_student_tests(
         student_id: Student user ID
         page: Page number (1-indexed), default 1
         page_size: Items per page, default 20, max 100
+        include_archived: Include archived tests (default True for complete history)
     """
     # Validate pagination params
     page = max(1, page)
@@ -146,18 +230,23 @@ async def get_student_tests(
                 detail="Not authorized to view this student's tests"
             )
     
-    # 1. Get total count (1 query)
-    count_stmt = select(func.count(TestModel.id)).where(TestModel.student_id == student_id)
-    total = (await db.execute(count_stmt)).scalar() or 0
+    # 1. Get total count from main table
+    main_count_stmt = select(func.count(TestModel.id)).where(TestModel.student_id == student_id)
+    main_total = (await db.execute(main_count_stmt)).scalar() or 0
     
-    # 2. Get paginated tests (1 query)
-    stmt = select(TestModel).where(
-        TestModel.student_id == student_id
-    ).order_by(TestModel.created_at.desc()).offset(offset).limit(page_size)
+    # 2. Get total count from archive table (if include_archived)
+    archive_total = 0
+    if include_archived:
+        archive_count_stmt = select(func.count(TestArchiveModel.id)).where(
+            TestArchiveModel.student_id == student_id
+        )
+        archive_total = (await db.execute(archive_count_stmt)).scalar() or 0
     
-    result = await db.execute(stmt)
-    tests = result.scalars().all()
-
+    total = main_total + archive_total
+    
+    # 3. Get paginated tests - first from main table, then from archive
+    items = []
+    
     # Get active tokens for this student to populate entry_url for pending tests
     from src.adapters.repositories.models import StudentEntryTokenModel
     token_stmt = select(StudentEntryTokenModel).where(
@@ -178,26 +267,66 @@ async def get_student_tests(
     # Use configured URL instead of hardcoded value
     BASE_URL = settings.FRONTEND_STUDENT_URL
     
-    items = [
-        TestSummary(
-            id=t.id,
-            level=t.level,
-            unit=t.unit,
-            status=t.status,
-            total_score=float(t.total_score) if t.total_score else None,
-            part1_score=float(t.part1_score) if t.part1_score else None,
-            part2_score=float(t.part2_score) if t.part2_score else None,
-            star_level=t.star_level,
-            created_at=t.created_at,
-            completed_at=t.completed_at,
-            entry_url=f"{BASE_URL}/{token_map.get((t.level, t.unit))}" if t.status != 'completed' and (t.level, t.unit) in token_map else None,
-            is_interpreted=t.interpretation_generated_at is not None,
-            interpretation_status=t.interpretation_status or "pending",
-            failure_reason=t.failure_reason if t.status == 'failed' else None,
-            retry_count=t.retry_count or 0
-        )
-        for t in tests
-    ]
+    # Query from main table first
+    if offset < main_total:
+        main_limit = min(page_size, main_total - offset)
+        stmt = select(TestModel).where(
+            TestModel.student_id == student_id
+        ).order_by(TestModel.created_at.desc()).offset(offset).limit(main_limit)
+        
+        result = await db.execute(stmt)
+        tests = result.scalars().all()
+        
+        for t in tests:
+            items.append(TestSummary(
+                id=t.id,
+                level=t.level,
+                unit=t.unit,
+                status=t.status,
+                total_score=float(t.total_score) if t.total_score else None,
+                part1_score=float(t.part1_score) if t.part1_score else None,
+                part2_score=float(t.part2_score) if t.part2_score else None,
+                star_level=t.star_level,
+                created_at=t.created_at,
+                completed_at=t.completed_at,
+                entry_url=f"{BASE_URL}/{token_map.get((t.level, t.unit))}" if t.status != 'completed' and (t.level, t.unit) in token_map else None,
+                is_interpreted=t.interpretation_generated_at is not None,
+                interpretation_status=t.interpretation_status or "pending",
+                failure_reason=t.failure_reason if t.status == 'failed' else None,
+                retry_count=t.retry_count or 0,
+                is_archived=False
+            ))
+    
+    # If main table doesn't have enough, get from archive table
+    remaining = page_size - len(items)
+    if remaining > 0 and include_archived:
+        archive_offset = max(0, offset - main_total)
+        stmt = select(TestArchiveModel).where(
+            TestArchiveModel.student_id == student_id
+        ).order_by(TestArchiveModel.created_at.desc()).offset(archive_offset).limit(remaining)
+        
+        result = await db.execute(stmt)
+        archives = result.scalars().all()
+        
+        for a in archives:
+            items.append(TestSummary(
+                id=a.original_id,  # 使用原始 ID 保持兼容
+                level=a.level,
+                unit=a.unit,
+                status=a.status,
+                total_score=float(a.total_score) if a.total_score else None,
+                part1_score=float(a.part1_score) if a.part1_score else None,
+                part2_score=float(a.part2_score) if a.part2_score else None,
+                star_level=a.star_level,
+                created_at=a.created_at,
+                completed_at=a.completed_at,
+                entry_url=None,  # 归档测评无入口链接
+                is_interpreted=a.interpretation_generated_at is not None,
+                interpretation_status=None,  # 归档后不再更新
+                failure_reason=None,  # 归档的都是已完成的
+                retry_count=a.retry_count or 0,
+                is_archived=True
+            ))
     
     # Calculate total pages
     pages = (total + page_size - 1) // page_size if page_size > 0 else 0
@@ -219,13 +348,13 @@ async def get_student_tests(
     "/tests/{test_id}",
     response_model=TestReportDetail,
     summary="获取测评报告详情",
-    description="获取完整的测评报告，包括 Part1 和 Part2 的详细评分。"
+    description="获取完整的测评报告，包括 Part1 和 Part2 的详细评分。支持查询已归档的历史测评。"
 )
 async def get_test_report(
     test_id: int,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_readonly)  # 只读操作，无需 commit
 ):
     """
     Get full test report detail.
@@ -235,15 +364,13 @@ async def get_test_report(
     - Part 1 raw result (word-level scores)
     - Part 2 items (question-by-question)
     - Audio URLs for playback
-    """
-    # Get test with items and raw_data (optimized: eager load large JSON from separate table)
-    stmt = select(TestModel).options(
-        selectinload(TestModel.items),
-        selectinload(TestModel.raw_data)  # Load large JSON from separate table
-    ).where(TestModel.id == test_id)
     
-    result = await db.execute(stmt)
-    test = result.scalar_one_or_none()
+    Note: Supports querying archived tests (tests older than retention period).
+    """
+    # Get test with items and raw_data (supports archive fallback)
+    test, is_archived = await get_test_with_archive_fallback(
+        db, test_id, load_items=True, load_raw_data=True
+    )
     
     if not test:
         raise HTTPException(
@@ -271,12 +398,17 @@ async def get_test_report(
     student_profile = result.scalar_one_or_none()
     student_name = student_profile.student_name if student_profile else "Unknown"
     
-    # Optimized: prefer raw_data table, fallback to main table
-    raw_data = test.raw_data
-    part1_raw_result = (raw_data.part1_raw_result if raw_data else None) or test.part1_raw_result
+    # Get part1_raw_result (from raw_data for main table, direct for archive)
+    if is_archived:
+        part1_raw_result = test.part1_raw_result
+        test_id_for_response = test.original_id
+    else:
+        raw_data = test.raw_data
+        part1_raw_result = (raw_data.part1_raw_result if raw_data else None) or test.part1_raw_result
+        test_id_for_response = test.id
     
     return TestReportDetail(
-        id=test.id,
+        id=test_id_for_response,
         student_id=test.student_id,
         student_name=student_name,
         level=test.level,
@@ -297,7 +429,7 @@ async def get_test_report(
                 feedback=item.feedback,
                 evidence=item.evidence
             )
-            for item in sorted(test.items, key=lambda x: x.question_no)
+            for item in sorted(test.items or [], key=lambda x: x.question_no)
         ],
         created_at=test.created_at,
         completed_at=test.completed_at
@@ -412,7 +544,7 @@ async def get_report_override(
     test_id: int,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_readonly)  # 只读操作，无需 commit
 ):
     """Get current report override data and original data for editing."""
     # Get test with items and raw_data (optimized)
@@ -1118,14 +1250,10 @@ async def get_parent_h5_report(
             detail="链接已过期"
         )
     
-    # Get test with items and raw_data (optimized: eager load large JSON)
-    stmt = select(TestModel).options(
-        selectinload(TestModel.items),
-        selectinload(TestModel.raw_data)  # Load large JSON from separate table
-    ).where(TestModel.id == share.test_id)
-    
-    result = await db.execute(stmt)
-    test = result.scalar_one_or_none()
+    # Get test with items and raw_data (supports archive fallback)
+    test, is_archived = await get_test_with_archive_fallback(
+        db, share.test_id, load_items=True, load_raw_data=True
+    )
     
     if not test:
         raise HTTPException(
@@ -1139,11 +1267,14 @@ async def get_parent_h5_report(
     student_profile = result.scalar_one_or_none()
     student_name = student_profile.student_name if student_profile else "学生"
     
-    # Optimized: prefer raw_data table, fallback to main table
-    raw_data_obj = test.raw_data
+    # Get raw_data (only for main table, archive has direct fields)
+    raw_data_obj = test.raw_data if not is_archived else None
     
-    # Get override data (prefer raw_data table)
-    override = (raw_data_obj.report_override if raw_data_obj else None) or test.report_override or {}
+    # Get override data (prefer raw_data table for main, direct for archive)
+    if is_archived:
+        override = test.report_override or {}
+    else:
+        override = (raw_data_obj.report_override if raw_data_obj else None) or test.report_override or {}
     
     # Apply overrides to base data
     final_student_name = override.get("student_name") or student_name
@@ -1341,22 +1472,24 @@ class InterpretationStatusResponse(BaseModel):
     "/tests/{test_id}/interpretation",
     response_model=InterpretationResponse,
     summary="获取报告解读",
-    description="获取已生成的报告解读（按6页组织）。如果尚未生成，返回 404。"
+    description="获取已生成的报告解读（按6页组织）。如果尚未生成，返回 404。支持查询已归档的历史测评。"
 )
 async def get_test_interpretation(
     test_id: int,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_readonly)  # 只读操作，无需 commit
 ):
     """
     Get stored interpretation for a test.
     Returns 404 if not yet generated.
+    
+    Note: Supports querying archived tests (tests older than retention period).
     """
-    # Get test
-    stmt = select(TestModel).where(TestModel.id == test_id)
-    result = await db.execute(stmt)
-    test = result.scalar_one_or_none()
+    # Get test (supports archive fallback)
+    test, is_archived = await get_test_with_archive_fallback(
+        db, test_id, load_items=False, load_raw_data=False
+    )
     
     if not test:
         raise HTTPException(
@@ -1379,9 +1512,10 @@ async def get_test_interpretation(
     
     # Check if interpretation exists (以 interpretation_pages 非空为准)
     if not test.interpretation_pages:
+        # 归档记录也可能没有解读
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="解读尚未生成，请先调用 POST 接口生成解读"
+            detail="解读尚未生成" + ("（已归档的历史记录）" if is_archived else "，请先调用 POST 接口生成解读")
         )
     
     # 解析 pages 数据（新格式：每页是字符串）
@@ -1585,7 +1719,7 @@ async def get_interpretation_status(
     test_id: int,
     user_id: int = Depends(get_current_user_id),
     role: str = Depends(get_current_user_role),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_readonly)  # 只读操作，无需 commit
 ):
     """
     查询报告解读生成状态。

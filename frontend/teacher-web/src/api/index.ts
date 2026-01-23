@@ -302,6 +302,7 @@ export interface TestSummary {
   completed_at?: string;
   entry_url?: string;
   is_interpreted: boolean;  // 是否已生成报告解读
+  is_archived?: boolean;    // 是否为归档数据（历史测评）
 }
 
 // Paginated Test List Response
