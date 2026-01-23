@@ -676,7 +676,11 @@ async def list_failed_tasks(
         test.updated_at = china_now()
     
     if stuck_tests:
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"更新卡住任务状态失败: {e}")
     
     # 查询所有失败的任务
     stmt = (
