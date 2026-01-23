@@ -84,6 +84,98 @@ UPLOAD_MAX_SIZE_MB=20      # 单文件最大大小
 
 ---
 
+## 数据库优化
+
+### 索引策略
+
+系统已添加以下组合索引以优化常见查询：
+
+| 表 | 索引 | 用途 |
+|----|------|------|
+| `users` | `(role, status)` | 后台教师/学生列表 |
+| `tests` | `(student_id, status)` | 学生测评列表 |
+| `tests` | `(student_id, status, created_at)` | 带时间排序的列表 |
+| `test_items` | `(test_id, question_no)` | 题目详情查询 |
+| `verification_codes` | `(email, code, is_used, expires_at)` | 登录验证 |
+| `student_entry_tokens` | `(student_id, is_used, expires_at)` | 入口验证 |
+| `report_share_tokens` | `(token, is_revoked, expires_at)` | 家长查看 |
+| `audit_logs` | `(target_type, target_id, created_at)` | 安全审计 |
+
+**应用索引**：
+
+```bash
+# 执行迁移脚本
+psql -U postgres -d speakingtest -f database/migrations/003_add_performance_indexes.sql
+```
+
+### 数据清理
+
+定期清理过期数据，避免表膨胀：
+
+```bash
+# 预览模式
+python scripts/cleanup_expired_data.py --dry-run
+
+# 实际执行
+python scripts/cleanup_expired_data.py
+
+# 只清理指定表
+python scripts/cleanup_expired_data.py --tables verification_codes,student_entry_tokens
+```
+
+**清理策略**：
+
+| 表 | 保留策略 | 默认天数 |
+|----|----------|---------|
+| `verification_codes` | 过期/已用 | 7 天 |
+| `student_entry_tokens` | 过期/已用 | 30 天 |
+| `report_share_tokens` | 过期+已撤销 | 90 天 |
+| `audit_logs` | 时间 | 365 天（需显式启用） |
+
+**Cron 定时任务**：
+
+```bash
+# 每天凌晨 3 点执行清理
+0 3 * * * cd /path/to/backend && python scripts/cleanup_expired_data.py >> /var/log/cleanup.log 2>&1
+```
+
+### 只读连接优化
+
+系统提供两种数据库连接方式：
+
+```python
+from src.infrastructure.database import get_db, get_db_readonly
+
+# 写操作（自动 commit）
+@router.post("/users")
+async def create_user(db: AsyncSession = Depends(get_db)):
+    ...
+
+# 读操作（不 commit，性能更好）
+@router.get("/users")
+async def get_users(db: AsyncSession = Depends(get_db_readonly)):
+    ...
+```
+
+### 缓存策略
+
+统计接口使用 Redis 缓存（5 分钟 TTL）：
+
+```python
+from src.infrastructure.cache import cache_get, cache_set
+
+# 检查缓存
+cached = await cache_get("stats:overview")
+if cached:
+    return cached
+
+# 计算并缓存
+result = await compute_stats()
+await cache_set("stats:overview", result, ttl=300)
+```
+
+---
+
 ## 水平扩容指南
 
 ### 方式一：增加消费者实例

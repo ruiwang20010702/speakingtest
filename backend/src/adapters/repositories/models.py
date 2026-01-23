@@ -1,6 +1,19 @@
 """
 SQLAlchemy ORM Models
 Maps domain entities to database tables.
+
+Index Strategy:
+- Primary keys and unique constraints create implicit indexes
+- Additional indexes are created for:
+  1. Foreign keys used in JOINs
+  2. Columns frequently used in WHERE clauses
+  3. Composite indexes for common query patterns
+  4. Columns used in ORDER BY with LIMIT
+
+Performance Notes:
+- Composite indexes should have most selective column first
+- Use INCLUDE columns for covering indexes (PostgreSQL 11+)
+- Monitor pg_stat_user_indexes for unused indexes
 """
 from datetime import datetime
 from typing import Optional
@@ -53,6 +66,11 @@ class UserModel(Base):
         foreign_keys="[StudentProfileModel.user_id]"
     )
     tests = relationship("TestModel", back_populates="student")
+    
+    __table_args__ = (
+        # 后台教师/学生列表筛选优化
+        Index("idx_users_role_status", "role", "status"),
+    )
 
 
 class StudentProfileModel(Base):
@@ -139,9 +157,13 @@ class TestModel(Base):
 
     __table_args__ = (
         UniqueConstraint("student_id", "level", "unit", name="uk_student_level_unit"),
+        # 基础索引
         Index("idx_tests_student_id", "student_id"),
         Index("idx_tests_status", "status"),
         Index("idx_tests_created_at", "created_at"),
+        # 组合索引：列表/统计常用查询
+        Index("idx_tests_student_status", "student_id", "status"),
+        Index("idx_tests_student_status_created", "student_id", "status", "created_at"),
     )
 
 
@@ -162,6 +184,9 @@ class TestItemModel(Base):
 
     __table_args__ = (
         UniqueConstraint("test_id", "question_no", name="uk_test_question"),
+        # 显式索引：虽然 unique 约束会创建索引，但显式声明更清晰
+        Index("idx_test_items_test_id", "test_id"),
+        Index("idx_test_items_test_question", "test_id", "question_no"),
     )
 
 
@@ -170,7 +195,7 @@ class StudentEntryTokenModel(Base):
     __tablename__ = "student_entry_tokens"
 
     id = Column(BigIntegerType, primary_key=True, autoincrement=True)
-    token = Column(String(64), unique=True, nullable=False)
+    token = Column(String(64), unique=True, nullable=False)  # unique 约束已隐式创建索引
     student_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
     level = Column(String(20), nullable=False)
     unit = Column(String(20), nullable=False)
@@ -182,6 +207,10 @@ class StudentEntryTokenModel(Base):
 
     __table_args__ = (
         Index("idx_student_entry_tokens_student_id", "student_id"),
+        # 组合索引：验证入口时用
+        Index("idx_student_entry_tokens_student_used_expires", "student_id", "is_used", "expires_at"),
+        # 过期清理用
+        Index("idx_student_entry_tokens_expires", "expires_at"),
     )
 
 
@@ -190,7 +219,7 @@ class ReportShareTokenModel(Base):
     __tablename__ = "report_share_tokens"
 
     id = Column(BigIntegerType, primary_key=True, autoincrement=True)
-    token = Column(String(64), unique=True, nullable=False)
+    token = Column(String(64), unique=True, nullable=False)  # unique 约束已隐式创建索引
     test_id = Column(BigInteger, ForeignKey("tests.id", ondelete="CASCADE"), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     is_revoked = Column(Boolean, default=False)
@@ -200,6 +229,12 @@ class ReportShareTokenModel(Base):
 
     __table_args__ = (
         Index("idx_report_share_tokens_test_id", "test_id"),
+        # 组合索引：查询有效分享
+        Index("idx_report_share_tokens_test_revoked", "test_id", "is_revoked"),
+        # 家长查看验证：token + is_revoked + expires_at
+        Index("idx_report_share_tokens_token_valid", "token", "is_revoked", "expires_at"),
+        # 过期清理用
+        Index("idx_report_share_tokens_expires", "expires_at"),
     )
 
 
@@ -221,6 +256,10 @@ class AuditLogModel(Base):
         Index("idx_audit_logs_operator_id", "operator_id"),
         Index("idx_audit_logs_action", "action"),
         Index("idx_audit_logs_created_at", "created_at"),
+        # 组合索引：按目标追溯审计记录
+        Index("idx_audit_logs_target", "target_type", "target_id", "created_at"),
+        # IP 追溯
+        Index("idx_audit_logs_ip", "client_ip"),
     )
 
 
@@ -241,6 +280,12 @@ class VerificationCodeModel(Base):
     __table_args__ = (
         Index("idx_verification_codes_email", "email"),
         Index("idx_verification_codes_expires", "expires_at"),
+        # 组合索引：登录验证查询
+        Index("idx_verification_codes_verify", "email", "code", "is_used", "expires_at"),
+        # IP 防刷/审计
+        Index("idx_verification_codes_ip", "ip_address"),
+        # 清理过期/已用验证码
+        Index("idx_verification_codes_cleanup", "is_used", "expires_at"),
     )
 
 
