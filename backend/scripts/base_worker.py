@@ -180,5 +180,5 @@ async def run_worker(
     except KeyboardInterrupt:
         logger.info(f"{worker_name} 收到退出信号")
     finally:
-        await consumer.stop()
+        await consumer.close()
         logger.info(f"{worker_name} 已停止")

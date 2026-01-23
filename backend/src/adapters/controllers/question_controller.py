@@ -436,7 +436,6 @@ async def delete_question(
         )
     
     question.is_active = False
-    question.is_active = False
     await db.commit()
     
     # Audit Log

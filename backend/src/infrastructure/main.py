@@ -104,7 +104,7 @@ def _get_cors_origins() -> list:
         if settings.FRONTEND_STUDENT_URL:
             parsed = urlparse(settings.FRONTEND_STUDENT_URL)
             if parsed.scheme and parsed.netloc:
-            origins.append(f"{parsed.scheme}://{parsed.netloc}")
+                origins.append(f"{parsed.scheme}://{parsed.netloc}")
         if settings.FRONTEND_PARENT_URL:
             parsed = urlparse(settings.FRONTEND_PARENT_URL)
             if parsed.scheme and parsed.netloc:
