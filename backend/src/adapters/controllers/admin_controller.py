@@ -309,7 +309,7 @@ from src.adapters.repositories.models import UserModel
 async def list_teachers(
     page: int = 1,
     limit: int = 20,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_readonly),
     _ = Depends(require_admin)
 ):
     """Get list of all teachers with summary stats (paginated).
@@ -433,7 +433,7 @@ async def list_teachers(
 )
 async def get_teacher_detail(
     teacher_id: int,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_readonly),
     _ = Depends(require_admin)
 ):
     """Get teacher detail with student list."""
@@ -539,7 +539,7 @@ async def query_audit_logs(
     operator_id: Optional[int] = None,
     page: int = 1,
     limit: int = 20,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_readonly),
     _ = Depends(require_admin)
 ):
     """Query audit logs with optional filters."""
