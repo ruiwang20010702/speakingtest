@@ -17,7 +17,8 @@ export const ReportPage: React.FC = () => {
     const [error, setError] = useState('');
     const [shareUrl, setShareUrl] = useState('');
     const [previewLoading, setPreviewLoading] = useState(true);
-    const [sharing, setSharing] = useState(false);
+    const [sharing, _setSharing] = useState(false);
+    void _setSharing; // Reserved for future share loading state
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 

@@ -205,12 +205,12 @@ export const EditReportModal: React.FC<EditReportModalProps> = ({
     }
   };
 
-  // Helper functions for list editing
-  const addListItem = (setter: React.Dispatch<React.SetStateAction<string[]>>) => {
+  // Helper functions for list editing (reserved for future use)
+  const _addListItem = (setter: React.Dispatch<React.SetStateAction<string[]>>) => {
     setter(prev => [...prev, '']);
   };
 
-  const updateListItem = (
+  const _updateListItem = (
     index: number,
     value: string,
     setter: React.Dispatch<React.SetStateAction<string[]>>
@@ -218,12 +218,17 @@ export const EditReportModal: React.FC<EditReportModalProps> = ({
     setter(prev => prev.map((item, i) => (i === index ? value : item)));
   };
 
-  const removeListItem = (
+  const _removeListItem = (
     index: number,
     setter: React.Dispatch<React.SetStateAction<string[]>>
   ) => {
     setter(prev => prev.filter((_, i) => i !== index));
   };
+
+  // Suppress unused warnings (these are helper functions for future use)
+  void _addListItem;
+  void _updateListItem;
+  void _removeListItem;
 
   // Part1 word helpers
   const addPart1Word = () => {
