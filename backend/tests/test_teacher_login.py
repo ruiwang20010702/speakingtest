@@ -49,15 +49,22 @@ class TestSendVerificationCodeUseCase:
         assert "51talk.com" in response.message
 
     @pytest.mark.asyncio
-    async def test_send_code_admin_bypass(self, test_db):
-        """Test admin email bypasses verification."""
-        request = SendCodeRequest(email="704778107@qq.com")
+    async def test_send_code_admin_email(self, test_db):
+        """Test admin email (from config) can receive verification code."""
+        # Admin emails are configured in ADMIN_EMAILS setting
+        # They still need verification codes, but will get admin role on login
+        request = SendCodeRequest(email="admin@51talk.com")  # Use a valid 51talk email
 
-        use_case = SendVerificationCodeUseCase(test_db)
-        response = await use_case.execute(request)
+        with patch("src.use_cases.teacher_login.get_email_service") as mock_service:
+            mock_email = MagicMock()
+            mock_email.send_verification_code = AsyncMock(return_value=True)
+            mock_service.return_value = mock_email
 
-        assert response.success is True
-        assert "无需验证码" in response.message
+            use_case = SendVerificationCodeUseCase(test_db)
+            response = await use_case.execute(request)
+
+            assert response.success is True
+            assert "已发送" in response.message
 
     @pytest.mark.asyncio
     async def test_send_code_rate_limit(self, test_db):
@@ -131,21 +138,40 @@ class TestTeacherLoginUseCase:
             assert response.role == "teacher"
 
     @pytest.mark.asyncio
-    async def test_login_admin_bypass(self, test_db):
-        """Test admin can login with any code."""
+    async def test_login_admin_role(self, test_db):
+        """Test admin email (from ADMIN_EMAILS config) gets admin role on login."""
+        # Create a valid verification code for admin email
+        # Note: admin email needs valid verification code, no bypass
+        admin_email = "admin@51talk.com"
+        valid_code = VerificationCodeModel(
+            email=admin_email,
+            code="123456",
+            purpose="login",
+            expires_at=china_now() + timedelta(minutes=5),
+            is_used=False
+        )
+        test_db.add(valid_code)
+        await test_db.commit()
+
         request = LoginRequest(
-            email="704778107@qq.com",
-            code="999999"
+            email=admin_email,
+            code="123456"
         )
 
-        with patch("src.use_cases.teacher_login.fetch_crm_user_info", new_callable=AsyncMock) as mock_crm:
-            mock_crm.return_value = None
+        # Mock the config to include our test email in ADMIN_EMAILS
+        with patch("src.use_cases.teacher_login.get_settings") as mock_settings:
+            mock_settings.return_value.ENABLE_TEST_AUTH = False
+            mock_settings.return_value.TEST_EMAIL_WHITELIST = ""
+            mock_settings.return_value.ADMIN_EMAILS = admin_email
+            
+            with patch("src.use_cases.teacher_login.fetch_crm_user_info", new_callable=AsyncMock) as mock_crm:
+                mock_crm.return_value = None
 
-            use_case = TeacherLoginUseCase(test_db)
-            response = await use_case.execute(request)
+                use_case = TeacherLoginUseCase(test_db)
+                response = await use_case.execute(request)
 
-            assert response.success is True
-            assert response.role == "admin"
+                assert response.success is True
+                assert response.role == "admin"
 
     @pytest.mark.asyncio
     async def test_login_invalid_email(self, test_db):
