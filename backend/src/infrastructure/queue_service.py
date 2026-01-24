@@ -62,16 +62,37 @@ class Part2TaskProducer:
         self.channel = None
     
     async def connect(self):
-        """建立连接"""
+        """建立连接，配置死信队列（与 Consumer 一致）"""
         self.connection = await connect_robust(self.url)
         self.channel = await self.connection.channel()
         
-        # 声明持久化队列
-        await self.channel.declare_queue(
-            self.QUEUE_NAME,
+        # 声明死信交换机
+        dlx_name = f"{self.QUEUE_NAME}{DLX_SUFFIX}"
+        await self.channel.declare_exchange(
+            dlx_name,
+            type="fanout",
             durable=True
         )
-        logger.info(f"Part2TaskProducer 已连接到 {self.QUEUE_NAME}")
+        
+        # 声明死信队列
+        dlq_name = f"{self.QUEUE_NAME}{DLQ_SUFFIX}"
+        dlq = await self.channel.declare_queue(
+            dlq_name,
+            durable=True
+        )
+        
+        # 绑定死信队列到死信交换机
+        await dlq.bind(dlx_name)
+        
+        # 主队列配置：失败消息发送到死信交换机
+        await self.channel.declare_queue(
+            self.QUEUE_NAME,
+            durable=True,
+            arguments={
+                "x-dead-letter-exchange": dlx_name,
+            }
+        )
+        logger.info(f"Part2TaskProducer 已连接到 {self.QUEUE_NAME}, DLQ={dlq_name}")
     
     async def publish(self, task: Part2Task):
         """
@@ -321,10 +342,37 @@ class Part1TaskProducer:
         self.channel = None
     
     async def connect(self):
+        """建立连接，配置死信队列（与 Consumer 一致）"""
         self.connection = await connect_robust(self.url)
         self.channel = await self.connection.channel()
-        await self.channel.declare_queue(self.QUEUE_NAME, durable=True)
-        logger.info(f"Part1TaskProducer 已连接到 {self.QUEUE_NAME}")
+        
+        # 声明死信交换机
+        dlx_name = f"{self.QUEUE_NAME}{DLX_SUFFIX}"
+        await self.channel.declare_exchange(
+            dlx_name,
+            type="fanout",
+            durable=True
+        )
+        
+        # 声明死信队列
+        dlq_name = f"{self.QUEUE_NAME}{DLQ_SUFFIX}"
+        dlq = await self.channel.declare_queue(
+            dlq_name,
+            durable=True
+        )
+        
+        # 绑定死信队列到死信交换机
+        await dlq.bind(dlx_name)
+        
+        # 主队列配置：失败消息发送到死信交换机
+        await self.channel.declare_queue(
+            self.QUEUE_NAME,
+            durable=True,
+            arguments={
+                "x-dead-letter-exchange": dlx_name,
+            }
+        )
+        logger.info(f"Part1TaskProducer 已连接到 {self.QUEUE_NAME}, DLQ={dlq_name}")
     
     async def publish(self, task: Part1Task):
         if not self.channel:
@@ -551,10 +599,37 @@ class InterpretationTaskProducer:
         self.channel = None
     
     async def connect(self):
+        """建立连接，配置死信队列（与 Consumer 一致）"""
         self.connection = await connect_robust(self.url)
         self.channel = await self.connection.channel()
-        await self.channel.declare_queue(self.QUEUE_NAME, durable=True)
-        logger.info(f"InterpretationTaskProducer 已连接到 {self.QUEUE_NAME}")
+        
+        # 声明死信交换机
+        dlx_name = f"{self.QUEUE_NAME}{DLX_SUFFIX}"
+        await self.channel.declare_exchange(
+            dlx_name,
+            type="fanout",
+            durable=True
+        )
+        
+        # 声明死信队列
+        dlq_name = f"{self.QUEUE_NAME}{DLQ_SUFFIX}"
+        dlq = await self.channel.declare_queue(
+            dlq_name,
+            durable=True
+        )
+        
+        # 绑定死信队列到死信交换机
+        await dlq.bind(dlx_name)
+        
+        # 主队列配置：失败消息发送到死信交换机
+        await self.channel.declare_queue(
+            self.QUEUE_NAME,
+            durable=True,
+            arguments={
+                "x-dead-letter-exchange": dlx_name,
+            }
+        )
+        logger.info(f"InterpretationTaskProducer 已连接到 {self.QUEUE_NAME}, DLQ={dlq_name}")
     
     async def publish(self, task: InterpretationTask):
         if not self.channel:

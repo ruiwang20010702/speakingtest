@@ -487,7 +487,8 @@ async def get_full_report(
         student_name = profile.student_name
     
     # 优化：优先从 raw_data 分离表读取大 JSON，fallback 到主表
-    raw_data = test.raw_data
+    # 注意：test.raw_data 是列表（backref 默认行为），取第一个元素
+    raw_data = test.raw_data[0] if test.raw_data else None
     part1_raw = (raw_data.part1_raw_result if raw_data else None) or test.part1_raw_result
     part2_raw = (raw_data.part2_raw_result if raw_data else None) or test.part2_raw_result
     
