@@ -204,8 +204,10 @@ class ProcessPart2TaskUseCase:
                     audio_data = response.content
             except Exception as e:
                 logger.exception(f"下载音频失败: {e}")
-                test.status = "failed"
                 test.failure_reason = f"下载音频失败: {str(e)}"[:250]
+                test.retry_count = (test.retry_count or 0) + 1
+                test.updated_at = china_now()
+                # 不设置 status="failed"，保持 status="processing"，让队列重试机制正常工作
                 await self.db.commit()
                 return False
             
@@ -302,9 +304,10 @@ class ProcessPart2TaskUseCase:
             
             # 5. 处理失败情况
             if not qwen_result.success:
-                test.status = "failed"
                 test.failure_reason = (qwen_result.error or "未知错误")[:250]
                 test.retry_count = (test.retry_count or 0) + 1
+                test.updated_at = china_now()
+                # 不设置 status="failed"，保持 status="processing"，让队列重试机制正常工作
                 await self.db.commit()
                 return False
             
@@ -358,10 +361,11 @@ class ProcessPart2TaskUseCase:
             # 全局异常捕获：确保任何异常都记录 failure_reason
             logger.exception(f"Part 2 处理异常: {e}")
             try:
-                test.status = "failed"
                 test.failure_reason = f"处理异常: {str(e)}"[:250]
                 test.part2_audio_url = task.audio_url  # 保存音频 URL 以便排查
                 test.retry_count = (test.retry_count or 0) + 1
+                test.updated_at = china_now()
+                # 不设置 status="failed"，保持 status="processing"，让队列重试机制正常工作 
                 
                 # 尝试保存已计算的评分数据（如果 Qwen 返回成功但后续处理失败）
                 # 使用 locals() 检查变量是否已定义

@@ -356,7 +356,8 @@ class ProcessPart1TaskUseCase:
             logger.error(f"下载音频失败: {e}")
             test.failure_reason = f"音频下载失败: {str(e)}"
             test.retry_count = (test.retry_count or 0) + 1
-            test.status = "failed"
+            test.updated_at = china_now()
+            # 不设置 status="failed"，保持 status="part1_processing"，让队列重试机制正常工作
             await self.db.commit()
             return False
         
@@ -371,7 +372,8 @@ class ProcessPart1TaskUseCase:
             logger.exception(f"Qwen Part 1 API error: {e}")
             test.failure_reason = str(e)[:250]  # 截断避免数据库字段溢出
             test.retry_count = (test.retry_count or 0) + 1
-            test.status = "failed"
+            test.updated_at = china_now()
+            # 不设置 status="failed"，保持 status="part1_processing"，让队列重试机制正常工作
             await self.db.commit()
             return False
         
@@ -379,7 +381,8 @@ class ProcessPart1TaskUseCase:
         if not evaluation_result.success:
             test.failure_reason = (evaluation_result.error or "未知错误")[:250]  # 截断
             test.retry_count = (test.retry_count or 0) + 1
-            test.status = "failed"
+            test.updated_at = china_now()
+            # 不设置 status="failed"，保持 status="part1_processing"，让队列重试机制正常工作
             await self.db.commit()
             return False
         
