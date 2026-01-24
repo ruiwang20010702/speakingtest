@@ -47,7 +47,7 @@ def strip_thinking_tags(text: str) -> str:
 # 基于 /prompt-engineering-patterns - Progressive Disclosure + Structured Output
 # ============================================
 
-PART2_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的任务是对学生 Part 2（12 题连续作答）的整段录音进行综合评测。
+PART2_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的任务是对学生 Part 2（10-12 题连续作答）的整段录音进行综合评测。
 
 ## 评分维度 (0-100分)
 
@@ -129,8 +129,12 @@ PART2_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
 3. 如果你对某段话属于题目 i 还是 i+1 不确定：宁可归到题目 i，也不要提前归到题目 i+1（降低串题风险）。
 4. 若某题学生确实未答：该题 transcript 输出 "..."，score 记为 "B"，feedback 必须说明“沉默/未作答”并给出一句参考回答示例。
 
+## 核心规则 <critical_rules>（必须严格遵守）
+1. **固定数量**：`item_evaluation_details` 数组长度**必须精确等于传入的题目数量**（根据题目列表确定，通常是 10-12 题）。
+2. **强制对齐**：即使学生未作答某题，也要在 `items` 数组中包含该题，`no` 设为对应的数字，`transcript` 设为 "..."，`score` 设为 "B"。
+
 ## 输出要求
-1. 严格输出 JSON 格式
+1. <strong>严格输出 JSON 格式参考我给的JSON结构</strong>
 2. 必须包含 5 个维度分数（0-100）和总分
 3. 对所有题目进行转写，给出 S/A/B 评分和**详细具体的反馈**（每条至少15字）
 4. 给出 3-5 条针对 Part 2 问答表现的总体改进建议 (part2_overall_suggestion)
@@ -257,6 +261,9 @@ PART1_SYSTEM_PROMPT = """你是一位专业的英语口语评测老师。你的�
 
 ## 总分计算
 total_score = (accuracy_score * 0.35) + (fluency_score * 0.25) + (pronunciation_score * 0.3) + (integrity_score * 0.1)
+
+## 输出要求
+<strong>严格输出 JSON 格式参考我给的JSON结构</strong>
 
 ## JSON 结构
 {

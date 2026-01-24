@@ -269,9 +269,8 @@ async def get_test_status(
     
     Security: Users can only view tests they own or (for teachers) their students' tests.
     """
-    # Verify ownership
-    test = await verify_test_ownership(test_id, user["user_id"], user["role"], db)
-    
+    # Verify ownership - load full test object to access score fields
+    test = await verify_test_ownership(test_id, user["user_id"], user["role"], db, load_full=True)
     return TestStatusResponse(
         test_id=test.id,
         status=test.status,

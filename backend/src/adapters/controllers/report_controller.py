@@ -414,7 +414,8 @@ async def get_test_report(
         part1_raw_result = test.part1_raw_result
         test_id_for_response = test.original_id
     else:
-        raw_data = test.raw_data
+        # 注意：test.raw_data 是列表（backref 默认行为），取第一个元素
+        raw_data = test.raw_data[0] if test.raw_data else None
         part1_raw_result = (raw_data.part1_raw_result if raw_data else None) or test.part1_raw_result
         test_id_for_response = test.id
     
@@ -592,7 +593,8 @@ async def get_report_override(
     student_name = student_profile.student_name if student_profile else "学生"
     
     # Optimized: prefer raw_data table, fallback to main table
-    raw_data = test.raw_data
+    # 注意：test.raw_data 是列表（backref 默认行为），取第一个元素
+    raw_data = test.raw_data[0] if test.raw_data else None
     part1_raw = (raw_data.part1_raw_result if raw_data else None) or test.part1_raw_result or {}
     part2_raw = (raw_data.part2_raw_result if raw_data else None) or test.part2_raw_result or {}
     
@@ -1109,7 +1111,8 @@ async def view_report_by_token(
     student_name = student_profile.student_name if student_profile else "Unknown"
     
     # Optimized: prefer raw_data table, fallback to main table
-    raw_data = test.raw_data
+    # 注意：test.raw_data 是列表（backref 默认行为），取第一个元素
+    raw_data = test.raw_data[0] if test.raw_data else None
     part1_raw_result = (raw_data.part1_raw_result if raw_data else None) or test.part1_raw_result
     
     return TestReportDetail(
@@ -1279,7 +1282,8 @@ async def get_parent_h5_report(
     student_name = student_profile.student_name if student_profile else "学生"
     
     # Get raw_data (only for main table, archive has direct fields)
-    raw_data_obj = test.raw_data if not is_archived else None
+    # 注意：test.raw_data 是列表（backref 默认行为），取第一个元素
+    raw_data_obj = (test.raw_data[0] if test.raw_data else None) if not is_archived else None
     
     # Get override data (prefer raw_data table for main, direct for archive)
     if is_archived:
