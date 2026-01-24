@@ -9,20 +9,9 @@ const getApiBaseUrl = (): string => {
     return import.meta.env.VITE_API_URL;
   }
   
-  // 2. Production: use relative path for same-origin requests
-  if (import.meta.env.PROD) {
-    return '/api/v1';
-  }
-  
-  // 3. Development: support various hosts for testing
-  const hostname = window.location.hostname;
-  if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-    // Mobile/LAN testing - use same protocol to avoid mixed content
-    return `${window.location.protocol}//${hostname}:8000/api/v1`;
-  }
-  
-  // 4. Default development
-  return 'http://localhost:8000/api/v1';
+  // 2. Default: use relative path (works with both Vite proxy and nginx proxy)
+  // Vite dev server proxies /api/* to http://localhost:8000/api/*
+  return '/api/v1';
 };
 
 const API_BASE_URL = getApiBaseUrl();

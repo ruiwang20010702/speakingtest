@@ -21,7 +21,8 @@ from sqlalchemy import select
 from typing import Optional
 
 from src.infrastructure.database import get_db
-from src.infrastructure.auth import decode_token, oauth2_scheme
+from fastapi import Request
+from src.infrastructure.auth import decode_token, oauth2_scheme, get_token_from_request
 from src.infrastructure.responses import ErrorResponse
 from src.infrastructure.config import get_settings
 from src.adapters.gateways.oss_client import get_oss_client
@@ -54,8 +55,17 @@ class UploadResponse(BaseModel):
     message: str = ""
 
 
-async def get_current_user_with_role(token: str = Depends(oauth2_scheme)):
-    """Get current user ID and role from token."""
+async def get_current_user_with_role(
+    request: Request,
+    auth_header: str = Depends(oauth2_scheme)
+):
+    """Get current user ID and role from token. Supports both Cookie and Authorization header."""
+    token = get_token_from_request(request, auth_header)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required"
+        )
     token_data = decode_token(token)
     if token_data is None:
         raise HTTPException(

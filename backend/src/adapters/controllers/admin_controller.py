@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database import get_db, get_db_readonly
 from src.infrastructure.cache import cache_get, cache_set
-from src.infrastructure.auth import require_admin, require_teacher, decode_token, oauth2_scheme
+from src.infrastructure.auth import require_admin, require_teacher, get_token_data, TokenData
 from src.adapters.repositories.models import (
     StudentProfileModel, TestModel, ReportShareTokenModel, StudentEntryTokenModel
 )
@@ -49,12 +49,8 @@ class CostStats(BaseModel):
 )
 async def get_overview_stats(
     db: AsyncSession = Depends(get_db_readonly),  # 使用只读连接
-    token: str = Depends(oauth2_scheme)
+    token_data: TokenData = Depends(get_token_data)  # 支持 Cookie 和 Header
 ):
-    # Decode token to get user info
-    token_data = decode_token(token)
-    if token_data is None:
-        raise HTTPException(status_code=401, detail="Invalid token")
     
     user_id = token_data.user_id
     role = token_data.role
@@ -828,7 +824,7 @@ async def regenerate_report(
     test_id: int,
     request: RegenerateReportRequest = None,
     db: AsyncSession = Depends(get_db),
-    token: str = Depends(oauth2_scheme)
+    token_data: TokenData = Depends(get_token_data)  # 支持 Cookie 和 Header
 ):
     """
     教师手动重新生成学生报告。
@@ -846,10 +842,6 @@ async def regenerate_report(
     - Admin can regenerate any report
     - Teacher can only regenerate reports of their own students
     """
-    # Parse token and check role
-    token_data = decode_token(token)
-    if token_data is None:
-        raise HTTPException(status_code=401, detail="Invalid token")
     
     user_id = token_data.user_id
     role = token_data.role

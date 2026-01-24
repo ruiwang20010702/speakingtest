@@ -169,7 +169,7 @@ def get_token_from_request(request: Request, auth_header: Optional[str] = None) 
     if auth_header:
         return auth_header
     
-        return None
+    return None
 
 
 # ============================================
