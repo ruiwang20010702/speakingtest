@@ -743,8 +743,8 @@ async def retry_failed_task(
             detail=f"Test status is '{test.status}', only 'failed' tests can be retried"
         )
     
-    # Check retry limit (max 3 retries)
-    MAX_RETRIES = 3
+    # Check retry limit (总重试次数限制为5次：队列自动重试3次 + 管理员手动重试2次)
+    MAX_RETRIES = 5
     if (test.retry_count or 0) >= MAX_RETRIES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
