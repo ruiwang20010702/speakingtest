@@ -72,7 +72,7 @@ cp .env.example .env  # 填入 API Keys 和数据库配置
 python migrate_db.py
 ```
 
-### 3. 一键启动 (API + 3 Workers)
+### 3. 一键启动 (API + 4 Workers)
 ```bash
 ./scripts/dev.sh
 ```
@@ -81,11 +81,12 @@ python migrate_db.py
 
 ## ⚙️ Worker 职责说明
 
-系统包含三个核心异步 Worker，通过 RabbitMQ 协同工作：
+系统包含四个核心异步 Worker，通过 RabbitMQ 协同工作：
 
 1.  **`part1_worker.py`**：处理单词朗读评测，调用 Qwen-Omni 音频接口。
 2.  **`part2_worker.py`**：处理 12 题对话评测，生成转写、评分及家长端汇总分析。
 3.  **`interpretation_worker.py`**：为教师生成报告解读演讲稿（约 10 分钟长度）。
+4.  **`dlq_worker.py`**：处理死信队列（Dead Letter Queue），监控失败任务并标记为失败状态。
 
 ---
 

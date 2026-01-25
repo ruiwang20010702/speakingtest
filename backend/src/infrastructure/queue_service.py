@@ -109,7 +109,7 @@ class Part2TaskProducer:
         message = Message(
             body=json.dumps(task.to_dict()).encode(),
             delivery_mode=DeliveryMode.PERSISTENT,  # 持久化，防止 broker 重启丢失
-            expiration=str(MESSAGE_TTL_MS),  # 消息过期时间（毫秒），超过此时间未处理自动进入死信队列
+            expiration=MESSAGE_TTL_MS,  # 消息过期时间（毫秒），超过此时间未处理自动进入死信队列
         )
         
         await self.channel.default_exchange.publish(
@@ -253,7 +253,7 @@ class Part2TaskConsumer:
             new_message = Message(
                 body=json.dumps(task_data).encode(),
                 delivery_mode=DeliveryMode.PERSISTENT,
-                expiration=str(MESSAGE_TTL_MS),  # 重试消息也设置过期时间
+                expiration=MESSAGE_TTL_MS,  # 重试消息也设置过期时间
                 headers={
                     "x-retry-count": new_retry_count,
                     "x-last-error": error_msg
@@ -385,7 +385,7 @@ class Part1TaskProducer:
         message = Message(
             body=json.dumps(task.to_dict()).encode(),
             delivery_mode=DeliveryMode.PERSISTENT,
-            expiration=str(MESSAGE_TTL_MS),  # 消息过期时间（毫秒），超过此时间未处理自动进入死信队列
+            expiration=MESSAGE_TTL_MS,  # 消息过期时间（毫秒），超过此时间未处理自动进入死信队列
         )
         
         await self.channel.default_exchange.publish(
@@ -501,7 +501,7 @@ class Part1TaskConsumer:
             new_message = Message(
                 body=json.dumps(task_data).encode(),
                 delivery_mode=DeliveryMode.PERSISTENT,
-                expiration=str(MESSAGE_TTL_MS),  # 重试消息也设置过期时间
+                expiration=MESSAGE_TTL_MS,  # 重试消息也设置过期时间
                 headers={
                     "x-retry-count": new_retry_count,
                     "x-last-error": error_msg
@@ -644,7 +644,7 @@ class InterpretationTaskProducer:
         message = Message(
             body=json.dumps(task.to_dict()).encode(),
             delivery_mode=DeliveryMode.PERSISTENT,
-            expiration=str(MESSAGE_TTL_MS),  # 消息过期时间（毫秒），超过此时间未处理自动进入死信队列
+            expiration=MESSAGE_TTL_MS,  # 消息过期时间（毫秒），超过此时间未处理自动进入死信队列
         )
         
         await self.channel.default_exchange.publish(
@@ -768,7 +768,7 @@ class InterpretationTaskConsumer:
             new_message = Message(
                 body=json.dumps(task_data).encode(),
                 delivery_mode=DeliveryMode.PERSISTENT,
-                expiration=str(MESSAGE_TTL_MS),  # 重试消息也设置过期时间
+                expiration=MESSAGE_TTL_MS,  # 重试消息也设置过期时间
                 headers={
                     "x-retry-count": new_retry_count,
                     "x-last-error": error_msg

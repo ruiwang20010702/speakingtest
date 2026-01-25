@@ -113,6 +113,7 @@ class ErrorResponse(BaseModel):
         *   `part1_worker.py`: Handles word/sentence reading evaluation.
         *   `part2_worker.py`: Handles 12-question dialogue evaluation and summary analysis.
         *   `interpretation_worker.py`: Handles AI speech script generation for teachers.
+        *   `dlq_worker.py`: Handles dead letter queue (DLQ), monitoring failed tasks and marking them as failed status.
     
 2.  **AI Provider**:
     *   **Qwen-Omni (Flash)**: Used for both Part 1 (Reading) and Part 2 (Q&A) audio evaluation due to its multimodal capabilities and cost-effectiveness.

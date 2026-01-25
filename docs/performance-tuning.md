@@ -201,6 +201,11 @@ python scripts/part2_worker.py &
 command=python scripts/part2_worker.py
 numprocs=5
 process_name=%(program_name)s_%(process_num)02d
+
+[program:dlq_worker]
+command=python scripts/dlq_worker.py
+numprocs=1
+process_name=%(program_name)s
 ```
 
 ### 方式二：增加 API 实例

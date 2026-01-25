@@ -7,6 +7,7 @@ Performance optimizations:
 - Uses Redis caching for expensive aggregate queries (5-minute TTL)
 """
 import random
+from loguru import logger
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select, func, case

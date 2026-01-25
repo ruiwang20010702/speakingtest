@@ -335,11 +335,12 @@ async def submit_part2(
     # 2. 确定题目来源
     questions = request.questions
     if not questions:
-        # 从数据库加载题目
+        # 从数据库加载题目 (Part 2 只需要 part=2 的问答题)
         stmt = select(QuestionModel).where(
             and_(
                 QuestionModel.level == test.level,
                 QuestionModel.unit == test.unit,
+                QuestionModel.part == 2,  # 只加载 Part 2 问答题
                 QuestionModel.is_active == True
             )
         ).order_by(QuestionModel.question_no)

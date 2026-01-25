@@ -11,6 +11,7 @@
 │  ├── 学生端 /s/     │────▶│  Part1 Worker               │
 │  ├── 家长端 /p/     │     │  Part2 Worker               │
 │  └── 老师端 /t/     │     │  Interpretation Worker      │
+│                     │     │  DLQ Worker (死信队列)       │
 │                     │     │  RabbitMQ (自建/云托管)      │
 └─────────────────────┘     └──────────────┬──────────────┘
                                            │
@@ -27,7 +28,7 @@
 | 资源 | 规格 | 预估费用 (月) | 说明 |
 |------|------|--------------|------|
 | ECS 1 (前端) | 2C4G | ¥100-150 | 静态文件 + Nginx |
-| ECS 2 (后端) | 4C8G | ¥300-400 | API + 3个 Workers + RabbitMQ |
+| ECS 2 (后端) | 4C8G | ¥300-400 | API + 4个 Workers + RabbitMQ + Redis |
 | RDS PostgreSQL | 2C4G 高可用版 | ¥200-300 | 数据库 |
 | OSS | 按量付费 | ¥20-50 | 音频存储 |
 | 带宽 | 按量/包月 | ¥50-100 | 公网带宽 |
@@ -51,10 +52,10 @@
 
 1.  **安装依赖**:
     ```bash
-    sudo apt update && sudo apt install -y python3.11 python3.11-venv rabbitmq-server
+    sudo apt update && sudo apt install -y python3.11 python3.11-venv rabbitmq-server redis-server
     ```
 2.  **配置服务**:
-    - 使用 `systemd` 管理 `speakingtest-api` 和 3 个 Worker 进程。
+    - 使用 `systemd` 管理 `speakingtest-api` 和 4 个 Worker 进程。
     - 配置文件路径: `/etc/systemd/system/speakingtest-*.service`
 
 ---
@@ -110,6 +111,7 @@ sudo systemctl status "speakingtest-*"
 sudo systemctl restart speakingtest-worker-part1
 sudo systemctl restart speakingtest-worker-part2
 sudo systemctl restart speakingtest-worker-interp
+sudo systemctl restart speakingtest-worker-dlq
 
 # 查看 AI 处理日志
 sudo journalctl -u speakingtest-worker-part2 -f

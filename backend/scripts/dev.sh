@@ -1,6 +1,6 @@
 #!/bin/bash
 # 开发环境启动脚本
-# 自动启动 RabbitMQ、后端 API、Part 1 Worker、Part 2 Worker
+# 自动启动 Redis、RabbitMQ、后端 API、Part 1 Worker、Part 2 Worker、Interpretation Worker、DLQ Worker
 
 set -e
 
@@ -14,6 +14,42 @@ export PATH="/opt/homebrew/opt/erlang/bin:$PATH"
 WORKER1_PID=""
 WORKER2_PID=""
 WORKER3_PID=""
+DLQ_WORKER_PID=""
+REDIS_PID=""
+
+# Redis 控制函数
+start_redis() {
+    echo "🔴 启动 Redis..."
+    if lsof -i :6379 > /dev/null 2>&1; then
+        echo "   Redis 已在运行"
+    else
+        # 尝试使用 Homebrew 安装的 Redis
+        if [ -x "/opt/homebrew/opt/redis/bin/redis-server" ]; then
+            /opt/homebrew/opt/redis/bin/redis-server /opt/homebrew/etc/redis.conf --daemonize yes
+        elif command -v redis-server > /dev/null 2>&1; then
+            redis-server --daemonize yes
+        else
+            echo "   ⚠️  Redis 未安装，跳过（缓存和限流将使用内存模式）"
+            echo "   💡 安装 Redis: brew install redis"
+            return 0
+        fi
+        
+        sleep 2
+        if lsof -i :6379 > /dev/null 2>&1; then
+            echo "   ✅ Redis 启动成功"
+        else
+            echo "   ⚠️  Redis 启动失败，继续运行（缓存和限流将使用内存模式）"
+        fi
+    fi
+}
+
+stop_redis() {
+    echo "🔴 关闭 Redis..."
+    if command -v redis-cli > /dev/null 2>&1; then
+        redis-cli shutdown 2>/dev/null || true
+    fi
+    echo "   ✅ Redis 已关闭"
+}
 
 # RabbitMQ 控制函数
 start_rabbitmq() {
@@ -57,6 +93,11 @@ start_workers() {
     python scripts/interpretation_worker.py &
     WORKER3_PID=$!
     echo "   ✅ Interpretation Worker PID: $WORKER3_PID"
+    
+    echo "👷 启动 DLQ Worker (死信队列)..."
+    python scripts/dlq_worker.py &
+    DLQ_WORKER_PID=$!
+    echo "   ✅ DLQ Worker PID: $DLQ_WORKER_PID"
 }
 
 stop_workers() {
@@ -72,6 +113,10 @@ stop_workers() {
         echo "👷 关闭 Interpretation Worker..."
         kill $WORKER3_PID 2>/dev/null || true
     fi
+    if [ -n "$DLQ_WORKER_PID" ]; then
+        echo "👷 关闭 DLQ Worker..."
+        kill $DLQ_WORKER_PID 2>/dev/null || true
+    fi
     echo "   ✅ Workers 已关闭"
 }
 
@@ -81,12 +126,14 @@ cleanup() {
     echo "🛑 收到退出信号，清理资源..."
     stop_workers
     stop_rabbitmq
+    stop_redis
     exit 0
 }
 
 trap cleanup SIGINT SIGTERM EXIT
 
 # 启动服务
+start_redis
 start_rabbitmq
 start_workers
 

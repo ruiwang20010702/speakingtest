@@ -74,7 +74,7 @@ pip install -r requirements.txt
 cp .env.example .env  # 填入 Qwen API Key, OSS, DB 等配置
 python migrate_db.py  # 初始化数据库
 
-# 一键启动所有服务 (API + 3个 Workers)
+# 一键启动所有服务 (API + 4个 Workers: Part1, Part2, Interpretation, DLQ)
 ./scripts/dev.sh
 ```
 
