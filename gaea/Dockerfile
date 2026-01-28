@@ -10,7 +10,7 @@ FROM node:20-bullseye AS frontend-builder
 WORKDIR /build
 
 # Use Tencent Cloud npm registry for faster downloads in China
-RUN npm config set registry https://npm.bjtest.51talk.biz
+RUN npm config set registry https://npm.bjtest.51talk.biz/npm
 
 # Copy all frontend projects
 COPY frontend/student-h5 /build/student-h5
