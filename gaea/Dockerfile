@@ -39,7 +39,7 @@ ARG S6_OVERLAY_VERSION=3.1.6.2
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
-
+ENV GAEA_BASE_URL="https://flow.51talk.biz/pkg/ops/app/files"
 # Switch to Tencent Cloud mirror for faster downloads in China
 RUN sed -i 's/deb.debian.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list && \
     sed -i 's/security.debian.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list
@@ -53,8 +53,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install s6-overlay
-ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp
-ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz /tmp
+ADD ${GAEA_BASE_URL}/${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp
+ADD ${GAEA_BASE_URL}/${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz /tmp
 RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz \
     && tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz \
     && rm /tmp/s6-overlay-*.tar.xz
