@@ -1,2 +1,0 @@
-#!/command/execlineb -P
-/usr/local/bin/python /app/scripts/interpretation_worker.py
