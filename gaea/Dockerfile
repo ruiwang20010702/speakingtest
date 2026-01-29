@@ -54,8 +54,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install s6-overlay
 
-RUN curl -o /tmp/s6-overlay-noarch.tar.xz ${GAEA_BASE_URL}/s6-overlay-noarch/${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz \
-    && curl -o /tmp/s6-overlay-x86_64.tar.xz ${GAEA_BASE_URL}/s6-overlay-x86_64/${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz
+ADD ${GAEA_BASE_URL}/s6-overlay-noarch/${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp/
+ADD ${GAEA_BASE_URL}/s6-overlay-x86_64/${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz /tmp/
 RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz \
     && tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz \
     && rm /tmp/s6-overlay-*.tar.xz
