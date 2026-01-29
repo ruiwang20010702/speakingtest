@@ -23,7 +23,7 @@ const LoadingPage: React.FC = () => {
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-8 text-center bg-white">
       <div className="relative mb-12">
          <img 
-           src="/Dynamic%20materials/progress%20bar.gif?t=123456" 
+           src={`${import.meta.env.BASE_URL}Dynamic%20materials/progress%20bar.gif?t=123456`} 
            alt="Loading" 
            className="w-64 h-64 object-contain drop-shadow-2xl"
            key="progress-bar-gif"

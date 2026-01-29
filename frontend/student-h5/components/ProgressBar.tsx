@@ -8,7 +8,7 @@ interface ProgressBarProps {
 
 const MonkeyCharacter = () => (
   <img 
-    src="/Dynamic materials/progress bar.gif" 
+    src={`${import.meta.env.BASE_URL}Dynamic materials/progress bar.gif`} 
     alt="Monkey" 
     className="w-20 h-20 object-contain drop-shadow-sm"
   />

@@ -88,7 +88,7 @@ export const BadgePage: React.FC = () => {
           {/* Badge Shape */}
           <div className="w-64 h-64 bg-baby rounded-full border-4 border-white flex items-center justify-center shadow-[0px_0px_40px_rgba(255,245,157,0.4)]">
              <div className="w-56 h-56 rounded-full flex items-center justify-center overflow-hidden">
-                <Monkey variant="winner" layoutId="monkey" className="w-48 h-48 mt-8" imageSrc="/5.gif" />
+                <Monkey variant="winner" layoutId="monkey" className="w-48 h-48 mt-8" imageSrc={`${import.meta.env.BASE_URL}5.gif`} />
              </div>
           </div>
           
