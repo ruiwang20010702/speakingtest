@@ -405,7 +405,7 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
             重试
           </button>
           <button
-            onClick={() => window.location.href = '/'}
+            onClick={() => window.location.href = '/s/'}
             className="px-6 py-3 bg-white/20 text-white rounded-xl font-bold border border-white/30"
           >
             返回首页

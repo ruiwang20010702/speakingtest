@@ -139,7 +139,7 @@ const TestContainer: React.FC = () => {
       }
 
       // 4. 跳转到结果页
-      window.location.href = '/result';
+      window.location.href = '/s/result';
 
     } catch (error) {
       if (isDev) console.error('Submission failed:', error);
@@ -166,7 +166,7 @@ const TestContainer: React.FC = () => {
       studentName={studentName}
       level={level}
       unit={unit}
-      onExit={() => window.location.href = '/'}
+      onExit={() => window.location.href = '/s/'}
       onComplete={handleComplete}
       onPart1Complete={handlePart1Complete}
     />
@@ -175,17 +175,17 @@ const TestContainer: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/s">
       <div className="antialiased min-h-screen overflow-hidden">
         <Routes>
-          {/* Entry Route: /s/:token */}
-          <Route path="/s/:token" element={<EntryPage />} />
+          {/* Entry Route: /s/:token (with basename) */}
+          <Route path="/:token" element={<EntryPage />} />
 
           {/* Main Test Route - requires valid session */}
           <Route path="/test" element={<TestContainer />} />
 
           {/* Result Route */}
-          <Route path="/result" element={<ResultPage onRestart={() => window.location.href = '/'} part1Score={20} />} />
+          <Route path="/result" element={<ResultPage onRestart={() => window.location.href = '/s/'} part1Score={20} />} />
 
           {/* Root and fallback routes */}
           {isDev ? (
