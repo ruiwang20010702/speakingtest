@@ -78,23 +78,21 @@ export async function fetchParentReport(token: string): Promise<ParentReportData
 
 /**
  * Get token from URL path.
- * Expects URL format: /p/{token} or ?token={token}
- * 
+ * Supports: /p/{token}, /p/p/{token}, /s/p/{token}, /t/p/{token} etc.
+ * Takes the segment after the last "p" in path as token.
+ *
  * @returns token string or null if not found
  */
 export function getTokenFromUrl(): string | null {
-  // Check URL path: /p/{token}
-  const pathMatch = window.location.pathname.match(/\/p\/([^/]+)/);
-  if (pathMatch) {
-    return pathMatch[1];
+  const path = window.location.pathname;
+  const segments = path.split('/').filter(Boolean);
+
+  const lastPIndex = segments.lastIndexOf('p');
+  if (lastPIndex !== -1 && segments[lastPIndex + 1]) {
+    return segments[lastPIndex + 1];
   }
-  
-  // Check query parameter: ?token={token}
+
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get('token');
-  if (token) {
-    return token;
-  }
-  
-  return null;
+  return token || null;
 }
