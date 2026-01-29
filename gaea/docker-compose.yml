@@ -1,0 +1,138 @@
+# ============================================
+# Docker Compose for AI Speaking Test
+# Usage: docker-compose -f gaea/docker-compose.yml up -d
+# ============================================
+
+services:
+  # Main application (Frontend + Backend + Workers)
+  app:
+    build:
+      context: ..
+      dockerfile: gaea/Dockerfile
+    container_name: speaking-test
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      # App settings
+      - DEBUG=false
+      - APP_NAME=Speaking Test System
+
+      # Database
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/speakingtest
+      - DB_POOL_SIZE=30
+      - DB_MAX_OVERFLOW=70
+
+      # Redis
+      - REDIS_URL=redis://redis:6379/0
+
+      # RabbitMQ
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+
+      # JWT (CHANGE IN PRODUCTION!)
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
+
+      # Cookie
+      - COOKIE_SECURE=false  # Set to true with HTTPS
+      - COOKIE_SAMESITE=lax
+
+      # CORS
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+
+      # Frontend URLs
+      - FRONTEND_STUDENT_URL=${FRONTEND_STUDENT_URL:-http://localhost/s}
+      - FRONTEND_PARENT_URL=${FRONTEND_PARENT_URL:-http://localhost/p}
+      - FRONTEND_TEACHER_URL=${FRONTEND_TEACHER_URL:-http://localhost}
+
+      # Qwen API
+      - QWEN_API_KEY=${QWEN_API_KEY}
+      - QWEN_MODEL=qwen3-omni-flash
+      - QWEN_PLUS_MODEL=qwen-plus
+
+      # Aliyun OSS
+      - OSS_ACCESS_KEY_ID=${OSS_ACCESS_KEY_ID}
+      - OSS_ACCESS_KEY_SECRET=${OSS_ACCESS_KEY_SECRET}
+      - OSS_ENDPOINT=${OSS_ENDPOINT}
+      - OSS_BUCKET_NAME=${OSS_BUCKET_NAME}
+
+      # SMTP Email
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL:-}
+
+      # Admin
+      - ADMIN_EMAILS=${ADMIN_EMAILS:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - speaking-test-net
+
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: speaking-test-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=speakingtest
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - speaking-test-net
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: speaking-test-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - speaking-test-net
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: speaking-test-rabbitmq
+    restart: unless-stopped
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - speaking-test-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+
+networks:
+  speaking-test-net:
+    driver: bridge
