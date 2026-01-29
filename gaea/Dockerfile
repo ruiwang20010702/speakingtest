@@ -36,10 +36,9 @@ FROM hub.51talk.biz/library/python:3.11-slim-bullseye
 
 # s6-overlay version
 ARG S6_OVERLAY_VERSION=3.1.6.2
-
+ENV GAEA_BASE_URL="https://flow.51talk.biz/pkg/ops/base/files"
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
-ENV GAEA_BASE_URL="https://flow.51talk.biz/pkg/ops/base/files"
 # Switch to Tencent Cloud mirror for faster downloads in China
 RUN sed -i 's/deb.debian.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list && \
     sed -i 's/security.debian.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list
