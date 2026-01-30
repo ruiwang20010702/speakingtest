@@ -63,7 +63,7 @@ export const Cover: React.FC = () => {
            {/* Abstract Circle Halo behind monkey */}
            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] max-w-[720px] max-h-[720px] bg-baby rounded-full blur-[60px] opacity-20" />
            
-           <Monkey variant="winner" layoutId="monkey" className="w-[700px] h-[700px] drop-shadow-2xl" imageSrc="/gif/1.gif" />
+           <Monkey variant="winner" layoutId="monkey" className="w-[700px] h-[700px] drop-shadow-2xl" imageSrc={`${import.meta.env.BASE_URL}gif/1.gif`} />
            
            {/* Floating Star Badge */}
            <motion.div 

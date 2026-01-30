@@ -281,7 +281,7 @@ export const RadarPage: React.FC = () => {
               animate={{ opacity: 1, y: 0 }} 
               transition={{ delay: 0.5 }}
             >
-              <Monkey variant="glasses" layoutId="monkey" className="h-[25vh] w-auto max-h-[220px] drop-shadow-2xl" imageSrc="/2.gif" />
+              <Monkey variant="glasses" layoutId="monkey" className="h-[25vh] w-auto max-h-[220px] drop-shadow-2xl" imageSrc={`${import.meta.env.BASE_URL}2.gif`} />
             </motion.div>
          </div>
       </div>

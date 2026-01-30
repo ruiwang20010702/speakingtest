@@ -10,7 +10,7 @@ interface HomePageProps {
 const AICore = () => (
   <div className="relative w-64 h-64 sm:w-80 sm:h-80 flex items-center justify-center">
     <img 
-      src="/Dynamic materials/Homepage.gif" 
+      src={`${import.meta.env.BASE_URL}Dynamic materials/Homepage.gif`} 
       alt="AI Core" 
       className="w-64 h-64 sm:w-80 sm:h-80 object-contain drop-shadow-2xl"
     />

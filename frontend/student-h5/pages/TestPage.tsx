@@ -422,7 +422,7 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
         <div className="flex-1 flex flex-col items-center justify-center space-y-10 text-center z-10 w-full max-sm:max-w-sm">
           <div className="relative w-full h-64 flex items-center justify-center mb-6">
             <img
-              src="/Dynamic%20materials/Settlement%20page.gif?t=123456"
+              src={`${import.meta.env.BASE_URL}Dynamic%20materials/Settlement%20page.gif?t=123456`}
               alt="Celebration"
               className="w-full max-w-sm h-64 object-contain drop-shadow-2xl"
             />
@@ -559,7 +559,7 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
                 {/* 对话环节下方的猴子 */}
                 <div className="mt-4 flex items-center justify-center">
                   <img 
-                    src="/Dynamic materials/3.gif" 
+                    src={`${import.meta.env.BASE_URL}Dynamic materials/3.gif`} 
                     alt="Monkey" 
                     className="w-64 h-64 sm:w-80 sm:h-80 object-contain drop-shadow-lg"
                   />

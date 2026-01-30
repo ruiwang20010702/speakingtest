@@ -264,7 +264,7 @@ export const DialoguePage: React.FC = () => {
         className="absolute bottom-[-2%] right-[-5%] pointer-events-none z-[60]"
       >
         <div className="relative">
-          <Monkey variant="glasses" layoutId="monkey" className="w-56 h-56 drop-shadow-[0_10px_10px_rgba(0,0,0,0.3)]" imageSrc="/4.gif" />
+          <Monkey variant="glasses" layoutId="monkey" className="w-56 h-56 drop-shadow-[0_10px_10px_rgba(0,0,0,0.3)]" imageSrc={`${import.meta.env.BASE_URL}4.gif`} />
         </div>
       </motion.div>
 

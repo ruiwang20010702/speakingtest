@@ -208,7 +208,7 @@ export const VocabPage: React.FC = () => {
           transition={{ type: "spring", delay: 0.3 }}
           className="relative -mt-4"
         >
-          <Monkey variant="glasses" layoutId="monkey" className="w-20 h-20 drop-shadow-2xl" imageSrc="/3.gif" />
+          <Monkey variant="glasses" layoutId="monkey" className="w-20 h-20 drop-shadow-2xl" imageSrc={`${import.meta.env.BASE_URL}3.gif`} />
         </motion.div>
       </div>
 
