@@ -856,10 +856,12 @@ class QwenOmniGateway:
                 return result
                 
             except Exception as e:
-                logger.exception(f"Qwen API 调用失败: {e}")
+                logger.exception(f"Qwen Part 2 API 调用失败: {e}")
+                # 记录详细错误信息，包含异常类型和音频格式
+                error_msg = f"Qwen Part2 [{type(e).__name__}] format={audio_format}: {str(e)}"
                 return Part2EvaluationResult(
                     success=False,
-                    error=str(e)
+                    error=error_msg[:450]
                 )
 
     async def evaluate_part1_reading(
@@ -878,11 +880,19 @@ class QwenOmniGateway:
         # 稳妥起见，我们这里假设输入是 wav/mp3。如果是 pcm，建议在 UseCase 层转码。
         
         audio_base64 = base64.b64encode(audio_data).decode("utf-8")
-        mime_type = "audio/wav" # Default to wav for pcm/wav
-        if audio_format == "mp3":
-            mime_type = "audio/mpeg"
-        elif audio_format == "pcm":
-             mime_type = "audio/pcm" # Qwen might not support this directly via data url without container
+        
+        # 根据格式设置正确的 MIME type
+        mime_type_map = {
+            "mp3": "audio/mpeg",
+            "wav": "audio/wav",
+            "pcm": "audio/pcm",
+            "webm": "audio/webm",
+            "m4a": "audio/mp4",
+            "ogg": "audio/ogg",
+        }
+        mime_type = mime_type_map.get(audio_format, "audio/wav")
+        
+        logger.info(f"Part 1 音频格式: {audio_format}, MIME: {mime_type}, 大小: {len(audio_data)} bytes")
         
         data_url = f"data:{mime_type};base64,{audio_base64}"
         
@@ -942,10 +952,11 @@ class QwenOmniGateway:
                     ) as response:
                         if response.status_code != 200:
                             error_text = await response.aread()
-                            logger.error(f"Qwen Part 1 API 错误 [{response.status_code}]: {error_text.decode()}")
-                            # 截断错误信息，避免数据库字段溢出
-                            error_msg = error_text.decode()[:200]
-                            return Part1EvaluationResult(success=False, error=f"API错误: {error_msg}")
+                            error_detail = error_text.decode()
+                            logger.error(f"Qwen Part 1 API 错误 [{response.status_code}]: {error_detail}")
+                            # 记录详细错误信息，包含状态码和音频格式，便于排查
+                            error_msg = f"Qwen [{response.status_code}] format={audio_format}: {error_detail[:300]}"
+                            return Part1EvaluationResult(success=False, error=error_msg[:450])
                         
                         # 收集流式响应
                         content_parts = []
@@ -983,8 +994,9 @@ class QwenOmniGateway:
                     
             except Exception as e:
                 logger.exception(f"Qwen Part 1 API 调用失败: {e}")
-                # 截断错误信息
-                return Part1EvaluationResult(success=False, error=str(e)[:200])
+                # 记录详细错误信息，包含异常类型
+                error_msg = f"Qwen调用异常 [{type(e).__name__}] format={audio_format}: {str(e)}"
+                return Part1EvaluationResult(success=False, error=error_msg[:450])
 
     def _parse_part1_response(self, response_text: str, reference_text: str = "") -> Part1EvaluationResult:
         """解析 Part 1 JSON 响应 (新版 4 维度评分)"""
@@ -1074,7 +1086,12 @@ class QwenOmniGateway:
                 json=request_body,
                 headers=headers
             ) as response:
-                response.raise_for_status()
+                # 详细记录非 200 响应
+                if response.status_code != 200:
+                    error_body = await response.aread()
+                    error_detail = error_body.decode()[:500]
+                    logger.error(f"Qwen API 错误 [{response.status_code}]: {error_detail}")
+                    raise Exception(f"Qwen API [{response.status_code}]: {error_detail}")
                 
                 async for line in response.aiter_lines():
                     if not line.startswith("data: "):

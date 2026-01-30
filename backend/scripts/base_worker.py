@@ -56,7 +56,7 @@ async def check_retry_limit(test_id: int) -> tuple[bool, int]:
 
 async def mark_task_failed(test_id: int, reason: str) -> None:
     """
-    将任务标记为失败
+    将任务标记为失败（保留原有错误信息）
     
     Args:
         test_id: 测试 ID
@@ -64,11 +64,26 @@ async def mark_task_failed(test_id: int, reason: str) -> None:
     """
     try:
         async with AsyncSessionLocal() as db:
+            # 先查询原有的 failure_reason，避免覆盖具体错误信息
+            result = await db.execute(
+                text("SELECT failure_reason FROM tests WHERE id = :id"),
+                {"id": test_id}
+            )
+            row = result.first()
+            existing_reason = row[0] if row and row[0] else ""
+            
+            # 如果已有错误信息，追加而不是覆盖
+            if existing_reason and existing_reason != reason:
+                final_reason = f"{existing_reason} | {reason}"
+            else:
+                final_reason = reason
+            
             await db.execute(
                 text("UPDATE tests SET status = 'failed', failure_reason = :reason, updated_at = :now WHERE id = :id AND status NOT IN ('completed', 'failed')"),
-                {"reason": reason, "now": china_now(), "id": test_id}
+                {"reason": final_reason[:500], "now": china_now(), "id": test_id}
             )
             await db.commit()
+            logger.info(f"已标记 test_id={test_id} 为失败，原因: {final_reason[:100]}...")
     except Exception as e:
         logger.error(f"标记任务失败出错: {e}")
 

@@ -352,9 +352,12 @@ class ProcessPart1TaskUseCase:
                 response = await client.get(task.audio_url, timeout=60)
                 response.raise_for_status()
                 audio_data = response.content
+                logger.info(f"音频下载成功: {len(audio_data)} bytes from {task.audio_url[:80]}...")
         except Exception as e:
-            logger.error(f"下载音频失败: {e}")
-            test.failure_reason = f"音频下载失败: {str(e)}"
+            logger.error(f"下载音频失败: {e}, URL={task.audio_url}")
+            # 记录详细错误信息，包含 URL 前缀便于排查
+            url_prefix = task.audio_url[:100] if task.audio_url else "无URL"
+            test.failure_reason = f"音频下载失败 [{type(e).__name__}]: {str(e)[:200]} | URL: {url_prefix}"[:450]
             test.retry_count = (test.retry_count or 0) + 1
             test.updated_at = china_now()
             # 不设置 status="failed"，保持 status="part1_processing"，让队列重试机制正常工作
@@ -362,15 +365,27 @@ class ProcessPart1TaskUseCase:
             return False
         
         # 3. 调用 Qwen API
+        # 根据上传时的文件扩展名确定格式（从 URL 解析）
+        audio_format = "wav"  # 默认 wav
+        if task.audio_url:
+            url_lower = task.audio_url.lower()
+            if url_lower.endswith(".mp3"):
+                audio_format = "mp3"
+            elif url_lower.endswith(".webm"):
+                audio_format = "webm"
+            elif url_lower.endswith(".m4a"):
+                audio_format = "m4a"
+        
         try:
             evaluation_result = await self.qwen.evaluate_part1_reading(
                 audio_data=audio_data,
                 reference_text=task.reference_text,
-                audio_format="mp3"  # OSS 上传的是 mp3
+                audio_format=audio_format
             )
         except Exception as e:
             logger.exception(f"Qwen Part 1 API error: {e}")
-            test.failure_reason = str(e)[:250]  # 截断避免数据库字段溢出
+            # 记录详细错误信息，包含音频大小和格式
+            test.failure_reason = f"Qwen异常 [{type(e).__name__}] size={len(audio_data)} fmt={audio_format}: {str(e)}"[:450]
             test.retry_count = (test.retry_count or 0) + 1
             test.updated_at = china_now()
             # 不设置 status="failed"，保持 status="part1_processing"，让队列重试机制正常工作
@@ -379,7 +394,8 @@ class ProcessPart1TaskUseCase:
         
         # 4. 处理结果
         if not evaluation_result.success:
-            test.failure_reason = (evaluation_result.error or "未知错误")[:250]  # 截断
+            # 错误信息已经在 qwen_client.py 里详细记录，直接使用
+            test.failure_reason = (evaluation_result.error or "未知错误")[:450]
             test.retry_count = (test.retry_count or 0) + 1
             test.updated_at = china_now()
             # 不设置 status="failed"，保持 status="part1_processing"，让队列重试机制正常工作
