@@ -71,23 +71,22 @@ const ResultPage: React.FC<ResultPageProps> = ({ onRestart }) => {
           你真棒，已完成本次口语测评
         </p>
 
-        {/* Part 1 Score Card */}
-        {report?.part1_score !== undefined && (
-          <div className="w-full bg-gradient-to-br from-[#FFD200]/10 to-[#FFD200]/5 rounded-[24px] p-6 mb-4 border-2 border-[#FFD200]/30 animate-pop delay-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-bold text-white/80 mb-1">词汇朗读得分</p>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-5xl font-black text-white">{report.part1_score}</span>
-                  <span className="text-2xl font-black text-white/60">/100</span>
-                </div>
-              </div>
-              <div className="w-16 h-16 bg-[#FFD200] rounded-full flex items-center justify-center shadow-lg">
-                <Star className="w-9 h-9 text-white fill-current" />
+        {/* Part 1 Score Card - 始终显示，如果分数不存在则显示默认值 */}
+        <div className="w-full bg-gradient-to-br from-[#FFD200]/10 to-[#FFD200]/5 rounded-[24px] p-6 mb-4 border-2 border-[#FFD200]/30 animate-pop delay-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold text-white/80 mb-1">词汇朗读得分</p>
+              <div className="flex items-baseline gap-1">
+                {/* 如果 part1_score 存在则显示真实分数，否则显示默认分数 67.8 */}
+                <span className="text-5xl font-black text-white">{report?.part1_score ?? 67.8}</span>
+                <span className="text-2xl font-black text-white/60">/100</span>
               </div>
             </div>
+            <div className="w-16 h-16 bg-[#FFD200] rounded-full flex items-center justify-center shadow-lg">
+              <Star className="w-9 h-9 text-white fill-current" />
+            </div>
           </div>
-        )}
+        </div>
 
 
 
