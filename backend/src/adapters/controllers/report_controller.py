@@ -1620,19 +1620,26 @@ async def generate_test_interpretation(
             full_script=test.interpretation_parent_script or ""
         )
     
+    # Check user trigger count from tokens_used (业务限制：用户手动触发次数)
+    tokens_used = dict(test.tokens_used) if test.tokens_used else {}
+    user_trigger_count = tokens_used.get("interpretation_user_triggers", 0)
+    
     # If failed, allow retry (will re-enqueue)
     if test.interpretation_status == "failed" and not force:
-        # Check retry count
-        if (test.interpretation_retry_count or 0) >= 3:
+        # Check user trigger count (not worker retry count)
+        if user_trigger_count >= 3:
             return InterpretationStatusResponse(
                 status="failed",
                 message="生成失败次数过多，请联系管理员"
             )
     
     if force:
-        logger.info(f"强制重新生成报告解读: test_id={test_id}")
-        # Reset retry count on force
-        test.interpretation_retry_count = 0
+        logger.info(f"强制重新生成报告解读: test_id={test_id}, user_trigger_count={user_trigger_count}")
+    
+    # 增加用户触发计数（存储在 tokens_used 中），重置 Worker 重试计数
+    tokens_used["interpretation_user_triggers"] = user_trigger_count + 1
+    test.tokens_used = tokens_used
+    test.interpretation_retry_count = 0  # 重置 Worker 重试计数，允许新一轮自动重试
     
     # Get student name
     stmt = select(StudentProfileModel).where(StudentProfileModel.user_id == test.student_id)
@@ -1778,8 +1785,10 @@ async def get_interpretation_status(
             full_script=test.interpretation_parent_script or ""
         )
     elif status_value == "failed":
-        retry_count = test.interpretation_retry_count or 0
-        if retry_count >= 3:
+        # 使用 tokens_used 中的用户触发次数来判断是否可以重试
+        tokens_used = test.tokens_used or {}
+        user_trigger_count = tokens_used.get("interpretation_user_triggers", 0)
+        if user_trigger_count >= 3:
             return InterpretationStatusResponse(
                 status="failed",
                 message="生成失败次数过多，请联系管理员"

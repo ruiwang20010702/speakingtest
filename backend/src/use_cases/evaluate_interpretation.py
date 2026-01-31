@@ -1,6 +1,17 @@
 """
 报告解读异步处理模块
 处理异步队列中的报告解读任务
+
+重试机制说明：
+- interpretation_retry_count: Worker 自动重试计数（技术容错）
+  - 每次用户触发生成报告时会重置为 0
+  - 用于处理网络波动、API 超时等临时故障
+  - 限制为 MAX_RETRIES 次，防止无限重试
+
+- tokens_used["interpretation_user_triggers"]: 用户手动触发计数（业务限制）
+  - 由 report_controller 管理，存储在 tokens_used JSONB 字段中
+  - 累计计数，不会重置
+  - 限制为 3 次，防止滥用
 """
 from loguru import logger
 from sqlalchemy import select
@@ -13,8 +24,8 @@ from src.adapters.repositories.models import TestModel
 from src.adapters.gateways.qwen_client import QwenOmniGateway
 
 
-# 最大重试次数
-MAX_RETRIES = 3
+# Worker 自动重试最大次数（技术容错，每次用户触发后重置）
+MAX_RETRIES = 5
 
 
 def _record_interpretation_cost(test, interpretation, attempt: int, success: bool = True, error: str = None) -> None:

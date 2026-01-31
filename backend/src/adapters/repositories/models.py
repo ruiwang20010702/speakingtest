@@ -143,7 +143,8 @@ class TestModel(Base):
     interpretation_parent_script = Column(Text, nullable=True)  # 家长沟通话术
     interpretation_generated_at = Column(DateTime(timezone=True), nullable=True)  # 生成时间
     interpretation_status = Column(String(20), nullable=True, default=None)  # pending/generating/completed/failed
-    interpretation_retry_count = Column(SmallInteger, default=0)  # 生成重试次数
+    interpretation_retry_count = Column(SmallInteger, default=0)  # Worker 自动重试次数（技术容错，每次用户触发后重置）
+    # 注意：用户触发次数存储在 tokens_used["interpretation_user_triggers"] 中，不单独建字段
     # Report Override (用户手动编辑的内容，优先于原始数据)
     report_override = Column(JSON_TYPE, nullable=True)
     # Timestamps
