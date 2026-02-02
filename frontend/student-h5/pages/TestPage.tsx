@@ -4,6 +4,8 @@ import { X, ChevronRight, ChevronLeft, Trophy, Star, Sparkles, Heart, Mic, Squar
 import { Question, Level } from '../types';
 import { getQuestions } from '../services/api';
 import ProgressBar from '../components/ProgressBar';
+import MicPermissionGuide from '../components/MicPermissionGuide';
+import { checkMicPermission, requestMicPermission, type PermissionError } from '../utils/micPermission';
 
 interface TestPageProps {
   studentName: string;
@@ -100,6 +102,10 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
   const [showPart2Guide, setShowPart2Guide] = useState(true);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [showStartGuide, setShowStartGuide] = useState(true); // 开始前的引导页
+  
+  // 麦克风权限引导状态
+  const [showMicGuide, setShowMicGuide] = useState(false);
+  const [micGuideType, setMicGuideType] = useState<PermissionError>('denied');
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -150,15 +156,36 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
   const partCurrent = currentIndex - startIdx + 1;
 
   const startRecording = async () => {
-    try {
-      // 重要：开始录音前，立即停止所有音频播放，避免录制到系统播放的声音
-      window.speechSynthesis.cancel();
-      setIsAudioPlaying(false);
+    // 重要：开始录音前，立即停止所有音频播放，避免录制到系统播放的声音
+    window.speechSynthesis.cancel();
+    setIsAudioPlaying(false);
 
+    // 1. 先检查权限状态
+    const permissionState = await checkMicPermission();
+    
+    if (permissionState === 'denied') {
+      // 权限已被拒绝，显示手动开启引导
+      setMicGuideType('denied');
+      setShowMicGuide(true);
+      return;
+    }
+
+    // 2. 请求麦克风权限
+    const result = await requestMicPermission();
+    
+    if (!result.success) {
+      // 权限获取失败，显示对应的引导
+      setMicGuideType(result.error || 'unknown');
+      setShowMicGuide(true);
+      return;
+    }
+
+    // 3. 权限获取成功，开始录音
+    try {
       // 等待一小段时间，确保音频完全停止后再开始录音
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = result.stream!;
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
@@ -181,7 +208,14 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
       };
       recorder.start();
       setIsRecording(true);
-    } catch (err) { alert("请允许麦克风权限"); }
+    } catch (err) {
+      // 录音过程中出错，释放 stream 避免麦克风一直被占用
+      if (result.stream) {
+        result.stream.getTracks().forEach(t => t.stop());
+      }
+      setMicGuideType('unknown');
+      setShowMicGuide(true);
+    }
   };
 
   const stopRecording = () => {
@@ -477,7 +511,16 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center p-4 sm:p-6 pt-6 sm:pt-10 bg-[#002FA7]">
+    <>
+      {/* 麦克风权限引导弹窗 */}
+      <MicPermissionGuide
+        isOpen={showMicGuide}
+        type={micGuideType}
+        onClose={() => setShowMicGuide(false)}
+        onRetry={startRecording}
+      />
+      
+      <div className="min-h-screen w-full flex flex-col items-center p-4 sm:p-6 pt-6 sm:pt-10 bg-[#002FA7]">
       <div className="w-full max-w-md mb-8 sm:mb-12 flex items-center gap-3 sm:gap-4">
         <button
           onClick={handleExitClick}
@@ -627,6 +670,7 @@ const TestPage: React.FC<TestPageProps> = ({ studentName, level, unit, onExit, o
         </div>
       </main>
     </div>
+    </>
   );
 };
 

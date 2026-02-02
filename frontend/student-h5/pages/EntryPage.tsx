@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Loader2 } from 'lucide-react';
+import WechatGuide from '../components/WechatGuide';
+import { shouldShowWechatGuide } from '../utils/browser';
 
 interface EntryResponse {
     access_token: string;
@@ -16,8 +18,17 @@ const EntryPage: React.FC = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [showWechatGuide, setShowWechatGuide] = useState(false);
 
     useEffect(() => {
+        // 检测 Android 微信环境，显示跳转引导
+        // 注意：必须在验证 token 之前检测，否则 token 会被消费
+        if (shouldShowWechatGuide()) {
+            setShowWechatGuide(true);
+            setLoading(false);
+            return; // 不验证 token，等用户跳转到浏览器后再验证
+        }
+
         const verifyToken = async () => {
             try {
                 // 使用 withCredentials 让浏览器接收 httpOnly Cookie
@@ -50,6 +61,11 @@ const EntryPage: React.FC = () => {
             setLoading(false);
         }
     }, [token, navigate]);
+
+    // 微信环境：显示跳转引导
+    if (showWechatGuide) {
+        return <WechatGuide isOpen={true} />;
+    }
 
     if (loading) {
         return (
